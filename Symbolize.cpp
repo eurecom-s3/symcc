@@ -27,6 +27,8 @@ public:
   // Runtime functions
   Value *buildInteger;
   Value *buildAdd;
+  Value *buildNeg;
+  Value *pushPathConstraint;
 };
 
 class Symbolizer : public InstVisitor<Symbolizer> {
@@ -52,6 +54,7 @@ public:
     DEBUG(errs() << "Unable to obtain a symbolic expression for " << *V
                  << '\n');
     assert(!"No symbolic expression for value");
+    // return ConstantPointerNull::get(IRB.getInt8PtrTy());
   }
 
   /// Create symbolic expressions for the function's arguments.
@@ -73,16 +76,30 @@ public:
   //
 
   void visitBinaryOperator(BinaryOperator &I) {
+    // Binary operators propagate into the symbolic expression.
     if (I.getOpcode() == Instruction::Add) {
-      errs() << "Found the addition!\n"
-             << *I.getOperand(0) << '\n'
-             << *I.getOperand(1) << '\n';
-
       IRBuilder<> IRB(&I);
       symbolicExpressions[&I] = IRB.CreateCall(
           SP.buildAdd, {getOrCreateSymbolicExpression(I.getOperand(0), IRB),
                         getOrCreateSymbolicExpression(I.getOperand(1), IRB)});
     }
+  }
+
+  void visitSelectInst(SelectInst &I) {
+    // Select is like the ternary operator ("?:") in C. We push the (potentially
+    // negated) condition to the path constraints and copy the symbolic
+    // expression over from the chosen argument.
+
+    IRBuilder<> IRB(&I);
+    auto condition = getOrCreateSymbolicExpression(I.getCondition(), IRB);
+    auto negatedCondition =
+        IRB.CreateCall(SP.buildNeg, condition, "negated_condition");
+    auto newConstraint = IRB.CreateSelect(
+        I.getCondition(), condition, negatedCondition, "new_path_constraint");
+    IRB.CreateCall(SP.pushPathConstraint, newConstraint);
+    symbolicExpressions[&I] = IRB.CreateSelect(
+        I.getCondition(), getOrCreateSymbolicExpression(I.getTrueValue(), IRB),
+        getOrCreateSymbolicExpression(I.getFalseValue(), IRB));
   }
 
 private:
@@ -105,6 +122,10 @@ bool SymbolizePass::doInitialization(Module &M) {
                             IRB.getInt64Ty(), IRB.getInt8Ty());
   buildAdd = M.getOrInsertFunction("__sym_build_add", IRB.getInt8PtrTy(),
                                    IRB.getInt8PtrTy(), IRB.getInt8PtrTy());
+  buildNeg = M.getOrInsertFunction("__sym_build_neg", IRB.getInt8PtrTy(),
+                                   IRB.getInt8PtrTy());
+  pushPathConstraint = M.getOrInsertFunction("__sym_push_path_constraint",
+                                             IRB.getVoidTy(), IRB.getInt8PtrTy());
   return true;
 }
 
