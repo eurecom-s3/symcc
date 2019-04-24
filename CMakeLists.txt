@@ -6,6 +6,12 @@ find_package(LLVM REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake from ${LLVM_DIR}")
 
+if (${LLVM_PACKAGE_VERSION} VERSION_LESS "8.0" OR
+    ${LLVM_PACKAGE_VERSION} VERSION_GREATER_EQUAL "9.0")
+  message(WARNING "The software has been developed for LLVM 8; \
+it is unlikely to work with other versions!")
+endif()
+
 add_definitions(${LLVM_DEFINITIONS})
 include_directories(${LLVM_INCLUDE_DIRS})
 
