@@ -32,6 +32,10 @@ public:
   Value *buildInteger;
   Value *buildNeg;
   Value *pushPathConstraint;
+  Value *getParameterExpression;
+  Value *setParameterExpression;
+  Value *setReturnExpression;
+  Value *getReturnExpression;
 
   /// Mapping from icmp predicates to the functions that build the corresponding
   /// symbolic expressions.
@@ -52,34 +56,28 @@ public:
         exprIt != symbolicExpressions.end())
       return exprIt->second;
 
+    Value *ret = nullptr;
+
     if (auto C = dyn_cast<ConstantInt>(V)) {
       // TODO is sign extension always correct?
-      auto expr =
+      ret =
           IRB.CreateCall(SP.buildInteger,
                          {IRB.CreateSExt(C, IRB.getInt64Ty()),
                           ConstantInt::get(IRB.getInt8Ty(), C->getBitWidth())});
-      symbolicExpressions[V] = expr;
-      return expr;
+    } else if (auto A = dyn_cast<Argument>(V)) {
+      ret = IRB.CreateCall(SP.getParameterExpression,
+                           ConstantInt::get(IRB.getInt8Ty(), A->getArgNo()));
     }
 
-    DEBUG(errs() << "Unable to obtain a symbolic expression for " << *V
-                 << '\n');
-    assert(!"No symbolic expression for value");
-    // return ConstantPointerNull::get(IRB.getInt8PtrTy());
-  }
-
-  /// Create symbolic expressions for the function's arguments.
-  void symbolizeArguments(Function &F) {
-    // TODO get expressions from function parameters
-
-    IRBuilder<> IRB(F.getEntryBlock().getFirstNonPHI());
-    for (auto arg = F.arg_begin(), arg_end = F.arg_end(); arg != arg_end;
-         arg++) {
-      symbolicExpressions[arg] =
-          // IRB.CreateAlloca(IRB.getInt8PtrTy(), nullptr,
-          //                  "expression_arg_" + Twine(arg->getArgNo()));
-          ConstantPointerNull::get(IRB.getInt8PtrTy());
+    if (!ret) {
+      DEBUG(errs() << "Unable to obtain a symbolic expression for " << *V
+                   << '\n');
+      assert(!"No symbolic expression for value");
+      // return ConstantPointerNull::get(IRB.getInt8PtrTy());
     }
+
+    symbolicExpressions[V] = ret;
+    return ret;
   }
 
   //
@@ -149,6 +147,16 @@ bool SymbolizePass::doInitialization(Module &M) {
   pushPathConstraint = M.getOrInsertFunction(
       "__sym_push_path_constraint", IRB.getVoidTy(), IRB.getInt8PtrTy());
 
+  setParameterExpression =
+      M.getOrInsertFunction("__sym_set_parameter_expression", IRB.getVoidTy(),
+                            IRB.getInt8Ty(), IRB.getInt8PtrTy());
+  getParameterExpression = M.getOrInsertFunction(
+      "__sym_get_parameter_expression", IRB.getInt8PtrTy(), IRB.getInt8Ty());
+  setReturnExpression = M.getOrInsertFunction(
+      "__sym_set_return_expression", IRB.getVoidTy(), IRB.getInt8PtrTy());
+  getReturnExpression =
+      M.getOrInsertFunction("__sym_get_return_expression", IRB.getInt8PtrTy());
+
 #define LOAD_BINARY_OPERATOR_HANDLER(constant, name)                           \
   binaryOperatorHandlers[Instruction::constant] =                              \
       M.getOrInsertFunction("__sym_build_" #name, IRB.getInt8PtrTy(),          \
@@ -199,7 +207,6 @@ bool SymbolizePass::runOnFunction(Function &F) {
   DEBUG(errs().write_escaped(F.getName()) << '\n');
 
   Symbolizer symbolizer(*this);
-  symbolizer.symbolizeArguments(F);
   symbolizer.visit(F);
   DEBUG(errs() << F << '\n');
 
