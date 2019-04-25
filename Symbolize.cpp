@@ -124,6 +124,17 @@ public:
                   getOrCreateSymbolicExpression(I.getOperand(1), IRB)});
   }
 
+  void visitReturnInst(ReturnInst &I) {
+    // Upon return, we just store the expression for the return value.
+
+    if (!I.getReturnValue())
+      return;
+
+    IRBuilder<> IRB(&I);
+    IRB.CreateCall(SP.setReturnExpression,
+                   getOrCreateSymbolicExpression(I.getReturnValue(), IRB));
+  }
+
 private:
   SymbolizePass &SP;
   ValueMap<Value *, Value *> symbolicExpressions;
