@@ -21,14 +21,22 @@ public:
   static char ID;
 
   SymbolizePass() : FunctionPass(ID) {}
+
   bool doInitialization(Module &M) override;
   bool runOnFunction(Function &F) override;
 
+  //
   // Runtime functions
+  //
+
   Value *buildInteger;
   Value *buildAdd;
   Value *buildNeg;
   Value *pushPathConstraint;
+
+  /// Mapping from icmp predicates to the functions that build the corresponding
+  /// symbolic expressions.
+  Value *comparisonHandlers[CmpInst::BAD_ICMP_PREDICATE];
 };
 
 class Symbolizer : public InstVisitor<Symbolizer> {
@@ -102,6 +110,18 @@ public:
         getOrCreateSymbolicExpression(I.getFalseValue(), IRB));
   }
 
+  void visitICmpInst(ICmpInst &I) {
+    // ICmp is integer comparison; we simply include it in the resulting
+    // expression.
+
+    IRBuilder<> IRB(&I);
+    Value *handler = SP.comparisonHandlers[I.getPredicate()];
+    assert(handler && "Unable to handle icmp variant");
+    symbolicExpressions[&I] = IRB.CreateCall(
+        handler, {getOrCreateSymbolicExpression(I.getOperand(0), IRB),
+                  getOrCreateSymbolicExpression(I.getOperand(1), IRB)});
+  }
+
 private:
   SymbolizePass &SP;
   ValueMap<Value *, Value *> symbolicExpressions;
@@ -124,8 +144,26 @@ bool SymbolizePass::doInitialization(Module &M) {
                                    IRB.getInt8PtrTy(), IRB.getInt8PtrTy());
   buildNeg = M.getOrInsertFunction("__sym_build_neg", IRB.getInt8PtrTy(),
                                    IRB.getInt8PtrTy());
-  pushPathConstraint = M.getOrInsertFunction("__sym_push_path_constraint",
-                                             IRB.getVoidTy(), IRB.getInt8PtrTy());
+  pushPathConstraint = M.getOrInsertFunction(
+      "__sym_push_path_constraint", IRB.getVoidTy(), IRB.getInt8PtrTy());
+
+#define LOAD_COMPARISON_HANDLER(constant, name)                                \
+  comparisonHandlers[CmpInst::constant] =                                      \
+      M.getOrInsertFunction("__sym_build_" #name, IRB.getInt8PtrTy(),          \
+                            IRB.getInt8PtrTy(), IRB.getInt8PtrTy());
+
+  LOAD_COMPARISON_HANDLER(ICMP_EQ, equal)
+  LOAD_COMPARISON_HANDLER(ICMP_UGT, unsigned_greater_than)
+  LOAD_COMPARISON_HANDLER(ICMP_UGE, unsigned_greater_equal)
+  LOAD_COMPARISON_HANDLER(ICMP_ULT, unsigned_less_than)
+  LOAD_COMPARISON_HANDLER(ICMP_ULE, unsigned_less_equal)
+  LOAD_COMPARISON_HANDLER(ICMP_SGT, signed_greater_than)
+  LOAD_COMPARISON_HANDLER(ICMP_SGE, signed_greater_equal)
+  LOAD_COMPARISON_HANDLER(ICMP_SLT, signed_less_than)
+  LOAD_COMPARISON_HANDLER(ICMP_SLE, signed_less_equal)
+
+#undef LOAD_COMPARISON_HANDLER
+
   return true;
 }
 
