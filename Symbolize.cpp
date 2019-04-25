@@ -30,13 +30,16 @@ public:
   //
 
   Value *buildInteger;
-  Value *buildAdd;
   Value *buildNeg;
   Value *pushPathConstraint;
 
   /// Mapping from icmp predicates to the functions that build the corresponding
   /// symbolic expressions.
   Value *comparisonHandlers[CmpInst::BAD_ICMP_PREDICATE];
+
+  /// Mapping from binary operators to the functions that build the
+  /// corresponding symbolic expressions.
+  Value *binaryOperatorHandlers[Instruction::BinaryOpsEnd];
 };
 
 class Symbolizer : public InstVisitor<Symbolizer> {
@@ -85,12 +88,13 @@ public:
 
   void visitBinaryOperator(BinaryOperator &I) {
     // Binary operators propagate into the symbolic expression.
-    if (I.getOpcode() == Instruction::Add) {
-      IRBuilder<> IRB(&I);
-      symbolicExpressions[&I] = IRB.CreateCall(
-          SP.buildAdd, {getOrCreateSymbolicExpression(I.getOperand(0), IRB),
-                        getOrCreateSymbolicExpression(I.getOperand(1), IRB)});
-    }
+
+    IRBuilder<> IRB(&I);
+    Value *handler = SP.binaryOperatorHandlers[I.getOpcode()];
+    assert(handler && "Unable to handle binary operator");
+    symbolicExpressions[&I] = IRB.CreateCall(
+        handler, {getOrCreateSymbolicExpression(I.getOperand(0), IRB),
+                  getOrCreateSymbolicExpression(I.getOperand(1), IRB)});
   }
 
   void visitSelectInst(SelectInst &I) {
@@ -140,12 +144,31 @@ bool SymbolizePass::doInitialization(Module &M) {
   buildInteger =
       M.getOrInsertFunction("__sym_build_integer", IRB.getInt8PtrTy(),
                             IRB.getInt64Ty(), IRB.getInt8Ty());
-  buildAdd = M.getOrInsertFunction("__sym_build_add", IRB.getInt8PtrTy(),
-                                   IRB.getInt8PtrTy(), IRB.getInt8PtrTy());
   buildNeg = M.getOrInsertFunction("__sym_build_neg", IRB.getInt8PtrTy(),
                                    IRB.getInt8PtrTy());
   pushPathConstraint = M.getOrInsertFunction(
       "__sym_push_path_constraint", IRB.getVoidTy(), IRB.getInt8PtrTy());
+
+#define LOAD_BINARY_OPERATOR_HANDLER(constant, name)                           \
+  binaryOperatorHandlers[Instruction::constant] =                              \
+      M.getOrInsertFunction("__sym_build_" #name, IRB.getInt8PtrTy(),          \
+                            IRB.getInt8PtrTy(), IRB.getInt8PtrTy());
+
+  LOAD_BINARY_OPERATOR_HANDLER(Add, add)
+  LOAD_BINARY_OPERATOR_HANDLER(Sub, sub)
+  LOAD_BINARY_OPERATOR_HANDLER(Mul, mul)
+  LOAD_BINARY_OPERATOR_HANDLER(UDiv, unsigned_div)
+  LOAD_BINARY_OPERATOR_HANDLER(SDiv, signed_div)
+  LOAD_BINARY_OPERATOR_HANDLER(URem, unsigned_rem)
+  LOAD_BINARY_OPERATOR_HANDLER(SRem, signed_rem)
+  LOAD_BINARY_OPERATOR_HANDLER(Shl, shift_left)
+  LOAD_BINARY_OPERATOR_HANDLER(LShr, logical_shift_right)
+  LOAD_BINARY_OPERATOR_HANDLER(AShr, arithmetic_shift_right)
+  LOAD_BINARY_OPERATOR_HANDLER(And, and)
+  LOAD_BINARY_OPERATOR_HANDLER(Or, or)
+  LOAD_BINARY_OPERATOR_HANDLER(Xor, xor)
+
+#undef LOAD_BINARY_OPERATOR_HANDLER
 
 #define LOAD_COMPARISON_HANDLER(constant, name)                                \
   comparisonHandlers[CmpInst::constant] =                                      \
