@@ -169,16 +169,20 @@ public:
     bool isIndirect = !callee;
     // TODO find a better way to detect external functions
     bool isExternal = !callee->getInstructionCount();
-    if (isIndirect || isExternal)
+    bool isBuildVariable = (callee->getName() == "_sym_build_variable");
+    if (isIndirect || (isExternal && !isBuildVariable))
       return;
 
     errs() << "Found call: " << I << '\n';
 
     IRBuilder<> IRB(&I);
-    for (Use &arg : I.args())
-      IRB.CreateCall(SP.setParameterExpression,
-                     {ConstantInt::get(IRB.getInt8Ty(), arg.getOperandNo()),
-                      getOrCreateSymbolicExpression(arg, IRB)});
+
+    if (!isBuildVariable) {
+      for (Use &arg : I.args())
+        IRB.CreateCall(SP.setParameterExpression,
+                       {ConstantInt::get(IRB.getInt8Ty(), arg.getOperandNo()),
+                        getOrCreateSymbolicExpression(arg, IRB)});
+    }
 
     IRB.SetInsertPoint(I.getNextNonDebugInstruction());
     symbolicExpressions[&I] = IRB.CreateCall(SP.getReturnExpression);

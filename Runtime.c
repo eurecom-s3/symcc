@@ -29,6 +29,20 @@ Z3_ast _sym_build_integer(uint64_t value, uint8_t bits) {
   return Z3_mk_int(g_context, value, Z3_mk_bv_sort(g_context, bits));
 }
 
+uint32_t _sym_build_variable(const char *name, uint32_t value, uint8_t bits) {
+  /* TODO find a way to make this more generic, not just for uint32_t */
+
+  /* This function is the connection between the target program and our
+     instrumentation; it serves as a way to mark variables as symbolic. We just
+     return the concrete value but also set the expression for the return value;
+     the instrumentation knows to treat this function specially and check the
+     returned expression even though it's an external call. */
+
+  Z3_symbol sym = Z3_mk_string_symbol(g_context, name);
+  g_return_value = Z3_mk_const(g_context, sym, Z3_mk_bv_sort(g_context, bits));
+  return value;
+}
+
 /*
  * Arithmetic
  */
@@ -80,6 +94,27 @@ Z3_ast _sym_get_return_expression(void) { return g_return_value; }
  */
 
 void _sym_push_path_constraint(Z3_ast constraint) {
+  /* TODO accept a parameter "taken" */
+
+  /* Generate a solution for the alternative */
+
+  Z3_solver_push(g_context, g_solver);
+
+  Z3_solver_assert(g_context, g_solver, Z3_mk_not(g_context, constraint));
+  Z3_lbool feasible = Z3_solver_check(g_context, g_solver);
+  if (feasible == Z3_L_TRUE) {
+    Z3_model model = Z3_solver_get_model(g_context, g_solver);
+    Z3_model_inc_ref(g_context, model);
+    printf("Diverging input:\n%s\n", Z3_model_to_string(g_context, model));
+    Z3_model_dec_ref(g_context, model);
+  } else {
+    printf("Can't find a diverging input at this point\n");
+  }
+
+  Z3_solver_pop(g_context, g_solver, 1);
+
+  /* Assert the actual path constraint */
+
   Z3_solver_assert(g_context, g_solver, constraint);
   printf("Solver state:\n%s\n", Z3_solver_to_string(g_context, g_solver));
 }
