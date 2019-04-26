@@ -6,51 +6,78 @@
 This is a compiler pass which embeds symbolic execution into the program during
 compilation. In essence, it inserts code that computes symbolic expressions for
 each value in the program. The actual computation happens through calls to a
-support library at run time. For now, only the compiler pass is available, so
-the resulting code will generate linker errors until the run-time library
-becomes ready.
+support library at run time.
 
-To build the pass, make sure that LLVM 8 is installed, create a build directory
-somewhere, and execute the following commands inside the build directory:
+To build the pass, make sure that LLVM 8 and Z3 are installed, create a build
+directory somewhere, and execute the following commands inside the build
+directory:
 
 $ cmake -G Ninja /path/to/compiler/sources
 $ ninja
 
 If LLVM is installed in a non-standard location, add the CMake parameter
-"-DLLVM_DIR=/path/to/llvm/cmake/module". The result of the build process is
-libSymbolize.so, which can be loaded into clang or opt.
+"-DLLVM_DIR=/path/to/llvm/cmake/module". The results of the build process are
+libSymbolize.so, a pass that can be loaded into clang or opt, and
+libSymRuntime.a, the support library that has to be linked with the target
+programs.
 
 To try the compiler, take a simple bitcode file like the following:
 
-  ; ModuleID = 'simple.c'
-  source_filename = "simple.c"
-  target datalayout = "e-m:e-i64:64-f80:128-n8:16:32:64-S128"
-  target triple = "x86_64-pc-linux-gnu"
+; ModuleID = 'if.c'
+source_filename = "if.c"
+target datalayout = "e-m:e-i64:64-f80:128-n8:16:32:64-S128"
+target triple = "x86_64-pc-linux-gnu"
 
-  ; Function Attrs: norecurse nounwind readnone sspstrong uwtable
-  define dso_local i32 @foo(i32) local_unnamed_addr #0 {
-    %2 = add nsw i32 %0, 1
-    ret i32 %2
-  }
+@.str = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
 
-  ; Function Attrs: norecurse nounwind readnone sspstrong uwtable
-  define dso_local i32 @main(i32, i8** nocapture readnone) local_unnamed_addr #0 {
-    ret i32 0
-  }
+; Function Attrs: norecurse nounwind readnone sspstrong uwtable
+define dso_local i32 @foo(i32, i32) local_unnamed_addr #0 {
+  %3 = shl nsw i32 %0, 1
+  %4 = icmp slt i32 %3, %1
+  br i1 %4, label %10, label %5
 
-  attributes #0 = { norecurse nounwind readnone sspstrong uwtable "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "no-frame-pointer-elim"="false" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
+; <label>:5:                                      ; preds = %2
+  %6 = srem i32 %0, %1
+  %7 = icmp eq i32 %6, 0
+  %8 = select i1 %7, i32 %0, i32 0
+  %9 = add nsw i32 %8, %1
+  ret i32 %9
 
-  !llvm.module.flags = !{!0, !1, !2}
-  !llvm.ident = !{!3}
+; <label>:10:                                     ; preds = %2
+  ret i32 %0
+}
 
-  !0 = !{i32 1, !"wchar_size", i32 4}
-  !1 = !{i32 7, !"PIC Level", i32 2}
-  !2 = !{i32 7, !"PIE Level", i32 2}
-  !3 = !{!"clang version 8.0.0 (tags/RELEASE_800/final)"}
+; Function Attrs: nounwind sspstrong uwtable
+define dso_local i32 @main(i32, i8** nocapture readnone) local_unnamed_addr #1 {
+  %res = call i32 (i32, i32) @foo(i32 5, i32 7)
+  %3 = tail call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([4 x i8], [4 x i8]* @.str, i64 0, i64 0), i32 %res)
+  ret i32 0
+}
 
-Save the file as "simple.ll" and run the following:
+; Function Attrs: nounwind
+declare i32 @printf(i8* nocapture readonly, ...) local_unnamed_addr #2
 
-$ opt -load ./libSymbolize.so -symbolize < simple.ll | llvm-dis
+attributes #0 = { norecurse nounwind readnone sspstrong uwtable "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "no-frame-pointer-elim"="false" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #1 = { nounwind sspstrong uwtable "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "no-frame-pointer-elim"="false" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #2 = { nounwind "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="false" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
 
-The output should be the compilation logs, followed by a disassembly of the
-transformed code.
+!llvm.module.flags = !{!0, !1, !2}
+!llvm.ident = !{!3}
+
+!0 = !{i32 1, !"wchar_size", i32 4}
+!1 = !{i32 7, !"PIC Level", i32 2}
+!2 = !{i32 7, !"PIE Level", i32 2}
+!3 = !{!"clang version 8.0.0 (tags/RELEASE_800/final)"}
+
+Save the file as "test.ll" and run the following:
+
+$ opt -load ./libSymbolize.so -symbolize < test.ll > test_instrumented.bc
+
+The output file contains instrumented LLVM bitcode. In order to run it, compile
+it for the host architecture and link it against the runtime like so:
+
+$ clang test.bc libSymRuntime.a -lz3 -o test
+$ ./test
+
+The program will execute the same computations as the uninstrumented version,
+but additionally the injected code will track computations symbolically.
