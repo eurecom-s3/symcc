@@ -93,19 +93,20 @@ Z3_ast _sym_get_return_expression(void) { return g_return_value; }
  * Constraint handling
  */
 
-void _sym_push_path_constraint(Z3_ast constraint) {
-  /* TODO accept a parameter "taken" */
-
+Z3_ast _sym_push_path_constraint(Z3_ast constraint, int taken) {
   /* Generate a solution for the alternative */
-
   Z3_solver_push(g_context, g_solver);
 
-  Z3_solver_assert(g_context, g_solver, Z3_mk_not(g_context, constraint));
+  Z3_solver_assert(g_context, g_solver,
+                   taken ? Z3_mk_not(g_context, constraint) : constraint);
+  printf("Trying to solve:\n%s\n", Z3_solver_to_string(g_context, g_solver));
+
   Z3_lbool feasible = Z3_solver_check(g_context, g_solver);
   if (feasible == Z3_L_TRUE) {
     Z3_model model = Z3_solver_get_model(g_context, g_solver);
     Z3_model_inc_ref(g_context, model);
-    printf("Diverging input:\n%s\n", Z3_model_to_string(g_context, model));
+    printf("Found diverging input:\n%s\n",
+           Z3_model_to_string(g_context, model));
     Z3_model_dec_ref(g_context, model);
   } else {
     printf("Can't find a diverging input at this point\n");
@@ -114,7 +115,8 @@ void _sym_push_path_constraint(Z3_ast constraint) {
   Z3_solver_pop(g_context, g_solver, 1);
 
   /* Assert the actual path constraint */
-
-  Z3_solver_assert(g_context, g_solver, constraint);
-  printf("Solver state:\n%s\n", Z3_solver_to_string(g_context, g_solver));
+  Z3_ast newConstraint =
+      (taken ? constraint : Z3_mk_not(g_context, constraint));
+  Z3_solver_assert(g_context, g_solver, newConstraint);
+  return newConstraint;
 }

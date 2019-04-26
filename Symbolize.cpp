@@ -105,12 +105,9 @@ public:
     // case, even when it's not used. Is this cheaper than a conditional branch?
 
     IRBuilder<> IRB(&I);
-    auto condition = getOrCreateSymbolicExpression(I.getCondition(), IRB);
-    auto negatedCondition =
-        IRB.CreateCall(SP.buildNeg, condition, "negated_condition");
-    auto newConstraint = IRB.CreateSelect(
-        I.getCondition(), condition, negatedCondition, "new_path_constraint");
-    IRB.CreateCall(SP.pushPathConstraint, newConstraint);
+    IRB.CreateCall(SP.pushPathConstraint,
+                   {getOrCreateSymbolicExpression(I.getCondition(), IRB),
+                    I.getCondition()});
     symbolicExpressions[&I] = IRB.CreateSelect(
         I.getCondition(), getOrCreateSymbolicExpression(I.getTrueValue(), IRB),
         getOrCreateSymbolicExpression(I.getFalseValue(), IRB));
@@ -152,13 +149,10 @@ public:
     // negative branch. Therefore, we insert calls directly into the two target
     // blocks.
 
-    IRBuilder<> IRB(I.getSuccessor(0)->getFirstNonPHI());
+    IRBuilder<> IRB(&I);
     IRB.CreateCall(SP.pushPathConstraint,
-                   getOrCreateSymbolicExpression(I.getCondition(), IRB));
-    IRB.SetInsertPoint(I.getSuccessor(1)->getFirstNonPHI());
-    auto negatedCondition = IRB.CreateCall(
-        SP.buildNeg, getOrCreateSymbolicExpression(I.getCondition(), IRB));
-    IRB.CreateCall(SP.pushPathConstraint, negatedCondition);
+                   {getOrCreateSymbolicExpression(I.getCondition(), IRB),
+                    I.getCondition()});
   }
 
   void visitCallInst(CallInst &I) {
@@ -208,8 +202,9 @@ bool SymbolizePass::doInitialization(Module &M) {
                                        IRB.getInt64Ty(), IRB.getInt8Ty());
   buildNeg = M.getOrInsertFunction("_sym_build_neg", IRB.getInt8PtrTy(),
                                    IRB.getInt8PtrTy());
-  pushPathConstraint = M.getOrInsertFunction(
-      "_sym_push_path_constraint", IRB.getVoidTy(), IRB.getInt8PtrTy());
+  pushPathConstraint =
+      M.getOrInsertFunction("_sym_push_path_constraint", IRB.getInt8PtrTy(),
+                            IRB.getInt8PtrTy(), IRB.getInt1Ty());
 
   setParameterExpression =
       M.getOrInsertFunction("_sym_set_parameter_expression", IRB.getVoidTy(),
