@@ -198,27 +198,26 @@ bool SymbolizePass::doInitialization(Module &M) {
   DEBUG(errs() << "Symbolizer module init\n");
 
   IRBuilder<> IRB(M.getContext());
-  buildInteger =
-      M.getOrInsertFunction("__sym_build_integer", IRB.getInt8PtrTy(),
-                            IRB.getInt64Ty(), IRB.getInt8Ty());
-  buildNeg = M.getOrInsertFunction("__sym_build_neg", IRB.getInt8PtrTy(),
+  buildInteger = M.getOrInsertFunction("_sym_build_integer", IRB.getInt8PtrTy(),
+                                       IRB.getInt64Ty(), IRB.getInt8Ty());
+  buildNeg = M.getOrInsertFunction("_sym_build_neg", IRB.getInt8PtrTy(),
                                    IRB.getInt8PtrTy());
   pushPathConstraint = M.getOrInsertFunction(
-      "__sym_push_path_constraint", IRB.getVoidTy(), IRB.getInt8PtrTy());
+      "_sym_push_path_constraint", IRB.getVoidTy(), IRB.getInt8PtrTy());
 
   setParameterExpression =
-      M.getOrInsertFunction("__sym_set_parameter_expression", IRB.getVoidTy(),
+      M.getOrInsertFunction("_sym_set_parameter_expression", IRB.getVoidTy(),
                             IRB.getInt8Ty(), IRB.getInt8PtrTy());
   getParameterExpression = M.getOrInsertFunction(
-      "__sym_get_parameter_expression", IRB.getInt8PtrTy(), IRB.getInt8Ty());
+      "_sym_get_parameter_expression", IRB.getInt8PtrTy(), IRB.getInt8Ty());
   setReturnExpression = M.getOrInsertFunction(
-      "__sym_set_return_expression", IRB.getVoidTy(), IRB.getInt8PtrTy());
+      "_sym_set_return_expression", IRB.getVoidTy(), IRB.getInt8PtrTy());
   getReturnExpression =
-      M.getOrInsertFunction("__sym_get_return_expression", IRB.getInt8PtrTy());
+      M.getOrInsertFunction("_sym_get_return_expression", IRB.getInt8PtrTy());
 
 #define LOAD_BINARY_OPERATOR_HANDLER(constant, name)                           \
   binaryOperatorHandlers[Instruction::constant] =                              \
-      M.getOrInsertFunction("__sym_build_" #name, IRB.getInt8PtrTy(),          \
+      M.getOrInsertFunction("_sym_build_" #name, IRB.getInt8PtrTy(),           \
                             IRB.getInt8PtrTy(), IRB.getInt8PtrTy());
 
   LOAD_BINARY_OPERATOR_HANDLER(Add, add)
@@ -239,7 +238,7 @@ bool SymbolizePass::doInitialization(Module &M) {
 
 #define LOAD_COMPARISON_HANDLER(constant, name)                                \
   comparisonHandlers[CmpInst::constant] =                                      \
-      M.getOrInsertFunction("__sym_build_" #name, IRB.getInt8PtrTy(),          \
+      M.getOrInsertFunction("_sym_build_" #name, IRB.getInt8PtrTy(),           \
                             IRB.getInt8PtrTy(), IRB.getInt8PtrTy());
 
   LOAD_COMPARISON_HANDLER(ICMP_EQ, equal)
