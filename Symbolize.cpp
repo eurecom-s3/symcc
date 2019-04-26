@@ -100,6 +100,9 @@ public:
     // negated) condition to the path constraints and copy the symbolic
     // expression over from the chosen argument.
 
+    // TODO The code we generate here causes the negation to be built in any
+    // case, even when it's not used. Is this cheaper than a conditional branch?
+
     IRBuilder<> IRB(&I);
     auto condition = getOrCreateSymbolicExpression(I.getCondition(), IRB);
     auto negatedCondition =
@@ -133,6 +136,28 @@ public:
     IRBuilder<> IRB(&I);
     IRB.CreateCall(SP.setReturnExpression,
                    getOrCreateSymbolicExpression(I.getReturnValue(), IRB));
+  }
+
+  void visitBranchInst(BranchInst &I) {
+    // Br can jump conditionally or unconditionally. We are only interested in
+    // the former case, in which we push the branch condition or its negation to
+    // the path constraints.
+
+    if (I.isUnconditional())
+      return;
+
+    // It seems that Clang can't optimize the sequence "call buildNeg; select;
+    // call pushPathConstraint; br", failing to move the first call to the
+    // negative branch. Therefore, we insert calls directly into the two target
+    // blocks.
+
+    IRBuilder<> IRB(I.getSuccessor(0)->getFirstNonPHI());
+    IRB.CreateCall(SP.pushPathConstraint,
+                   getOrCreateSymbolicExpression(I.getCondition(), IRB));
+    IRB.SetInsertPoint(I.getSuccessor(1)->getFirstNonPHI());
+    auto negatedCondition = IRB.CreateCall(
+        SP.buildNeg, getOrCreateSymbolicExpression(I.getCondition(), IRB));
+    IRB.CreateCall(SP.pushPathConstraint, negatedCondition);
   }
 
 private:
