@@ -160,6 +160,29 @@ public:
     IRB.CreateCall(SP.pushPathConstraint, negatedCondition);
   }
 
+  void visitCallInst(CallInst &I) {
+    // TODO handle indirect calls
+    // TODO prevent instrumentation of our own functions with attributes
+
+    Function *callee = I.getCalledFunction();
+    bool isIndirect = !callee;
+    // TODO find a better way to detect external functions
+    bool isExternal = !callee->getInstructionCount();
+    if (isIndirect || isExternal)
+      return;
+
+    errs() << "Found call: " << I << '\n';
+
+    IRBuilder<> IRB(&I);
+    for (Use &arg : I.args())
+      IRB.CreateCall(SP.setParameterExpression,
+                     {ConstantInt::get(IRB.getInt8Ty(), arg.getOperandNo()),
+                      getOrCreateSymbolicExpression(arg, IRB)});
+
+    IRB.SetInsertPoint(I.getNextNonDebugInstruction());
+    symbolicExpressions[&I] = IRB.CreateCall(SP.getReturnExpression);
+  }
+
 private:
   SymbolizePass &SP;
   ValueMap<Value *, Value *> symbolicExpressions;
@@ -235,10 +258,6 @@ bool SymbolizePass::doInitialization(Module &M) {
 }
 
 bool SymbolizePass::runOnFunction(Function &F) {
-  // TODO handle main later
-  if (F.getName() == "main")
-    return false;
-
   DEBUG(errs() << "Symbolizing function ");
   DEBUG(errs().write_escaped(F.getName()) << '\n');
 
