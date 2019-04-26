@@ -29,6 +29,7 @@ public:
   // Runtime functions
   //
 
+  Value *initializeRuntime;
   Value *buildInteger;
   Value *buildNeg;
   Value *pushPathConstraint;
@@ -198,6 +199,7 @@ bool SymbolizePass::doInitialization(Module &M) {
   DEBUG(errs() << "Symbolizer module init\n");
 
   IRBuilder<> IRB(M.getContext());
+  initializeRuntime = M.getOrInsertFunction("_sym_initialize", IRB.getVoidTy());
   buildInteger = M.getOrInsertFunction("_sym_build_integer", IRB.getInt8PtrTy(),
                                        IRB.getInt64Ty(), IRB.getInt8Ty());
   buildNeg = M.getOrInsertFunction("_sym_build_neg", IRB.getInt8PtrTy(),
@@ -259,6 +261,11 @@ bool SymbolizePass::doInitialization(Module &M) {
 bool SymbolizePass::runOnFunction(Function &F) {
   DEBUG(errs() << "Symbolizing function ");
   DEBUG(errs().write_escaped(F.getName()) << '\n');
+
+  if (F.getName() == "main") {
+    IRBuilder<> IRB(F.getEntryBlock().getFirstNonPHI());
+    IRB.CreateCall(initializeRuntime);
+  }
 
   Symbolizer symbolizer(*this);
   symbolizer.visit(F);
