@@ -157,6 +157,7 @@ public:
 
   void visitCallInst(CallInst &I) {
     // TODO handle indirect calls
+    // TODO handle calls to intrinsics
     // TODO prevent instrumentation of our own functions with attributes
 
     Function *callee = I.getCalledFunction();
@@ -164,10 +165,11 @@ public:
     // TODO find a better way to detect external functions
     bool isExternal = !callee->getInstructionCount();
     bool isBuildVariable = (callee->getName() == "_sym_build_variable");
-    if (isIndirect || (isExternal && !isBuildVariable))
+    if (isIndirect || (isExternal && !isBuildVariable)) {
+      errs() << "Warning: losing track of symbolic expressions at " << I
+             << '\n';
       return;
-
-    errs() << "Found call: " << I << '\n';
+    }
 
     IRBuilder<> IRB(&I);
 
@@ -182,8 +184,39 @@ public:
     symbolicExpressions[&I] = IRB.CreateCall(SP.getReturnExpression);
   }
 
+  // TODO find out why our handling of alloca, load and store breaks
+  // optimization
+
+  void visitAllocaInst(AllocaInst &I) {
+    if (auto size = dyn_cast<ConstantInt>(I.getArraySize());
+        !size || !size->isOne()) {
+      errs() << "Warning: stack-allocated arrays are not supported yet\n";
+      return;
+    }
+
+    IRBuilder<> IRB(&I);
+    symbolicExpressions[&I] = IRB.CreateAlloca(IRB.getInt8PtrTy());
+  }
+
+  void visitLoadInst(LoadInst &I) {
+    IRBuilder<> IRB(&I);
+    symbolicExpressions[&I] = IRB.CreateLoad(
+        getOrCreateSymbolicExpression(I.getPointerOperand(), IRB));
+  }
+
+  void visitStoreInst(StoreInst &I) {
+    IRBuilder<> IRB(&I);
+    IRB.CreateStore(getOrCreateSymbolicExpression(I.getValueOperand(), IRB),
+                    getOrCreateSymbolicExpression(I.getPointerOperand(), IRB));
+  }
+
 private:
   SymbolizePass &SP;
+
+  /// Mapping from SSA values to symbolic expressions.
+  ///
+  /// For pointer values, the stored value is not an expression but a pointer to
+  /// the expression of the referenced value.
   ValueMap<Value *, Value *> symbolicExpressions;
 };
 
@@ -243,6 +276,7 @@ bool SymbolizePass::doInitialization(Module &M) {
                             IRB.getInt8PtrTy(), IRB.getInt8PtrTy());
 
   LOAD_COMPARISON_HANDLER(ICMP_EQ, equal)
+  LOAD_COMPARISON_HANDLER(ICMP_NE, not_equal)
   LOAD_COMPARISON_HANDLER(ICMP_UGT, unsigned_greater_than)
   LOAD_COMPARISON_HANDLER(ICMP_UGE, unsigned_greater_equal)
   LOAD_COMPARISON_HANDLER(ICMP_ULT, unsigned_less_than)

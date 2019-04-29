@@ -51,6 +51,10 @@ Z3_ast _sym_build_add(Z3_ast a, Z3_ast b) {
   return Z3_mk_bvadd(g_context, a, b);
 }
 
+Z3_ast _sym_build_mul(Z3_ast a, Z3_ast b) {
+  return Z3_mk_bvmul(g_context, a, b);
+}
+
 Z3_ast _sym_build_signed_rem(Z3_ast a, Z3_ast b) {
   return Z3_mk_bvsrem(g_context, a, b);
 }
@@ -71,6 +75,10 @@ Z3_ast _sym_build_signed_less_than(Z3_ast a, Z3_ast b) {
 
 Z3_ast _sym_build_equal(Z3_ast a, Z3_ast b) {
   return Z3_mk_eq(g_context, a, b);
+}
+
+Z3_ast _sym_build_not_equal(Z3_ast a, Z3_ast b) {
+  return Z3_mk_not(g_context, _sym_build_equal(a, b));
 }
 
 /*
