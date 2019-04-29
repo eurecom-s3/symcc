@@ -1,0 +1,24 @@
+
+
+                                  Optimization
+
+
+A popular technique for experimenting with compiler passes is to produce bitcode
+with "clang -emit-llvm" and run the pass on the resulting bitcode with opt. Note
+that this approach does not mix well with optimization: simply running "opt -O3"
+on the instrumented bitcode yields inferior results. Why? In principle, the
+instrumentation that adds symbolic-execution capabilities does not interfere
+with the compiler's regular optimization. However, while "opt -O3" runs the same
+middle-end optimizations as clang does internally, "clang -O3" performs
+additional analysis before invoking the middle end. In particular, type-based
+alias analysis (TBAA) adds metadata to the bitcode that enables the SROA pass to
+promote a lot of stack-allocated variables into SSA values.
+
+In order to produce bitcode that can later be properly optimized with opt, pass
+the desired optimization flag at each stage of the workflow:
+
+$ clang -O3 -Xclang -disable-llvm-passes -emit-llvm -S test.c -o test.ll
+$ opt -load ./libSymbolize.so -symbolize < test.ll > test_instrumented.bc
+$ opt -O3 < test_instrumented.bc > test_instrumented_optimized.bc
+$ clang -O3 test_instrumented_optimized.bc -o test
+$ ./test

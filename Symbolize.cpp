@@ -2,10 +2,12 @@
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/InstVisitor.h>
 #include <llvm/IR/InstrTypes.h>
+#include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/ValueMap.h>
 #include <llvm/Pass.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/Transforms/IPO/PassManagerBuilder.h>
 
 #define DEBUG(X)                                                               \
   do {                                                                         \
@@ -184,9 +186,6 @@ public:
     symbolicExpressions[&I] = IRB.CreateCall(SP.getReturnExpression);
   }
 
-  // TODO find out why our handling of alloca, load and store breaks
-  // optimization
-
   void visitAllocaInst(AllocaInst &I) {
     if (auto size = dyn_cast<ConstantInt>(I.getArraySize());
         !size || !size->isOne()) {
@@ -220,11 +219,19 @@ private:
   ValueMap<Value *, Value *> symbolicExpressions;
 };
 
+void addSymbolizePass(const PassManagerBuilder &, legacy::PassManagerBase &PM) {
+  PM.add(new SymbolizePass());
+}
+
 } // end of anonymous namespace
 
 char SymbolizePass::ID = 0;
 
+// Make the pass known to opt.
 static RegisterPass<SymbolizePass> X("symbolize", "Symbolization Pass");
+// Tell frontends to run the pass automatically.
+static struct RegisterStandardPasses Y(PassManagerBuilder::EP_EarlyAsPossible,
+                                       addSymbolizePass);
 
 bool SymbolizePass::doInitialization(Module &M) {
   DEBUG(errs() << "Symbolizer module init\n");

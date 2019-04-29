@@ -21,66 +21,34 @@ libSymbolize.so, a pass that can be loaded into clang or opt, and
 libSymRuntime.a, the support library that has to be linked with the target
 programs.
 
-To try the compiler, take a simple bitcode file like the following:
+To try the compiler, take some simple C code like the following:
 
-; ModuleID = 'if.c'
-source_filename = "if.c"
-target datalayout = "e-m:e-i64:64-f80:128-n8:16:32:64-S128"
-target triple = "x86_64-pc-linux-gnu"
+#include <stdio.h>
+#include <stdint.h>
 
-@.str = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
-@symname = constant [2 x i8] c"x\00", align 1
+int _sym_build_variable(const char*, int, uint8_t);
 
-; Function Attrs: norecurse nounwind readnone sspstrong uwtable
-define dso_local i32 @foo(i32, i32) local_unnamed_addr #0 {
-  %3 = shl nsw i32 %0, 1
-  %4 = icmp slt i32 %3, %1
-  br i1 %4, label %10, label %5
-
-; <label>:5:                                      ; preds = %2
-  %6 = srem i32 %0, %1
-  %7 = icmp eq i32 %6, 0
-  %8 = select i1 %7, i32 %0, i32 0
-  %9 = add nsw i32 %8, %1
-  ret i32 %9
-
-; <label>:10:                                     ; preds = %2
-  ret i32 %0
+int foo(int a, int b) {
+    if (2 * a < b)
+        return a;
+    else if (a % b)
+        return b;
+    else
+        return a + b;
 }
 
-; Function Attrs: nounwind sspstrong uwtable
-define dso_local i32 @main(i32, i8** nocapture readnone) local_unnamed_addr #1 {
-  %sym = call i32 (i8*, i32, i8) @_sym_build_variable(i8* getelementptr inbounds ([2 x i8], [2 x i8]* @symname, i64 0, i64 0), i32 5, i8 32)
-  %res = call i32 (i32, i32) @foo(i32 %sym, i32 7)
-  %3 = tail call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([4 x i8], [4 x i8]* @.str, i64 0, i64 0), i32 %res)
-  ret i32 0
+int main(int argc, char* argv[]) {
+    int x = _sym_build_variable("x", 5, 32);
+    printf("%d\n", foo(x, 7));
+    return 0;
 }
 
-; Function Attrs: nounwind
-declare i32 @printf(i8* nocapture readonly, ...) local_unnamed_addr #2
+Save the code as "test.c". In addition to regular compilation, we need to load
+the compiler pass and link the object file against both the symbolic runtime and
+Z3:
 
-declare i32 @_sym_build_variable(i8*, i32, i8) #2
-
-attributes #0 = { norecurse nounwind readnone sspstrong uwtable "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "no-frame-pointer-elim"="false" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
-attributes #1 = { nounwind sspstrong uwtable "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "no-frame-pointer-elim"="false" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
-attributes #2 = { nounwind "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="false" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
-
-!llvm.module.flags = !{!0, !1, !2}
-!llvm.ident = !{!3}
-
-!0 = !{i32 1, !"wchar_size", i32 4}
-!1 = !{i32 7, !"PIC Level", i32 2}
-!2 = !{i32 7, !"PIE Level", i32 2}
-!3 = !{!"clang version 8.0.0 (tags/RELEASE_800/final)"}
-
-Save the file as "test.ll" and run the following:
-
-$ opt -load ./libSymbolize.so -symbolize < test.ll > test_instrumented.bc
-
-The output file contains instrumented LLVM bitcode. In order to run it, compile
-it for the host architecture and link it against the runtime like so:
-
-$ clang test.bc libSymRuntime.a -lz3 -o test
+$ clang -O3 -Xclang -load -Xclang ./libSymbolize.so \
+    test.c libSymRuntime.a -lz3 -o test
 $ ./test
 
 The program will execute the same computations as the uninstrumented version,
