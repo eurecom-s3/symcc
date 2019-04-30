@@ -25,3 +25,5 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pedantic -Wall -Wshadow -Wpointer-arith \
 
 add_library(Symbolize MODULE Symbolize.cpp)
 add_library(SymRuntime Runtime.c)
+
+add_subdirectory(test)
