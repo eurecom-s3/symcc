@@ -209,6 +209,17 @@ public:
                     getOrCreateSymbolicExpression(I.getPointerOperand(), IRB));
   }
 
+  void visitBitCastInst(BitCastInst &I) {
+    if (I.getSrcTy()->isPointerTy() && I.getDestTy()->isPointerTy())
+      return;
+
+    errs() << "Warning: unhandled non-pointer bit cast " << I << '\n';
+  }
+
+  void visitInstruction(Instruction &I) {
+    errs() << "Warning: unknown instruction " << I << '\n';
+  }
+
 private:
   SymbolizePass &SP;
 
