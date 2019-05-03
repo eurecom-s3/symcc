@@ -73,6 +73,10 @@ Z3_ast _sym_build_signed_less_than(Z3_ast a, Z3_ast b) {
   return Z3_mk_bvslt(g_context, a, b);
 }
 
+Z3_ast _sym_build_signed_less_equal(Z3_ast a, Z3_ast b) {
+  return Z3_mk_bvsle(g_context, a, b);
+}
+
 Z3_ast _sym_build_equal(Z3_ast a, Z3_ast b) {
   return Z3_mk_eq(g_context, a, b);
 }

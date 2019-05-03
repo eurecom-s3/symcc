@@ -261,6 +261,7 @@ bool SymbolizePass::doInitialization(Module &M) {
       M.getOrInsertFunction("_sym_build_" #name, IRB.getInt8PtrTy(),           \
                             IRB.getInt8PtrTy(), IRB.getInt8PtrTy());
 
+  // TODO make sure that we use the correct variant (signed or unsigned)
   LOAD_BINARY_OPERATOR_HANDLER(Add, add)
   LOAD_BINARY_OPERATOR_HANDLER(Sub, sub)
   LOAD_BINARY_OPERATOR_HANDLER(Mul, mul)
