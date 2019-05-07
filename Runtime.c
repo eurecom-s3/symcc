@@ -102,6 +102,15 @@ Z3_ast _sym_build_not_equal(Z3_ast a, Z3_ast b) {
 }
 
 /*
+ * Casts
+ */
+
+Z3_ast _sym_build_zext(Z3_ast expr, uint8_t bits) {
+  printf("Input: %s\n", Z3_ast_to_string(g_context, expr));
+  return Z3_mk_zero_ext(g_context, bits, expr);
+}
+
+/*
  * Function-call helpers
  */
 
@@ -123,6 +132,7 @@ Z3_ast _sym_get_return_expression(void) { return g_return_value; }
 
 Z3_ast _sym_push_path_constraint(Z3_ast constraint, int taken) {
   constraint = Z3_simplify(g_context, constraint);
+  /* TODO don't check if the constraint is constant */
 
   /* Generate a solution for the alternative */
   Z3_solver_push(g_context, g_solver);

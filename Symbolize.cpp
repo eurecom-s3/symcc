@@ -37,6 +37,7 @@ public:
 
   Value *buildInteger;
   Value *buildNeg;
+  Value *buildZExt;
   Value *pushPathConstraint;
   Value *getParameterExpression;
   Value *setParameterExpression;
@@ -252,6 +253,24 @@ public:
     symbolicExpressions[&I] = IRB.Insert(exprGEP);
   }
 
+  void visitZExtInst(ZExtInst &I) {
+    IRBuilder<> IRB(&I);
+
+    // LLVM bitcode represents Boolean values as i1. In Z3, those are a not a
+    // bit-vector sort, so trying to cast one into a bit vector of any length
+    // raises an error. For now, we follow the heuristic that i1 is always a
+    // Boolean and thus does not need extension on the Z3 side.
+    if (I.getSrcTy()->getIntegerBitWidth() == 1) {
+      symbolicExpressions[&I] =
+          getOrCreateSymbolicExpression(I.getOperand(0), IRB);
+    } else {
+      symbolicExpressions[&I] = IRB.CreateCall(
+          SP.buildZExt, {getOrCreateSymbolicExpression(I.getOperand(0), IRB),
+                         IRB.getInt8(I.getDestTy()->getIntegerBitWidth() -
+                                     I.getSrcTy()->getIntegerBitWidth())});
+    }
+  }
+
   void visitInstruction(Instruction &I) {
     errs() << "Warning: unknown instruction " << I << '\n';
   }
@@ -302,6 +321,8 @@ bool SymbolizePass::doInitialization(Module &M) {
                                        IRB.getInt64Ty(), IRB.getInt8Ty());
   buildNeg = M.getOrInsertFunction("_sym_build_neg", IRB.getInt8PtrTy(),
                                    IRB.getInt8PtrTy());
+  buildZExt = M.getOrInsertFunction("_sym_build_zext", IRB.getInt8PtrTy(),
+                                    IRB.getInt8PtrTy(), IRB.getInt8Ty());
   pushPathConstraint =
       M.getOrInsertFunction("_sym_push_path_constraint", IRB.getInt8PtrTy(),
                             IRB.getInt8PtrTy(), IRB.getInt1Ty());
