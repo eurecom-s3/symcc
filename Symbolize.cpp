@@ -8,6 +8,10 @@
 #include <llvm/Pass.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
+#include <llvm/Transforms/Utils/ModuleUtils.h>
+#include <llvm/Transforms/Utils/ValueMapper.h>
+
+#define SYM_CTOR_NAME "__sym_ctor"
 
 #define DEBUG(X)                                                               \
   do {                                                                         \
@@ -31,7 +35,6 @@ public:
   // Runtime functions
   //
 
-  Value *initializeRuntime;
   Value *buildInteger;
   Value *buildNeg;
   Value *pushPathConstraint;
@@ -47,6 +50,9 @@ public:
   /// Mapping from binary operators to the functions that build the
   /// corresponding symbolic expressions.
   Value *binaryOperatorHandlers[Instruction::BinaryOpsEnd];
+
+  /// Mapping from global variables to their corresponding symbolic expressions.
+  ValueMap<GlobalVariable *, GlobalVariable *> globalExpressions;
 };
 
 class Symbolizer : public InstVisitor<Symbolizer> {
@@ -59,6 +65,12 @@ public:
         exprIt != symbolicExpressions.end())
       return exprIt->second;
 
+    if (auto global = dyn_cast<GlobalVariable>(V)) {
+      if (auto exprIt = SP.globalExpressions.find(global);
+          exprIt != SP.globalExpressions.end())
+        return exprIt->second;
+    }
+
     Value *ret = nullptr;
 
     if (auto C = dyn_cast<ConstantInt>(V)) {
@@ -70,6 +82,14 @@ public:
     } else if (auto A = dyn_cast<Argument>(V)) {
       ret = IRB.CreateCall(SP.getParameterExpression,
                            ConstantInt::get(IRB.getInt8Ty(), A->getArgNo()));
+    } else if (auto gep = dyn_cast<GEPOperator>(V)) {
+      // TODO can we assume this is always a global value?
+      auto baseExpr = cast<GlobalValue>(
+          getOrCreateSymbolicExpression(gep->getPointerOperand(), IRB));
+      SmallVector<Value *, 5> indices(gep->idx_begin(), gep->idx_end());
+      ret = ConstantExpr::getGetElementPtr(baseExpr->getValueType(), baseExpr,
+                                           indices, gep->isInBounds(),
+                                           gep->getInRangeIndex());
     }
 
     if (!ret) {
@@ -164,14 +184,14 @@ public:
 
     Function *callee = I.getCalledFunction();
     bool isIndirect = !callee;
-    // TODO find a better way to detect external functions
-    bool isExternal = !callee->getInstructionCount();
     bool isBuildVariable = (callee->getName() == "_sym_build_variable");
-    if (isIndirect || (isExternal && !isBuildVariable)) {
+    if (isIndirect) {
       errs() << "Warning: losing track of symbolic expressions at " << I
              << '\n';
       return;
     }
+    if (!isBuildVariable && callee->getName().startswith("_sym_"))
+      return;
 
     IRBuilder<> IRB(&I);
 
@@ -183,6 +203,7 @@ public:
     }
 
     IRB.SetInsertPoint(I.getNextNonDebugInstruction());
+    // TODO get the expression only if the function set one
     symbolicExpressions[&I] = IRB.CreateCall(SP.getReturnExpression);
   }
 
@@ -210,10 +231,25 @@ public:
   }
 
   void visitBitCastInst(BitCastInst &I) {
-    if (I.getSrcTy()->isPointerTy() && I.getDestTy()->isPointerTy())
+    if (!I.getSrcTy()->isPointerTy() || !I.getDestTy()->isPointerTy()) {
+      errs() << "Warning: unhandled non-pointer bit cast " << I << '\n';
       return;
+    }
 
-    errs() << "Warning: unhandled non-pointer bit cast " << I << '\n';
+    IRBuilder<> IRB(&I);
+    symbolicExpressions[&I] =
+        getOrCreateSymbolicExpression(I.getOperand(0), IRB);
+  }
+
+  void visitGetElementPtrInst(GetElementPtrInst &I) {
+    IRBuilder<> IRB(&I);
+    auto *exprGEP = I.clone();
+    ValueToValueMapTy vmap;
+    vmap[&I] = exprGEP;
+    vmap[I.getPointerOperand()] =
+        getOrCreateSymbolicExpression(I.getPointerOperand(), IRB);
+    RemapInstruction(exprGEP, vmap);
+    symbolicExpressions[&I] = IRB.Insert(exprGEP);
   }
 
   void visitInstruction(Instruction &I) {
@@ -234,6 +270,20 @@ void addSymbolizePass(const PassManagerBuilder &, legacy::PassManagerBase &PM) {
   PM.add(new SymbolizePass());
 }
 
+/// Return the appropriate type for storing symbolic expressions.
+Type *expressionType(Type *type, LLVMContext &ctx) {
+  // TODO handle struct types
+  if (type->isIntegerTy()) {
+    return Type::getInt8PtrTy(ctx);
+  } else if (type->isArrayTy()) {
+    return ArrayType::get(expressionType(type->getArrayElementType(), ctx),
+                          type->getArrayNumElements());
+  }
+
+  errs() << "Warning: cannot determine expression type for " << type << '\n';
+  llvm_unreachable("Unable to determine expression type");
+}
+
 } // end of anonymous namespace
 
 char SymbolizePass::ID = 0;
@@ -248,7 +298,6 @@ bool SymbolizePass::doInitialization(Module &M) {
   DEBUG(errs() << "Symbolizer module init\n");
 
   IRBuilder<> IRB(M.getContext());
-  initializeRuntime = M.getOrInsertFunction("_sym_initialize", IRB.getVoidTy());
   buildInteger = M.getOrInsertFunction("_sym_build_integer", IRB.getInt8PtrTy(),
                                        IRB.getInt64Ty(), IRB.getInt8Ty());
   buildNeg = M.getOrInsertFunction("_sym_build_neg", IRB.getInt8PtrTy(),
@@ -307,21 +356,57 @@ bool SymbolizePass::doInitialization(Module &M) {
 
 #undef LOAD_COMPARISON_HANDLER
 
+  // For each global variable, we need another global variable that holds the
+  // corresponding symbolic expression.
+  for (auto &global : M.globals()) {
+    auto exprType = expressionType(global.getValueType(), M.getContext());
+    // The expression has to be initialized at run time and can therefore never
+    // be constant, even if the value that it represents is.
+    globalExpressions[&global] =
+        new GlobalVariable(M, exprType, false, global.getLinkage(),
+                           Constant::getNullValue(exprType),
+                           global.getName() + ".sym_expr", &global);
+  }
+
+  // Insert a constructor that initializes the runtime and any globals.
+  Function *ctor;
+  std::tie(ctor, std::ignore) = createSanitizerCtorAndInitFunctions(
+      M, SYM_CTOR_NAME, "_sym_initialize", {}, {});
+  IRB.SetInsertPoint(ctor->getEntryBlock().getTerminator());
+  auto initializeGlobal = M.getOrInsertFunction(
+      "_sym_initialize_array", IRB.getVoidTy(), IRB.getInt8PtrTy(),
+      IRB.getInt8PtrTy(), IRB.getInt64Ty());
+  for (auto &&[value, expression] : globalExpressions) {
+    // TODO handle non-array globals and non-char arrays
+    auto valueType = value->getValueType();
+    // errs() << *value << " - " << *valueType << '\n';
+    if (valueType->isIntegerTy()) {
+      auto intValue = IRB.CreateLoad(value);
+      auto intExpr = IRB.CreateCall(
+          buildInteger,
+          {intValue, IRB.getInt8(valueType->getIntegerBitWidth())});
+      IRB.CreateStore(intExpr, expression);
+    } else {
+      IRB.CreateCall(
+          initializeGlobal,
+          {expression, value, IRB.getInt64(valueType->getArrayNumElements())});
+    }
+  }
+  appendToGlobalCtors(M, ctor, 0);
+
   return true;
 }
 
 bool SymbolizePass::runOnFunction(Function &F) {
+  if (F.getName() == SYM_CTOR_NAME)
+    return false;
+
   DEBUG(errs() << "Symbolizing function ");
   DEBUG(errs().write_escaped(F.getName()) << '\n');
 
-  if (F.getName() == "main") {
-    IRBuilder<> IRB(F.getEntryBlock().getFirstNonPHI());
-    IRB.CreateCall(initializeRuntime);
-  }
-
   Symbolizer symbolizer(*this);
   symbolizer.visit(F);
-  DEBUG(errs() << F << '\n');
+  // DEBUG(errs() << F << '\n');
 
   return true; // TODO be more specific
 }

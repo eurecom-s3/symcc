@@ -1,5 +1,10 @@
 #include <z3.h>
 
+/* TODO Eventually we'll want to inline as much of this as possible. I'm keeping
+   it in C for now because that makes it easier to experiment with new features,
+   but I expect that a lot of the functions will stay so simple that we can
+   generate the corresponding bitcode directly in the compiler pass. */
+
 static Z3_context g_context;
 static Z3_solver g_solver;
 static Z3_ast g_return_value;
@@ -19,6 +24,12 @@ void _sym_initialize(void) {
 
   g_solver = Z3_mk_solver(g_context);
   Z3_solver_inc_ref(g_context, g_solver);
+}
+
+void _sym_initialize_array(Z3_ast expression[], uint8_t value[], size_t length) {
+  for (size_t i = 0; i < length; i++) {
+    expression[i] = Z3_mk_int(g_context, value[i], Z3_mk_bv_sort(g_context, 8));
+  }
 }
 
 /*
@@ -75,6 +86,10 @@ Z3_ast _sym_build_signed_less_than(Z3_ast a, Z3_ast b) {
 
 Z3_ast _sym_build_signed_less_equal(Z3_ast a, Z3_ast b) {
   return Z3_mk_bvsle(g_context, a, b);
+}
+
+Z3_ast _sym_build_unsigned_less_than(Z3_ast a, Z3_ast b) {
+  return Z3_mk_bvult(g_context, a, b);
 }
 
 Z3_ast _sym_build_equal(Z3_ast a, Z3_ast b) {
