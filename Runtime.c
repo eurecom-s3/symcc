@@ -26,7 +26,8 @@ void _sym_initialize(void) {
   Z3_solver_inc_ref(g_context, g_solver);
 }
 
-void _sym_initialize_array(Z3_ast expression[], uint8_t value[], size_t length) {
+void _sym_initialize_array(Z3_ast expression[], uint8_t value[],
+                           size_t length) {
   for (size_t i = 0; i < length; i++) {
     expression[i] = Z3_mk_int(g_context, value[i], Z3_mk_bv_sort(g_context, 8));
   }
@@ -121,6 +122,8 @@ Z3_ast _sym_get_return_expression(void) { return g_return_value; }
  */
 
 Z3_ast _sym_push_path_constraint(Z3_ast constraint, int taken) {
+  constraint = Z3_simplify(g_context, constraint);
+
   /* Generate a solution for the alternative */
   Z3_solver_push(g_context, g_solver);
 

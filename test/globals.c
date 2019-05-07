@@ -35,12 +35,12 @@ int main(int argc, char* argv[]) {
     int x = _sym_build_variable("x", 5, 32);
     printf("%d\n", increment(x));
     // CHECK: Trying to solve
-    // CHECK: (bvadd x #x{{0*}}11)
+    // CHECK: (bvadd #x{{0*}}11 x)
 
     g_increment = 18;
     printf("%d\n", increment(x));
     // CHECK: Trying to solve
-    // CHECK: (bvadd x #x{{0*}}12)
+    // CHECK: (bvadd #x{{0*}}12 x)
 
     g_uninitialized = 101;
     printf("%s\n", (x < g_uninitialized) ? "smaller" : "greater or equal");
