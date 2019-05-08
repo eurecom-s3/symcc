@@ -5,10 +5,12 @@
    but I expect that a lot of the functions will stay so simple that we can
    generate the corresponding bitcode directly in the compiler pass. */
 
+#define MAX_FUNCTION_ARGUMENTS 256
+
 static Z3_context g_context;
 static Z3_solver g_solver;
 static Z3_ast g_return_value;
-static Z3_ast g_function_arguments[256];
+static Z3_ast g_function_arguments[MAX_FUNCTION_ARGUMENTS];
 
 /*
  * Initialization
