@@ -38,6 +38,7 @@ private:
 
   Value *buildInteger;
   Value *buildNeg;
+  Value *buildSExt;
   Value *buildZExt;
   Value *pushPathConstraint;
   Value *getParameterExpression;
@@ -190,15 +191,22 @@ public:
 
     Function *callee = I.getCalledFunction();
     bool isIndirect = (callee == nullptr);
-    bool isBuildVariable = (callee->getName() == "_sym_build_variable");
     if (isIndirect) {
-      errs() << "Warning: losing track of symbolic expressions at " << I
-             << '\n';
+      errs()
+          << "Warning: losing track of symbolic expressions at indirect call "
+          << I << '\n';
       return;
     }
 
-    if (!isBuildVariable && callee->getName().startswith("_sym_"))
+    bool isBuildVariable = (callee->getName() == "_sym_build_variable");
+    bool isSymRuntimeFunction = callee->getName().startswith("_sym_");
+    if (!isBuildVariable && isSymRuntimeFunction)
       return;
+    if (callee->isIntrinsic()) {
+      errs() << "Warning: unhandled LLVM intrinsic " << callee->getName()
+             << '\n';
+      return;
+    }
 
     IRBuilder<> IRB(&I);
 
@@ -250,16 +258,19 @@ public:
 
   void visitGetElementPtrInst(GetElementPtrInst &I) {
     IRBuilder<> IRB(&I);
-    auto *exprGEP = I.clone();
-    ValueToValueMapTy vmap;
-    vmap[&I] = exprGEP;
-    vmap[I.getPointerOperand()] =
-        getOrCreateSymbolicExpression(I.getPointerOperand(), IRB);
-    RemapInstruction(exprGEP, vmap);
-    symbolicExpressions[&I] = IRB.Insert(exprGEP);
+    SmallVector<Value *, kExpectedMaxGEPIndices> indices(I.idx_begin(),
+                                                         I.idx_end());
+    symbolicExpressions[&I] = IRB.CreateGEP(
+        getOrCreateSymbolicExpression(I.getPointerOperand(), IRB), indices);
   }
 
-  void visitZExtInst(ZExtInst &I) {
+  void visitCastInst(CastInst &I) {
+    auto opcode = I.getOpcode();
+    if (opcode != Instruction::SExt && opcode != Instruction::ZExt) {
+      errs() << "Warning: unhandled cast instruction " << I << '\n';
+      return;
+    }
+
     IRBuilder<> IRB(&I);
 
     // LLVM bitcode represents Boolean values as i1. In Z3, those are a not a
@@ -270,10 +281,24 @@ public:
       symbolicExpressions[&I] =
           getOrCreateSymbolicExpression(I.getOperand(0), IRB);
     } else {
+      Value *target;
+
+      // TODO use array indexed with cast opcodes
+      switch (I.getOpcode()) {
+      case Instruction::SExt:
+        target = SP.buildSExt;
+        break;
+      case Instruction::ZExt:
+        target = SP.buildZExt;
+        break;
+      default:
+        llvm_unreachable("Unknown cast opcode");
+      }
+
       symbolicExpressions[&I] = IRB.CreateCall(
-          SP.buildZExt, {getOrCreateSymbolicExpression(I.getOperand(0), IRB),
-                         IRB.getInt8(I.getDestTy()->getIntegerBitWidth() -
-                                     I.getSrcTy()->getIntegerBitWidth())});
+          target, {getOrCreateSymbolicExpression(I.getOperand(0), IRB),
+                   IRB.getInt8(I.getDestTy()->getIntegerBitWidth() -
+                               I.getSrcTy()->getIntegerBitWidth())});
     }
   }
 
@@ -332,6 +357,8 @@ bool SymbolizePass::doInitialization(Module &M) {
                                        IRB.getInt64Ty(), IRB.getInt8Ty());
   buildNeg = M.getOrInsertFunction("_sym_build_neg", IRB.getInt8PtrTy(),
                                    IRB.getInt8PtrTy());
+  buildSExt = M.getOrInsertFunction("_sym_build_sext", IRB.getInt8PtrTy(),
+                                    IRB.getInt8PtrTy(), IRB.getInt8Ty());
   buildZExt = M.getOrInsertFunction("_sym_build_zext", IRB.getInt8PtrTy(),
                                     IRB.getInt8PtrTy(), IRB.getInt8Ty());
   pushPathConstraint =

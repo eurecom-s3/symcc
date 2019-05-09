@@ -12,7 +12,7 @@ int _sym_build_variable(const char*, int, uint8_t);
 int g_increment = 17;
 int g_uninitialized;
 
-/* char g_values[] = {1, 2, 3}; */
+char g_values[] = {1, 2, 3};
 
 int increment(int x) {
     int result = x + g_increment;
@@ -22,30 +22,37 @@ int increment(int x) {
         return 42;
 }
 
-/* void sum(int x) { */
-/*     int result = 0; */
-/*     for (size_t i = 0; i < (sizeof(g_values) / sizeof(g_values[0])); i++) { */
-/*         result += g_values[i]; */
-/*     } */
+void sum(int x) {
+    int result = 0;
+    for (size_t i = 0; i < (sizeof(g_values) / sizeof(g_values[0])); i++) {
+        result += g_values[i];
+    }
 
-/*     printf("%d", (result < x) ? 1 : 0); */
-/* } */
+    printf("%d", (result < x) ? 1 : 0);
+}
 
 int main(int argc, char* argv[]) {
     int x = _sym_build_variable("x", 5, 32);
     printf("%d\n", increment(x));
     // CHECK: Trying to solve
     // CHECK: (bvadd #x{{0*}}11 x)
+    // CHECK: Found diverging input
 
     g_increment = 18;
     printf("%d\n", increment(x));
     // CHECK: Trying to solve
     // CHECK: (bvadd #x{{0*}}12 x)
+    // CHECK: Found diverging input
 
     g_uninitialized = 101;
     printf("%s\n", (x < g_uninitialized) ? "smaller" : "greater or equal");
+    // CHECK: Trying to solve
+    // CHECK: (bvsle #x{{0*}}65 x)
+    // CHECK: Found diverging input
 
-    /* sum(x); */
+    sum(x);
+    // CHECK: Trying to solve
+    // CHECK: Found diverging input
 
     return 0;
 }

@@ -107,8 +107,11 @@ Z3_ast _sym_build_not_equal(Z3_ast a, Z3_ast b) {
  * Casts
  */
 
+Z3_ast _sym_build_sext(Z3_ast expr, uint8_t bits) {
+  return Z3_mk_sign_ext(g_context, bits, expr);
+}
+
 Z3_ast _sym_build_zext(Z3_ast expr, uint8_t bits) {
-  printf("Input: %s\n", Z3_ast_to_string(g_context, expr));
   return Z3_mk_zero_ext(g_context, bits, expr);
 }
 
