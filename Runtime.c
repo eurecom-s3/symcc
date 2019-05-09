@@ -29,12 +29,22 @@ void _sym_initialize(void) {
   Z3_solver_inc_ref(g_context, g_solver);
 }
 
-void _sym_initialize_array(Z3_ast expression[], uint8_t value[],
-                           size_t length) {
-  for (size_t i = 0; i < length; i++) {
-    expression[i] = Z3_mk_int(g_context, value[i], Z3_mk_bv_sort(g_context, 8));
+#define SYM_INITIALIZE_ARRAY(bits)                                             \
+  void _sym_initialize_array_##bits(Z3_ast expression[], void *value,          \
+                                    size_t n_elements) {                       \
+    uint##bits##_t *typed_value = value;                                       \
+    for (size_t i = 0; i < n_elements; i++) {                                  \
+      expression[i] = Z3_mk_int(g_context, typed_value[i],                     \
+                                Z3_mk_bv_sort(g_context, bits));               \
+    }                                                                          \
   }
-}
+
+SYM_INITIALIZE_ARRAY(8)
+SYM_INITIALIZE_ARRAY(16)
+SYM_INITIALIZE_ARRAY(32)
+SYM_INITIALIZE_ARRAY(64)
+
+#undef SYM_INITIALIZE_ARRAY
 
 /*
  * Construction of simple values
@@ -140,8 +150,8 @@ Z3_ast _sym_push_path_constraint(Z3_ast constraint, int taken) {
   constraint = Z3_simplify(g_context, constraint);
 
   /* Check the easy cases first: if simplification reduced the constraint to
-   * "true" or "false", there is no point in trying to solve the negation or
-   * pushing the constraint to the solver... */
+     "true" or "false", there is no point in trying to solve the negation or *
+     pushing the constraint to the solver... */
 
   if (Z3_is_eq_ast(g_context, constraint, Z3_mk_true(g_context))) {
     assert(taken && "We have taken an impossible branch");
@@ -154,10 +164,11 @@ Z3_ast _sym_push_path_constraint(Z3_ast constraint, int taken) {
   }
 
   /* Generate a solution for the alternative */
-  Z3_solver_push(g_context, g_solver);
+  Z3_ast not_constraint =
+      Z3_simplify(g_context, Z3_mk_not(g_context, constraint));
 
-  Z3_solver_assert(g_context, g_solver,
-                   taken ? Z3_mk_not(g_context, constraint) : constraint);
+  Z3_solver_push(g_context, g_solver);
+  Z3_solver_assert(g_context, g_solver, taken ? not_constraint : constraint);
   printf("Trying to solve:\n%s\n", Z3_solver_to_string(g_context, g_solver));
 
   Z3_lbool feasible = Z3_solver_check(g_context, g_solver);
@@ -174,8 +185,9 @@ Z3_ast _sym_push_path_constraint(Z3_ast constraint, int taken) {
   Z3_solver_pop(g_context, g_solver, 1);
 
   /* Assert the actual path constraint */
-  Z3_ast newConstraint =
-      (taken ? constraint : Z3_mk_not(g_context, constraint));
+  Z3_ast newConstraint = (taken ? constraint : not_constraint);
   Z3_solver_assert(g_context, g_solver, newConstraint);
+  assert((Z3_solver_check(g_context, g_solver) == Z3_L_TRUE) &&
+         "Asserting infeasible path constraint");
   return newConstraint;
 }

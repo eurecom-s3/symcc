@@ -11,8 +11,10 @@ int _sym_build_variable(const char*, int, uint8_t);
 
 int g_increment = 17;
 int g_uninitialized;
+int g_more_than_one_byte_int = 512;
 
 char g_values[] = {1, 2, 3};
+int g_non_char_values[] = {300, 400, 500};
 
 int increment(int x) {
     int result = x + g_increment;
@@ -28,7 +30,16 @@ void sum(int x) {
         result += g_values[i];
     }
 
-    printf("%d", (result < x) ? 1 : 0);
+    printf("%d\n", (result < x) ? 1 : 0);
+}
+
+void sum_ints(int x) {
+    int result = 0;
+    for (size_t i = 0; i < (sizeof(g_non_char_values) / sizeof(g_non_char_values[0])); i++) {
+        result += g_non_char_values[i];
+    }
+
+    printf("%d\n", (result < x) ? 1 : 0);
 }
 
 int main(int argc, char* argv[]) {
@@ -54,6 +65,16 @@ int main(int argc, char* argv[]) {
     // CHECK: Trying to solve
     // CHECK-NOT: Can't find
     // CHECK: Found diverging input
+
+    printf("%s\n", (x < g_more_than_one_byte_int) ? "true" : "false");
+    // CHECK: Trying to solve
+    // CHECK: #x{{0*}}200
+    // CHECK: Can't find
+
+    sum_ints(x);
+    // CHECK: Trying to solve
+    // CHECK: #x{{0*}}4b0
+    // CHECK: Can't find
 
     return 0;
 }

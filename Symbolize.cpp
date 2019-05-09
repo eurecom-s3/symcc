@@ -415,6 +415,18 @@ bool SymbolizePass::doInitialization(Module &M) {
 
 #undef LOAD_COMPARISON_HANDLER
 
+#define LOAD_ARRAY_INITIALIZER(bits)                                           \
+  auto initializeArray##bits = M.getOrInsertFunction(                          \
+      "_sym_initialize_array_" #bits, IRB.getVoidTy(), IRB.getInt8PtrTy(),     \
+      PointerType::getInt##bits##PtrTy(M.getContext()), IRB.getInt64Ty());
+
+  LOAD_ARRAY_INITIALIZER(8)
+  LOAD_ARRAY_INITIALIZER(16)
+  LOAD_ARRAY_INITIALIZER(32)
+  LOAD_ARRAY_INITIALIZER(64)
+
+#undef LOAD_ARRAY_INITIALIZER
+
   // For each global variable, we need another global variable that holds the
   // corresponding symbolic expression.
   for (auto &global : M.globals()) {
@@ -432,13 +444,9 @@ bool SymbolizePass::doInitialization(Module &M) {
   std::tie(ctor, std::ignore) = createSanitizerCtorAndInitFunctions(
       M, kSymCtorName, "_sym_initialize", {}, {});
   IRB.SetInsertPoint(ctor->getEntryBlock().getTerminator());
-  auto initializeGlobal = M.getOrInsertFunction(
-      "_sym_initialize_array", IRB.getVoidTy(), IRB.getInt8PtrTy(),
-      IRB.getInt8PtrTy(), IRB.getInt64Ty());
   for (auto &&[value, expression] : globalExpressions) {
-    // TODO handle non-array globals and non-char arrays
+    // TODO handle non-array globals
     auto valueType = value->getValueType();
-    // errs() << *value << " - " << *valueType << '\n';
     if (valueType->isIntegerTy()) {
       auto intValue = IRB.CreateLoad(value);
       auto intExpr = IRB.CreateCall(
@@ -446,9 +454,26 @@ bool SymbolizePass::doInitialization(Module &M) {
           {intValue, IRB.getInt8(valueType->getIntegerBitWidth())});
       IRB.CreateStore(intExpr, expression);
     } else {
-      IRB.CreateCall(
-          initializeGlobal,
-          {expression, value, IRB.getInt64(valueType->getArrayNumElements())});
+      Value *target;
+      switch (valueType->getArrayElementType()->getIntegerBitWidth()) {
+      case 8:
+        target = initializeArray8;
+        break;
+      case 16:
+        target = initializeArray16;
+        break;
+      case 32:
+        target = initializeArray32;
+        break;
+      case 64:
+        target = initializeArray64;
+        break;
+      default:
+        llvm_unreachable("Unhandled global array element type");
+      }
+
+      IRB.CreateCall(target, {expression, value,
+                              IRB.getInt64(valueType->getArrayNumElements())});
     }
   }
   appendToGlobalCtors(M, ctor, 0);
