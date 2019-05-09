@@ -52,6 +52,7 @@ int main(int argc, char* argv[]) {
 
     sum(x);
     // CHECK: Trying to solve
+    // CHECK-NOT: Can't find
     // CHECK: Found diverging input
 
     return 0;

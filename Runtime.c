@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <z3.h>
 
 /* TODO Eventually we'll want to inline as much of this as possible. I'm keeping
@@ -137,7 +138,20 @@ Z3_ast _sym_get_return_expression(void) { return g_return_value; }
 
 Z3_ast _sym_push_path_constraint(Z3_ast constraint, int taken) {
   constraint = Z3_simplify(g_context, constraint);
-  /* TODO don't check if the constraint is constant */
+
+  /* Check the easy cases first: if simplification reduced the constraint to
+   * "true" or "false", there is no point in trying to solve the negation or
+   * pushing the constraint to the solver... */
+
+  if (Z3_is_eq_ast(g_context, constraint, Z3_mk_true(g_context))) {
+    assert(taken && "We have taken an impossible branch");
+    return constraint;
+  }
+
+  if (Z3_is_eq_ast(g_context, constraint, Z3_mk_false(g_context))) {
+    assert(!taken && "We have taken an impossible branch");
+    return Z3_mk_not(g_context, constraint);
+  }
 
   /* Generate a solution for the alternative */
   Z3_solver_push(g_context, g_solver);
