@@ -117,11 +117,22 @@ public:
     Value *ret = nullptr;
 
     if (auto C = dyn_cast<ConstantInt>(V)) {
+      // Constants may be used in multiple places throughout a function.
+      // Ideally, we'd make sure that in such cases the symbolic expression is
+      // generated as early as necessary but no earlier. For now, we just create
+      // it at the very beginning of the function.
+
+      auto oldInsertionPoint = IRB.saveIP();
+      IRB.SetInsertPoint(oldInsertionPoint.getBlock()
+                             ->getParent()
+                             ->getEntryBlock()
+                             .getFirstNonPHI());
       // TODO is sign extension always correct?
       ret =
           IRB.CreateCall(SP.buildInteger,
                          {IRB.CreateSExt(C, IRB.getInt64Ty()),
                           ConstantInt::get(IRB.getInt8Ty(), C->getBitWidth())});
+      IRB.restoreIP(oldInsertionPoint);
     } else if (auto A = dyn_cast<Argument>(V)) {
       ret = IRB.CreateCall(SP.getParameterExpression,
                            ConstantInt::get(IRB.getInt8Ty(), A->getArgNo()));
