@@ -10,6 +10,11 @@ struct point {
     int y;
 };
 
+struct line {
+    struct point start;
+    struct point end;
+};
+
 static struct point g_point = {1, 2};
 
 int main(int argc, char* argv[]) {
@@ -34,6 +39,10 @@ int main(int argc, char* argv[]) {
     // CHECK: Trying to solve
     // CHECK: Found diverging input
     // CHECK: no
+
+    // Nested structs
+
+    struct line l = {{0, 0}, {5, 5}};
 
     return 0;
 }

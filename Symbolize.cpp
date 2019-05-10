@@ -34,8 +34,8 @@ private:
 
   /// Generate code to initialize the expression corresponding to a global
   /// variable.
-  void buildGlobalInitialization(GlobalVariable *expression,
-                                 GlobalVariable *value, IRBuilder<> &IRB);
+  void buildGlobalInitialization(Value *expression, Value *value,
+                                 IRBuilder<> &IRB);
 
   //
   // Runtime functions
@@ -495,11 +495,10 @@ bool SymbolizePass::doInitialization(Module &M) {
   return true;
 }
 
-void SymbolizePass::buildGlobalInitialization(GlobalVariable *expression,
-                                              GlobalVariable *value,
+void SymbolizePass::buildGlobalInitialization(Value *expression, Value *value,
                                               IRBuilder<> &IRB) {
   // TODO handle non-array globals
-  auto valueType = value->getValueType();
+  auto valueType = value->getType()->getPointerElementType();
   if (valueType->isIntegerTy()) {
     auto intValue = IRB.CreateLoad(value);
     auto intExpr = IRB.CreateCall(
@@ -534,12 +533,7 @@ void SymbolizePass::buildGlobalInitialization(GlobalVariable *expression,
           IRB.CreateGEP(expression, {IRB.getInt32(0), IRB.getInt32(element)});
       auto elementValuePtr =
           IRB.CreateGEP(value, {IRB.getInt32(0), IRB.getInt32(element)});
-      auto elementValue = IRB.CreateLoad(elementValuePtr);
-      auto elementExpr = IRB.CreateCall(
-          buildInteger,
-          {elementValue, IRB.getInt8(valueType->getStructElementType(element)
-                                         ->getIntegerBitWidth())});
-      IRB.CreateStore(elementExpr, elementExprPtr);
+      buildGlobalInitialization(elementExprPtr, elementValuePtr, IRB);
     }
   } else {
     llvm_unreachable(
