@@ -10,8 +10,8 @@
 
 static Z3_context g_context;
 static Z3_solver g_solver;
-static Z3_ast g_return_value;
-static Z3_ast g_function_arguments[MAX_FUNCTION_ARGUMENTS];
+static void *g_return_value;
+static void *g_function_arguments[MAX_FUNCTION_ARGUMENTS];
 
 /*
  * Initialization
@@ -130,11 +130,11 @@ Z3_ast _sym_build_zext(Z3_ast expr, uint8_t bits) {
  * Function-call helpers
  */
 
-void _sym_set_parameter_expression(uint8_t index, Z3_ast expr) {
+void _sym_set_parameter_expression(uint8_t index, void *expr) {
   g_function_arguments[index] = expr;
 }
 
-Z3_ast _sym_get_parameter_expression(uint8_t index) {
+void *_sym_get_parameter_expression(uint8_t index) {
   return g_function_arguments[index];
 }
 

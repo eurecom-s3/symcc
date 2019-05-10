@@ -248,9 +248,11 @@ public:
 
     if (!isBuildVariable) {
       for (Use &arg : I.args())
-        IRB.CreateCall(SP.setParameterExpression,
-                       {ConstantInt::get(IRB.getInt8Ty(), arg.getOperandNo()),
-                        getOrCreateSymbolicExpression(arg, IRB)});
+        IRB.CreateCall(
+            SP.setParameterExpression,
+            {ConstantInt::get(IRB.getInt8Ty(), arg.getOperandNo()),
+             IRB.CreateBitCast(getOrCreateSymbolicExpression(arg, IRB),
+                               IRB.getInt8PtrTy())});
     }
 
     IRB.SetInsertPoint(I.getNextNonDebugInstruction());
@@ -460,7 +462,8 @@ bool SymbolizePass::doInitialization(Module &M) {
 
 #define LOAD_ARRAY_INITIALIZER(bits)                                           \
   initializeArray##bits = M.getOrInsertFunction(                               \
-      "_sym_initialize_array_" #bits, IRB.getVoidTy(), IRB.getInt8PtrTy(),     \
+      "_sym_initialize_array_" #bits, IRB.getVoidTy(),                         \
+      PointerType::get(IRB.getInt8PtrTy(), 0),                                 \
       PointerType::getInt##bits##PtrTy(M.getContext()), IRB.getInt64Ty());
 
   LOAD_ARRAY_INITIALIZER(8)
@@ -523,10 +526,13 @@ void SymbolizePass::buildGlobalInitialization(Value *expression, Value *value,
       llvm_unreachable("Unhandled global array element type");
     }
 
-    IRB.CreateCall(target, {expression, value,
-                            IRB.getInt64(valueType->getArrayNumElements())});
+    IRB.CreateCall(
+        target,
+        {IRB.CreateBitCast(expression, PointerType::get(IRB.getInt8PtrTy(), 0)),
+         IRB.CreateBitCast(
+             value, PointerType::get(valueType->getArrayElementType(), 0)),
+         IRB.getInt64(valueType->getArrayNumElements())});
   } else if (valueType->isStructTy()) {
-    // TODO nested structs
     for (unsigned element = 0, numElements = valueType->getStructNumElements();
          element < numElements; element++) {
       auto elementExprPtr =
