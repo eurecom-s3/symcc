@@ -32,6 +32,11 @@ public:
 private:
   static constexpr char kSymCtorName[] = "__sym_ctor";
 
+  /// Generate code to initialize the expression corresponding to a global
+  /// variable.
+  void buildGlobalInitialization(GlobalVariable *expression,
+                                 GlobalVariable *value, IRBuilder<> &IRB);
+
   //
   // Runtime functions
   //
@@ -45,6 +50,10 @@ private:
   Value *setParameterExpression;
   Value *setReturnExpression;
   Value *getReturnExpression;
+  Value *initializeArray8;
+  Value *initializeArray16;
+  Value *initializeArray32;
+  Value *initializeArray64;
 
   /// Mapping from icmp predicates to the functions that build the corresponding
   /// symbolic expressions.
@@ -450,7 +459,7 @@ bool SymbolizePass::doInitialization(Module &M) {
 #undef LOAD_COMPARISON_HANDLER
 
 #define LOAD_ARRAY_INITIALIZER(bits)                                           \
-  auto initializeArray##bits = M.getOrInsertFunction(                          \
+  initializeArray##bits = M.getOrInsertFunction(                               \
       "_sym_initialize_array_" #bits, IRB.getVoidTy(), IRB.getInt8PtrTy(),     \
       PointerType::getInt##bits##PtrTy(M.getContext()), IRB.getInt64Ty());
 
@@ -479,40 +488,63 @@ bool SymbolizePass::doInitialization(Module &M) {
       M, kSymCtorName, "_sym_initialize", {}, {});
   IRB.SetInsertPoint(ctor->getEntryBlock().getTerminator());
   for (auto &&[value, expression] : globalExpressions) {
-    // TODO handle non-array globals
-    auto valueType = value->getValueType();
-    if (valueType->isIntegerTy()) {
-      auto intValue = IRB.CreateLoad(value);
-      auto intExpr = IRB.CreateCall(
-          buildInteger,
-          {intValue, IRB.getInt8(valueType->getIntegerBitWidth())});
-      IRB.CreateStore(intExpr, expression);
-    } else {
-      Value *target;
-      switch (valueType->getArrayElementType()->getIntegerBitWidth()) {
-      case 8:
-        target = initializeArray8;
-        break;
-      case 16:
-        target = initializeArray16;
-        break;
-      case 32:
-        target = initializeArray32;
-        break;
-      case 64:
-        target = initializeArray64;
-        break;
-      default:
-        llvm_unreachable("Unhandled global array element type");
-      }
-
-      IRB.CreateCall(target, {expression, value,
-                              IRB.getInt64(valueType->getArrayNumElements())});
-    }
+    buildGlobalInitialization(expression, value, IRB);
   }
   appendToGlobalCtors(M, ctor, 0);
 
   return true;
+}
+
+void SymbolizePass::buildGlobalInitialization(GlobalVariable *expression,
+                                              GlobalVariable *value,
+                                              IRBuilder<> &IRB) {
+  // TODO handle non-array globals
+  auto valueType = value->getValueType();
+  if (valueType->isIntegerTy()) {
+    auto intValue = IRB.CreateLoad(value);
+    auto intExpr = IRB.CreateCall(
+        buildInteger, {intValue, IRB.getInt8(valueType->getIntegerBitWidth())});
+    IRB.CreateStore(intExpr, expression);
+  } else if (valueType->isArrayTy()) {
+    Value *target;
+    switch (valueType->getArrayElementType()->getIntegerBitWidth()) {
+    case 8:
+      target = initializeArray8;
+      break;
+    case 16:
+      target = initializeArray16;
+      break;
+    case 32:
+      target = initializeArray32;
+      break;
+    case 64:
+      target = initializeArray64;
+      break;
+    default:
+      llvm_unreachable("Unhandled global array element type");
+    }
+
+    IRB.CreateCall(target, {expression, value,
+                            IRB.getInt64(valueType->getArrayNumElements())});
+  } else if (valueType->isStructTy()) {
+    // TODO nested structs
+    for (unsigned element = 0, numElements = valueType->getStructNumElements();
+         element < numElements; element++) {
+      auto elementExprPtr =
+          IRB.CreateGEP(expression, {IRB.getInt32(0), IRB.getInt32(element)});
+      auto elementValuePtr =
+          IRB.CreateGEP(value, {IRB.getInt32(0), IRB.getInt32(element)});
+      auto elementValue = IRB.CreateLoad(elementValuePtr);
+      auto elementExpr = IRB.CreateCall(
+          buildInteger,
+          {elementValue, IRB.getInt8(valueType->getStructElementType(element)
+                                         ->getIntegerBitWidth())});
+      IRB.CreateStore(elementExpr, elementExprPtr);
+    }
+  } else {
+    llvm_unreachable(
+        "Don't know how to initialize expression for global variable");
+  }
 }
 
 bool SymbolizePass::runOnFunction(Function &F) {
