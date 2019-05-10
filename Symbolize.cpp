@@ -60,6 +60,33 @@ private:
   friend class Symbolizer;
 };
 
+constexpr int kExpectedMaxStructElements = 10;
+
+/// Return the appropriate type for storing symbolic expressions.
+Type *expressionType(Type *type) {
+  // TODO handle struct types
+  if (type->isSingleValueType()) {
+    return Type::getInt8PtrTy(type->getContext());
+  }
+
+  if (type->isArrayTy()) {
+    return ArrayType::get(expressionType(type->getArrayElementType()),
+                          type->getArrayNumElements());
+  }
+
+  if (type->isStructTy()) {
+    SmallVector<Type *, kExpectedMaxStructElements> exprSubtypes;
+    for (auto *subtype : type->subtypes()) {
+      exprSubtypes.push_back(expressionType(subtype));
+    }
+
+    return StructType::create(exprSubtypes);
+  }
+
+  errs() << "Warning: cannot determine expression type for " << *type << '\n';
+  llvm_unreachable("Unable to determine expression type");
+}
+
 class Symbolizer : public InstVisitor<Symbolizer> {
 public:
   explicit Symbolizer(const SymbolizePass &symPass) : SP(symPass) {}
@@ -230,7 +257,8 @@ public:
     }
 
     IRBuilder<> IRB(&I);
-    symbolicExpressions[&I] = IRB.CreateAlloca(IRB.getInt8PtrTy());
+    symbolicExpressions[&I] =
+        IRB.CreateAlloca(expressionType(I.getAllocatedType()));
   }
 
   void visitLoadInst(LoadInst &I) {
@@ -245,6 +273,14 @@ public:
                     getOrCreateSymbolicExpression(I.getPointerOperand(), IRB));
   }
 
+  void visitGetElementPtrInst(GetElementPtrInst &I) {
+    IRBuilder<> IRB(&I);
+    SmallVector<Value *, kExpectedMaxGEPIndices> indices(I.idx_begin(),
+                                                         I.idx_end());
+    symbolicExpressions[&I] = IRB.CreateGEP(
+        getOrCreateSymbolicExpression(I.getPointerOperand(), IRB), indices);
+  }
+
   void visitBitCastInst(BitCastInst &I) {
     if (!I.getSrcTy()->isPointerTy() || !I.getDestTy()->isPointerTy()) {
       errs() << "Warning: unhandled non-pointer bit cast " << I << '\n';
@@ -254,14 +290,6 @@ public:
     IRBuilder<> IRB(&I);
     symbolicExpressions[&I] =
         getOrCreateSymbolicExpression(I.getOperand(0), IRB);
-  }
-
-  void visitGetElementPtrInst(GetElementPtrInst &I) {
-    IRBuilder<> IRB(&I);
-    SmallVector<Value *, kExpectedMaxGEPIndices> indices(I.idx_begin(),
-                                                         I.idx_end());
-    symbolicExpressions[&I] = IRB.CreateGEP(
-        getOrCreateSymbolicExpression(I.getPointerOperand(), IRB), indices);
   }
 
   void visitCastInst(CastInst &I) {
@@ -321,22 +349,6 @@ private:
 void addSymbolizePass(const PassManagerBuilder & /* unused */,
                       legacy::PassManagerBase &PM) {
   PM.add(new SymbolizePass());
-}
-
-/// Return the appropriate type for storing symbolic expressions.
-Type *expressionType(Type *type, LLVMContext &ctx) {
-  // TODO handle struct types
-  if (type->isIntegerTy()) {
-    return Type::getInt8PtrTy(ctx);
-  }
-
-  if (type->isArrayTy()) {
-    return ArrayType::get(expressionType(type->getArrayElementType(), ctx),
-                          type->getArrayNumElements());
-  }
-
-  errs() << "Warning: cannot determine expression type for " << type << '\n';
-  llvm_unreachable("Unable to determine expression type");
 }
 
 } // end of anonymous namespace
@@ -430,7 +442,7 @@ bool SymbolizePass::doInitialization(Module &M) {
   // For each global variable, we need another global variable that holds the
   // corresponding symbolic expression.
   for (auto &global : M.globals()) {
-    auto exprType = expressionType(global.getValueType(), M.getContext());
+    auto exprType = expressionType(global.getValueType());
     // The expression has to be initialized at run time and can therefore never
     // be constant, even if the value that it represents is.
     globalExpressions[&global] =
