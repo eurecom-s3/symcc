@@ -127,10 +127,9 @@ public:
                              ->getParent()
                              ->getEntryBlock()
                              .getFirstNonPHI());
-      // TODO is sign extension always correct?
       ret =
           IRB.CreateCall(SP.buildInteger,
-                         {IRB.CreateSExt(C, IRB.getInt64Ty()),
+                         {IRB.CreateZExt(C, IRB.getInt64Ty()),
                           ConstantInt::get(IRB.getInt8Ty(), C->getBitWidth())});
       IRB.restoreIP(oldInsertionPoint);
     } else if (auto A = dyn_cast<Argument>(V)) {
@@ -516,7 +515,8 @@ void SymbolizePass::buildGlobalInitialization(Value *expression, Value *value,
   if (valueType->isIntegerTy()) {
     auto intValue = IRB.CreateLoad(value);
     auto intExpr = IRB.CreateCall(
-        buildInteger, {intValue, IRB.getInt8(valueType->getIntegerBitWidth())});
+        buildInteger, {IRB.CreateZExt(intValue, IRB.getInt64Ty()),
+                       IRB.getInt8(valueType->getIntegerBitWidth())});
     IRB.CreateStore(intExpr, expression);
   } else if (valueType->isArrayTy()) {
     Value *target;
