@@ -1,3 +1,4 @@
+// RUN: %verify_o2
 // RUN: %symcc -O2 %s %symruntime -o %t
 // RUN: %t | FileCheck %s
 #include <stdio.h>
