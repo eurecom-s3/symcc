@@ -330,6 +330,28 @@ public:
     }
   }
 
+  void visitPHINode(PHINode &I) {
+    // PHI nodes just assign values based on the origin of the last jump, so we
+    // assign the corresponding symbolic expression the same way.
+
+    IRBuilder<> IRB(&I);
+    unsigned numIncomingValues = I.getNumIncomingValues();
+
+    auto exprPHI = IRB.CreatePHI(IRB.getInt8PtrTy(), numIncomingValues);
+    for (unsigned incoming = 0; incoming < numIncomingValues; incoming++) {
+      auto block = I.getIncomingBlock(incoming);
+      // Any code we may have to generate for the symbolic expressions will have
+      // to live in the basic block that the respective value comes from: PHI
+      // nodes can't be preceded by regular code in a basic block.
+      IRBuilder<> blockIRB(block->getTerminator());
+      exprPHI->addIncoming(
+          getOrCreateSymbolicExpression(I.getIncomingValue(incoming), blockIRB),
+          block);
+    }
+
+    symbolicExpressions[&I] = exprPHI;
+  }
+
   void visitInstruction(Instruction &I) {
     errs() << "Warning: unknown instruction " << I << '\n';
   }
