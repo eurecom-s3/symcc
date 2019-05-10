@@ -102,8 +102,28 @@ Z3_ast _sym_build_signed_less_equal(Z3_ast a, Z3_ast b) {
   return Z3_mk_bvsle(g_context, a, b);
 }
 
+Z3_ast _sym_build_signed_greater_than(Z3_ast a, Z3_ast b) {
+  return Z3_mk_bvsgt(g_context, a, b);
+}
+
+Z3_ast _sym_build_signed_greater_equal(Z3_ast a, Z3_ast b) {
+  return Z3_mk_bvsge(g_context, a, b);
+}
+
 Z3_ast _sym_build_unsigned_less_than(Z3_ast a, Z3_ast b) {
   return Z3_mk_bvult(g_context, a, b);
+}
+
+Z3_ast _sym_build_unsigned_less_equal(Z3_ast a, Z3_ast b) {
+  return Z3_mk_bvule(g_context, a, b);
+}
+
+Z3_ast _sym_build_unsigned_greater_than(Z3_ast a, Z3_ast b) {
+  return Z3_mk_bvugt(g_context, a, b);
+}
+
+Z3_ast _sym_build_unsigned_greater_equal(Z3_ast a, Z3_ast b) {
+  return Z3_mk_bvuge(g_context, a, b);
 }
 
 Z3_ast _sym_build_equal(Z3_ast a, Z3_ast b) {

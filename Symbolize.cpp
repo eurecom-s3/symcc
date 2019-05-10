@@ -89,7 +89,7 @@ Type *expressionType(Type *type) {
       exprSubtypes.push_back(expressionType(subtype));
     }
 
-    return StructType::create(exprSubtypes);
+    return StructType::get(type->getContext(), exprSubtypes);
   }
 
   errs() << "Warning: cannot determine expression type for " << *type << '\n';
@@ -136,14 +136,9 @@ public:
       ret = IRB.CreateCall(SP.getParameterExpression,
                            ConstantInt::get(IRB.getInt8Ty(), A->getArgNo()));
     } else if (auto gep = dyn_cast<GEPOperator>(V)) {
-      // TODO can we assume this is always a global value?
-      auto baseExpr = cast<GlobalValue>(
-          getOrCreateSymbolicExpression(gep->getPointerOperand(), IRB));
-      SmallVector<Value *, kExpectedMaxGEPIndices> indices(gep->idx_begin(),
-                                                           gep->idx_end());
-      ret = ConstantExpr::getGetElementPtr(baseExpr->getValueType(), baseExpr,
-                                           indices, gep->isInBounds(),
-                                           gep->getInRangeIndex());
+      ret = handleGEPOperator(*gep, IRB);
+    } else if (auto bc = dyn_cast<BitCastOperator>(V)) {
+      ret = handleBitCastOperator(*bc, IRB);
     }
 
     if (ret == nullptr) {
@@ -154,6 +149,24 @@ public:
 
     symbolicExpressions[V] = ret;
     return ret;
+  }
+
+  //
+  // Handling of operators that exist both as instructions and as constant
+  // expressions
+  //
+
+  Value *handleBitCastOperator(BitCastOperator &I, IRBuilder<> &IRB) {
+    assert(I.getSrcTy()->isPointerTy() && I.getDestTy()->isPointerTy() &&
+           "Unhandled non-pointer bit cast");
+    return getOrCreateSymbolicExpression(I.getOperand(0), IRB);
+  }
+
+  Value *handleGEPOperator(GEPOperator &I, IRBuilder<> &IRB) {
+    SmallVector<Value *, kExpectedMaxGEPIndices> indices(I.idx_begin(),
+                                                         I.idx_end());
+    return IRB.CreateGEP(
+        getOrCreateSymbolicExpression(I.getPointerOperand(), IRB), indices);
   }
 
   //
@@ -232,7 +245,6 @@ public:
 
   void visitCallInst(CallInst &I) {
     // TODO handle indirect calls
-    // TODO handle calls to intrinsics
     // TODO prevent instrumentation of our own functions with attributes
 
     Function *callee = I.getCalledFunction();
@@ -248,26 +260,45 @@ public:
     bool isSymRuntimeFunction = callee->getName().startswith("_sym_");
     if (!isBuildVariable && isSymRuntimeFunction)
       return;
-    if (callee->isIntrinsic()) {
-      errs() << "Warning: unhandled LLVM intrinsic " << callee->getName()
-             << '\n';
-      return;
-    }
 
     IRBuilder<> IRB(&I);
 
-    if (!isBuildVariable) {
-      for (Use &arg : I.args())
+    if (callee->isIntrinsic()) {
+      switch (callee->getIntrinsicID()) {
+      case Intrinsic::lifetime_start:
+      case Intrinsic::lifetime_end:
+        // These are safe to ignore.
+        break;
+      case Intrinsic::memcpy: {
+        auto destExpr = getOrCreateSymbolicExpression(I.getOperand(0), IRB);
+        auto srcExpr = getOrCreateSymbolicExpression(I.getOperand(1), IRB);
         IRB.CreateCall(
-            SP.setParameterExpression,
-            {ConstantInt::get(IRB.getInt8Ty(), arg.getOperandNo()),
-             IRB.CreateBitCast(getOrCreateSymbolicExpression(arg, IRB),
-                               IRB.getInt8PtrTy())});
-    }
+            callee,
+            {IRB.CreateBitCast(destExpr, IRB.getInt8PtrTy()),
+             IRB.CreateBitCast(srcExpr, IRB.getInt8PtrTy()),
+             sizeOfType(srcExpr->getType()->getPointerElementType(), IRB),
+             I.getOperand(3)});
+        break;
+      }
+      default:
+        errs() << "Warning: unhandled LLVM intrinsic " << callee->getName()
+               << '\n';
+        break;
+      }
+    } else {
+      if (!isBuildVariable) {
+        for (Use &arg : I.args())
+          IRB.CreateCall(
+              SP.setParameterExpression,
+              {ConstantInt::get(IRB.getInt8Ty(), arg.getOperandNo()),
+               IRB.CreateBitCast(getOrCreateSymbolicExpression(arg, IRB),
+                                 IRB.getInt8PtrTy())});
+      }
 
-    IRB.SetInsertPoint(I.getNextNonDebugInstruction());
-    // TODO get the expression only if the function set one
-    symbolicExpressions[&I] = IRB.CreateCall(SP.getReturnExpression);
+      IRB.SetInsertPoint(I.getNextNonDebugInstruction());
+      // TODO get the expression only if the function set one
+      symbolicExpressions[&I] = IRB.CreateCall(SP.getReturnExpression);
+    }
   }
 
   void visitAllocaInst(AllocaInst &I) {
@@ -296,21 +327,13 @@ public:
 
   void visitGetElementPtrInst(GetElementPtrInst &I) {
     IRBuilder<> IRB(&I);
-    SmallVector<Value *, kExpectedMaxGEPIndices> indices(I.idx_begin(),
-                                                         I.idx_end());
-    symbolicExpressions[&I] = IRB.CreateGEP(
-        getOrCreateSymbolicExpression(I.getPointerOperand(), IRB), indices);
+    symbolicExpressions[&I] = handleGEPOperator(cast<GEPOperator>(I), IRB);
   }
 
   void visitBitCastInst(BitCastInst &I) {
-    if (!I.getSrcTy()->isPointerTy() || !I.getDestTy()->isPointerTy()) {
-      errs() << "Warning: unhandled non-pointer bit cast " << I << '\n';
-      return;
-    }
-
     IRBuilder<> IRB(&I);
     symbolicExpressions[&I] =
-        getOrCreateSymbolicExpression(I.getOperand(0), IRB);
+        handleBitCastOperator(cast<BitCastOperator>(I), IRB);
   }
 
   void visitCastInst(CastInst &I) {
@@ -375,6 +398,18 @@ public:
 
   void visitInstruction(Instruction &I) {
     errs() << "Warning: unknown instruction " << I << '\n';
+  }
+
+  //
+  // Helpers
+  //
+
+  /// Generate code that computes the size of the given type.
+  Value *sizeOfType(Type *type, IRBuilder<> &IRB) {
+    return IRB.CreatePtrToInt(
+        IRB.CreateGEP(ConstantPointerNull::get(type->getPointerTo()),
+                      IRB.getInt32(1)),
+        IRB.getInt64Ty());
   }
 
 private:

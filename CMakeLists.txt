@@ -17,7 +17,7 @@ include_directories(${LLVM_INCLUDE_DIRS})
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wredundant-decls -Wcast-align \
--Wmissing-declarations -Wmissing-include-dirs -Wswitch-enum -Wswitch-default \
+-Wmissing-declarations -Wmissing-include-dirs -Wswitch-default \
 -Wextra -Wall -Winvalid-pch -Wredundant-decls -Wformat=2 \
 -Wmissing-format-attribute -Wformat-nonliteral")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pedantic -Wall -Wshadow -Wpointer-arith \

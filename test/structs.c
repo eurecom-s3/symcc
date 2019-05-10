@@ -16,6 +16,8 @@ struct line {
     struct point end;
 };
 
+// TODO array of structures
+
 static struct point g_point = {1, 2};
 
 int main(int argc, char* argv[]) {
@@ -44,6 +46,11 @@ int main(int argc, char* argv[]) {
     // Nested structs
 
     struct line l = {{0, 0}, {5, 5}};
+
+    printf("%s\n", (l.end.x > x) ? "yes" : "no");
+    // CHECK: Trying to solve
+    // CHECK: Found diverging input
+    // CHECK: no
 
     return 0;
 }
