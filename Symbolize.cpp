@@ -73,7 +73,6 @@ constexpr int kExpectedMaxStructElements = 10;
 
 /// Return the appropriate type for storing symbolic expressions.
 Type *expressionType(Type *type) {
-  // TODO handle struct types
   if (type->isSingleValueType()) {
     return Type::getInt8PtrTy(type->getContext());
   }
@@ -545,7 +544,6 @@ bool SymbolizePass::doInitialization(Module &M) {
 
 void SymbolizePass::buildGlobalInitialization(Value *expression, Value *value,
                                               IRBuilder<> &IRB) {
-  // TODO handle non-array globals
   auto valueType = value->getType()->getPointerElementType();
   if (valueType->isIntegerTy()) {
     auto intValue = IRB.CreateLoad(value);
@@ -604,5 +602,5 @@ bool SymbolizePass::runOnFunction(Function &F) {
   symbolizer.visit(F);
   // DEBUG(errs() << F << '\n');
 
-  return true; // TODO be more specific
+  return true;
 }
