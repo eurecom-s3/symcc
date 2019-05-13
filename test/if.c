@@ -18,7 +18,7 @@ int foo(int a, int b) {
     // BITCODE-NOT: load
     // BITCODE-NOT: store
     // CHECK: Trying to solve
-    // BITCODE: shl nsw i32 %0, 1
+    // BITCODE: shl
     if (2 * a < b)
         return a;
     // CHECK: Trying to solve

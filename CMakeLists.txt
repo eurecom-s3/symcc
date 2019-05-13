@@ -23,7 +23,15 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wredundant-decls -Wcast-align \
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pedantic -Wall -Wshadow -Wpointer-arith \
 -Wcast-qual -Wstrict-prototypes")
 
+# This is the compiler pass that we later load into clang or opt. If LLVM is
+# built without RTTI we have to disable it for our library too, otherwise we'll
+# get linker errors.
 add_library(Symbolize MODULE Symbolize.cpp)
+if (NOT LLVM_ENABLE_RTTI)
+  set_target_properties(Symbolize PROPERTIES COMPILE_FLAGS "-fno-rtti")
+endif()
+
 add_library(SymRuntime Runtime.c)
+target_link_libraries(SymRuntime "z3")
 
 add_subdirectory(test)
