@@ -146,6 +146,10 @@ Z3_ast _sym_build_zext(Z3_ast expr, uint8_t bits) {
   return Z3_mk_zero_ext(g_context, bits, expr);
 }
 
+Z3_ast _sym_build_trunc(Z3_ast expr, uint8_t bits) {
+  return Z3_mk_extract(g_context, bits - 1, 0, expr);
+}
+
 /*
  * Function-call helpers
  */
