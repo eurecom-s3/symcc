@@ -139,6 +139,11 @@ public:
       ret = handleGEPOperator(*gep, IRB);
     } else if (auto bc = dyn_cast<BitCastOperator>(V)) {
       ret = handleBitCastOperator(*bc, IRB);
+    } else if (auto gv = dyn_cast<GlobalValue>(V)) {
+      // TODO symbolic handling of pointers to functions and global variables?
+      ret = IRB.CreateCall(SP.buildInteger,
+                           {IRB.CreatePtrToInt(gv, IRB.getInt64Ty()),
+                            ConstantInt::get(IRB.getInt8Ty(), 64)});
     }
 
     if (ret == nullptr) {
