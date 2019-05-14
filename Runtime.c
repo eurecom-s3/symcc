@@ -12,12 +12,15 @@ static Z3_context g_context;
 static Z3_solver g_solver;
 static void *g_return_value;
 static void *g_function_arguments[MAX_FUNCTION_ARGUMENTS];
+static Z3_ast g_null_pointer;
 
 /*
  * Initialization
  */
 
 void _sym_initialize(void) {
+  /* TODO prevent repeated initialization */
+
   Z3_config cfg;
 
   cfg = Z3_mk_config();
@@ -27,6 +30,9 @@ void _sym_initialize(void) {
 
   g_solver = Z3_mk_solver(g_context);
   Z3_solver_inc_ref(g_context, g_solver);
+
+  g_null_pointer =
+      Z3_mk_int(g_context, 0, Z3_mk_bv_sort(g_context, sizeof(void *)));
 }
 
 #define SYM_INITIALIZE_ARRAY(bits)                                             \
@@ -66,6 +72,10 @@ uint32_t _sym_build_variable(const char *name, uint32_t value, uint8_t bits) {
   Z3_symbol sym = Z3_mk_string_symbol(g_context, name);
   g_return_value = Z3_mk_const(g_context, sym, Z3_mk_bv_sort(g_context, bits));
   return value;
+}
+
+Z3_ast _sym_build_null_pointer(void) {
+  return g_null_pointer;
 }
 
 /*

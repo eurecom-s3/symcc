@@ -42,6 +42,7 @@ private:
   //
 
   Value *buildInteger;
+  Value *buildNullPointer;
   Value *buildNeg;
   Value *buildSExt;
   Value *buildZExt;
@@ -144,6 +145,11 @@ public:
       ret = IRB.CreateCall(SP.buildInteger,
                            {IRB.CreatePtrToInt(gv, IRB.getInt64Ty()),
                             ConstantInt::get(IRB.getInt8Ty(), 64)});
+    } else if (isa<ConstantPointerNull>(V)) {
+      // Return immediately to avoid caching. The null pointer may be used in
+      // multiple unrelated places, so we either have to load it early enough in
+      // the function or reload it every time.
+      return IRB.CreateCall(SP.buildNullPointer, {});
     }
 
     if (ret == nullptr) {
@@ -461,6 +467,7 @@ bool SymbolizePass::doInitialization(Module &M) {
 
   buildInteger = M.getOrInsertFunction("_sym_build_integer", exprT,
                                        IRB.getInt64Ty(), int8T);
+  buildNullPointer = M.getOrInsertFunction("_sym_build_null_pointer", exprT);
   buildNeg = M.getOrInsertFunction("_sym_build_neg", exprT, exprT);
   buildSExt = M.getOrInsertFunction("_sym_build_sext", exprT, exprT, int8T);
   buildZExt = M.getOrInsertFunction("_sym_build_zext", exprT, exprT, int8T);
