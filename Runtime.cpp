@@ -1,4 +1,4 @@
-#include <assert.h>
+#include <cassert>
 #include <z3.h>
 
 /* TODO Eventually we'll want to inline as much of this as possible. I'm keeping
@@ -10,9 +10,11 @@
 
 static Z3_context g_context;
 static Z3_solver g_solver;
-static void *g_return_value;
-static void *g_function_arguments[MAX_FUNCTION_ARGUMENTS];
+static Z3_ast g_return_value;
+static Z3_ast g_function_arguments[MAX_FUNCTION_ARGUMENTS];
 static Z3_ast g_null_pointer;
+
+extern "C" {
 
 /*
  * Initialization
@@ -38,7 +40,7 @@ void _sym_initialize(void) {
 #define SYM_INITIALIZE_ARRAY(bits)                                             \
   void _sym_initialize_array_##bits(Z3_ast expression[], void *value,          \
                                     size_t n_elements) {                       \
-    uint##bits##_t *typed_value = value;                                       \
+    uint##bits##_t *typed_value = static_cast<uint##bits##_t *>(value);        \
     for (size_t i = 0; i < n_elements; i++) {                                  \
       expression[i] = Z3_mk_int(g_context, typed_value[i],                     \
                                 Z3_mk_bv_sort(g_context, bits));               \
@@ -74,9 +76,7 @@ uint32_t _sym_build_variable(const char *name, uint32_t value, uint8_t bits) {
   return value;
 }
 
-Z3_ast _sym_build_null_pointer(void) {
-  return g_null_pointer;
-}
+Z3_ast _sym_build_null_pointer(void) { return g_null_pointer; }
 
 /*
  * Arithmetic
@@ -164,7 +164,7 @@ Z3_ast _sym_build_trunc(Z3_ast expr, uint8_t bits) {
  * Function-call helpers
  */
 
-void _sym_set_parameter_expression(uint8_t index, void *expr) {
+void _sym_set_parameter_expression(uint8_t index, Z3_ast expr) {
   g_function_arguments[index] = expr;
 }
 
@@ -224,4 +224,5 @@ Z3_ast _sym_push_path_constraint(Z3_ast constraint, int taken) {
   assert((Z3_solver_check(g_context, g_solver) == Z3_L_TRUE) &&
          "Asserting infeasible path constraint");
   return newConstraint;
+}
 }
