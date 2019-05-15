@@ -1,5 +1,5 @@
 // RUN: %verify_o2
-// RUN: %symcc -O2 %s %symruntime -o %t
+// RUN: %symcc -O2 %s -o %t
 // RUN: %t | FileCheck %s
 //
 // Make sure that our instrumentation works with back-jumps.

@@ -29,7 +29,7 @@ if (NOT LLVM_ENABLE_RTTI)
   set_target_properties(Symbolize PROPERTIES COMPILE_FLAGS "-fno-rtti")
 endif()
 
-add_library(SymRuntime Runtime.cpp)
+add_library(SymRuntime SHARED Runtime.cpp)
 target_link_libraries(SymRuntime "z3")
 
 add_subdirectory(test)

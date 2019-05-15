@@ -1,5 +1,5 @@
 // RUN: %verify_o2
-// RUN: %symcc -O2 %s %symruntime -o %t
+// RUN: %symcc -O2 %s -o %t
 // RUN: %t | FileCheck %s
 // RUN: %symcc -O2 -emit-llvm -S %s -o - | FileCheck --check-prefix=BITCODE %s
 //
