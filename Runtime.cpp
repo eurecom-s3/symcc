@@ -1,24 +1,62 @@
+#include "Runtime.h"
+#include <algorithm>
 #include <cassert>
-#include <z3.h>
+#include <set>
 
 /* TODO Eventually we'll want to inline as much of this as possible. I'm keeping
    it in C for now because that makes it easier to experiment with new features,
    but I expect that a lot of the functions will stay so simple that we can
    generate the corresponding bitcode directly in the compiler pass. */
 
-#define MAX_FUNCTION_ARGUMENTS 256
+namespace {
 
-static Z3_context g_context;
-static Z3_solver g_solver;
-static Z3_ast g_return_value;
-static Z3_ast g_function_arguments[MAX_FUNCTION_ARGUMENTS];
-static Z3_ast g_null_pointer;
+constexpr int kMaxFunctionArguments = 256;
 
-extern "C" {
+/// Memory regions represent a consecutive range of allocated bytes in memory.
+/// We assume that there can only ever be a single allocation per address, so
+/// the regions do not overlap.
+struct MemoryRegion {
+  uintptr_t start, end;
+  Z3_ast *shadow;
 
-/*
- * Initialization
- */
+  bool operator<(const MemoryRegion &other) const {
+    return start < other.start;
+  }
+};
+
+bool operator<(const MemoryRegion &r, uintptr_t addr) { return r.end < addr; }
+bool operator<(uintptr_t addr, const MemoryRegion &r) { return addr < r.start; }
+
+/// The global Z3 context.
+Z3_context g_context;
+
+/// The global Z3 solver.
+Z3_solver g_solver; // TODO make thread-local
+
+/// Global storage for function parameters and the return value.
+Z3_ast g_return_value;
+Z3_ast g_function_arguments[kMaxFunctionArguments];
+// TODO make thread-local
+
+/// A Z3 representation of the null pointer, for efficiency.
+Z3_ast g_null_pointer;
+
+/// The set of known memory regions. The container is a sorted set to make
+/// retrieval by address efficient. Remember that we assume regions to be
+/// non-overlapping.
+std::set<MemoryRegion, std::less<>> g_memory_regions;
+
+/// Make sure that g_memory_regions doesn't contain any overlapping memory
+/// regions.
+void assert_memory_region_invariant() {
+  uintptr_t last_end = 0;
+  for (auto &region : g_memory_regions) {
+    assert((region.start >= last_end) && "Overlapping memory regions");
+    last_end = region.end;
+  }
+}
+
+} // namespace
 
 void _sym_initialize(void) {
   /* TODO prevent repeated initialization */
@@ -34,12 +72,12 @@ void _sym_initialize(void) {
   Z3_solver_inc_ref(g_context, g_solver);
 
   g_null_pointer =
-      Z3_mk_int(g_context, 0, Z3_mk_bv_sort(g_context, sizeof(void *)));
+      Z3_mk_int(g_context, 0, Z3_mk_bv_sort(g_context, 8 * sizeof(void *)));
 }
 
 #define SYM_INITIALIZE_ARRAY(bits)                                             \
-  void _sym_initialize_array_##bits(Z3_ast expression[], void *value,          \
-                                    size_t n_elements) {                       \
+  extern "C" void _sym_initialize_array_##bits(                                \
+      Z3_ast expression[], void *value, size_t n_elements) {                   \
     uint##bits##_t *typed_value = static_cast<uint##bits##_t *>(value);        \
     for (size_t i = 0; i < n_elements; i++) {                                  \
       expression[i] = Z3_mk_int(g_context, typed_value[i],                     \
@@ -53,10 +91,6 @@ SYM_INITIALIZE_ARRAY(32)
 SYM_INITIALIZE_ARRAY(64)
 
 #undef SYM_INITIALIZE_ARRAY
-
-/*
- * Construction of simple values
- */
 
 Z3_ast _sym_build_integer(uint64_t value, uint8_t bits) {
   return Z3_mk_int(g_context, value, Z3_mk_bv_sort(g_context, bits));
@@ -78,10 +112,6 @@ uint32_t _sym_build_variable(const char *name, uint32_t value, uint8_t bits) {
 
 Z3_ast _sym_build_null_pointer(void) { return g_null_pointer; }
 
-/*
- * Arithmetic
- */
-
 Z3_ast _sym_build_add(Z3_ast a, Z3_ast b) {
   return Z3_mk_bvadd(g_context, a, b);
 }
@@ -97,10 +127,6 @@ Z3_ast _sym_build_signed_rem(Z3_ast a, Z3_ast b) {
 Z3_ast _sym_build_shift_left(Z3_ast a, Z3_ast b) {
   return Z3_mk_bvshl(g_context, a, b);
 }
-
-/*
- * Boolean operations
- */
 
 Z3_ast _sym_build_neg(Z3_ast expr) { return Z3_mk_not(g_context, expr); }
 
@@ -144,10 +170,6 @@ Z3_ast _sym_build_not_equal(Z3_ast a, Z3_ast b) {
   return Z3_mk_not(g_context, _sym_build_equal(a, b));
 }
 
-/*
- * Casts
- */
-
 Z3_ast _sym_build_sext(Z3_ast expr, uint8_t bits) {
   return Z3_mk_sign_ext(g_context, bits, expr);
 }
@@ -160,10 +182,6 @@ Z3_ast _sym_build_trunc(Z3_ast expr, uint8_t bits) {
   return Z3_mk_extract(g_context, bits - 1, 0, expr);
 }
 
-/*
- * Function-call helpers
- */
-
 void _sym_set_parameter_expression(uint8_t index, Z3_ast expr) {
   g_function_arguments[index] = expr;
 }
@@ -175,10 +193,6 @@ void *_sym_get_parameter_expression(uint8_t index) {
 void _sym_set_return_expression(Z3_ast expr) { g_return_value = expr; }
 
 Z3_ast _sym_get_return_expression(void) { return g_return_value; }
-
-/*
- * Constraint handling
- */
 
 Z3_ast _sym_push_path_constraint(Z3_ast constraint, int taken) {
   constraint = Z3_simplify(g_context, constraint);
@@ -225,4 +239,35 @@ Z3_ast _sym_push_path_constraint(Z3_ast constraint, int taken) {
          "Asserting infeasible path constraint");
   return newConstraint;
 }
+
+void _sym_register_memory(uintptr_t addr, Z3_ast *shadow, size_t length) {
+  assert_memory_region_invariant();
+
+  // Remove overlapping regions, if any.
+  auto first = g_memory_regions.lower_bound(addr);
+  auto last = g_memory_regions.upper_bound(addr + length);
+  printf("Erasing %ld memory objects\n", std::distance(first, last));
+  g_memory_regions.erase(first, last);
+
+  g_memory_regions.insert({addr, addr + length, shadow});
+}
+
+Z3_ast _sym_read_memory(uintptr_t addr, size_t length, bool little_endian) {
+  assert_memory_region_invariant();
+  assert(length && "Invalid query for zero-length memory region");
+
+  auto region = g_memory_regions.find(addr);
+  assert((region != g_memory_regions.end()) && (addr + length <= region->end) &&
+         "Unknown memory region");
+
+  Z3_ast *shadow = &region->shadow[addr - region->start];
+  Z3_ast expr = shadow[0];
+  for (size_t i = 1; i < length; i++) {
+    // TODO For uninitialized memory, create a constant expression holding the
+    // actual memory contents.
+    expr = little_endian ? Z3_mk_concat(g_context, shadow[i], expr)
+                         : Z3_mk_concat(g_context, expr, shadow[i]);
+  }
+
+  return expr;
 }
