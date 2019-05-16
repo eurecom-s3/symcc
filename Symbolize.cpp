@@ -58,6 +58,9 @@ private:
   Value *initializeArray32{};
   Value *initializeArray64{};
   Value *memcpy{};
+  Value *registerMemory{};
+  Value *readMemory{};
+  Value *writeMemory{};
 
   /// Mapping from icmp predicates to the functions that build the corresponding
   /// symbolic expressions.
@@ -358,15 +361,18 @@ public:
   }
 
   void visitAllocaInst(AllocaInst &I) {
-    if (auto size = dyn_cast<ConstantInt>(I.getArraySize());
-        (size == nullptr) || !size->isOne()) {
-      errs() << "Warning: stack-allocated arrays are not supported yet\n";
-      return;
-    }
-
-    IRBuilder<> IRB(&I);
-    symbolicExpressions[&I] =
-        IRB.CreateAlloca(expressionType(I.getAllocatedType()));
+    IRBuilder<> IRB(I.getNextNode());
+    auto allocationLength =
+        SP.dataLayout->getTypeAllocSize(I.getAllocatedType());
+    auto shadow =
+        IRB.CreateAlloca(ArrayType::get(IRB.getInt8PtrTy(), allocationLength));
+    IRB.CreateCall(SP.registerMemory,
+                   {IRB.CreatePtrToInt(&I, SP.intPtrType),
+                    IRB.CreateBitCast(shadow, IRB.getInt8PtrTy()),
+                    ConstantInt::get(SP.intPtrType, allocationLength)});
+    symbolicExpressions[&I] = IRB.CreateCall(
+        SP.buildInteger, {IRB.CreatePtrToInt(&I, IRB.getInt64Ty()),
+                          ConstantInt::get(IRB.getInt8Ty(), SP.ptrBits)});
   }
 
   void visitLoadInst(LoadInst &I) {
@@ -583,6 +589,12 @@ bool SymbolizePass::doInitialization(Module &M) {
 #undef LOAD_ARRAY_INITIALIZER
 
   memcpy = M.getOrInsertFunction("_sym_memcpy", voidT, ptrT, ptrT, intPtrType);
+  registerMemory = M.getOrInsertFunction("_sym_register_memory", voidT,
+                                         intPtrType, ptrT, intPtrType);
+  readMemory = M.getOrInsertFunction("_sym_read_memory", ptrT, intPtrType,
+                                     intPtrType, int8T);
+  writeMemory = M.getOrInsertFunction("_sym_write_memory", voidT, intPtrType,
+                                      intPtrType, ptrT, int8T);
 
   // For each global variable, we need another global variable that holds the
   // corresponding symbolic expression.
