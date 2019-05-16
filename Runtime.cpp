@@ -4,6 +4,10 @@
 #include <cstring>
 #include <set>
 
+#ifndef NDEBUG
+#include <iostream>
+#endif
+
 /* TODO Eventually we'll want to inline as much of this as possible. I'm keeping
    it in C for now because that makes it easier to experiment with new features,
    but I expect that a lot of the functions will stay so simple that we can
@@ -17,16 +21,21 @@ constexpr int kMaxFunctionArguments = 256;
 /// We assume that there can only ever be a single allocation per address, so
 /// the regions do not overlap.
 struct MemoryRegion {
-  uintptr_t start, end;
+  uintptr_t start, end; // end is one past the last byte
   Z3_ast *shadow;
 
-  bool operator<(const MemoryRegion &other) const {
-    return start < other.start;
-  }
+  bool operator<(const MemoryRegion &other) const { return end <= other.start; }
 };
 
-bool operator<(const MemoryRegion &r, uintptr_t addr) { return r.end < addr; }
+bool operator<(const MemoryRegion &r, uintptr_t addr) { return r.end <= addr; }
 bool operator<(uintptr_t addr, const MemoryRegion &r) { return addr < r.start; }
+
+#ifndef NDEBUG
+std::ostream &operator<<(std::ostream &out, const MemoryRegion &region) {
+  out << "<" << std::hex << region.start << ", " << region.end << ">";
+  return out;
+}
+#endif
 
 /// The global Z3 context.
 Z3_context g_context;
@@ -47,6 +56,7 @@ Z3_ast g_null_pointer;
 /// non-overlapping.
 std::set<MemoryRegion, std::less<>> g_memory_regions;
 
+#ifndef NDEBUG
 /// Make sure that g_memory_regions doesn't contain any overlapping memory
 /// regions.
 void assert_memory_region_invariant() {
@@ -56,6 +66,18 @@ void assert_memory_region_invariant() {
     last_end = region.end;
   }
 }
+#else
+#define assert_memory_region_invariant() ((void)0)
+#endif
+
+#ifndef NDEBUG
+void dump_known_regions() {
+  std::cout << "Known regions:" << std::endl;
+  for (auto &region : g_memory_regions) {
+    std::cout << "  " << region << std::endl;
+  }
+}
+#endif
 
 } // namespace
 
@@ -244,10 +266,17 @@ Z3_ast _sym_push_path_constraint(Z3_ast constraint, int taken) {
 void _sym_register_memory(uintptr_t addr, Z3_ast *shadow, size_t length) {
   assert_memory_region_invariant();
 
+#ifndef NDEBUG
+  std::cout << "Registering memory from " << std::hex << addr << " to "
+            << addr + length << std::endl;
+#endif
+
   // Remove overlapping regions, if any.
   auto first = g_memory_regions.lower_bound(addr);
-  auto last = g_memory_regions.upper_bound(addr + length);
+  auto last = g_memory_regions.upper_bound(addr + length - 1);
+#ifndef NDEBUG
   printf("Erasing %ld memory objects\n", std::distance(first, last));
+#endif
   g_memory_regions.erase(first, last);
 
   g_memory_regions.insert({addr, addr + length, shadow});
@@ -257,9 +286,21 @@ Z3_ast _sym_read_memory(uintptr_t addr, size_t length, bool little_endian) {
   assert_memory_region_invariant();
   assert(length && "Invalid query for zero-length memory region");
 
+#ifndef NDEBUG
+  std::cout << "Reading " << length << " bytes from address " << std::hex
+            << addr << std::endl;
+  dump_known_regions();
+#endif
+
   auto region = g_memory_regions.find(addr);
-  assert((region != g_memory_regions.end()) && (addr + length <= region->end) &&
-         "Unknown memory region");
+
+#ifndef NDEBUG
+  if (region != g_memory_regions.end())
+    std::cout << "Found region " << *region << std::endl;
+#endif
+
+  assert((region != g_memory_regions.end()) && (region->start <= addr) &&
+         (addr + length <= region->end) && "Unknown memory region");
 
   Z3_ast *shadow = &region->shadow[addr - region->start];
   Z3_ast expr = shadow[0];
@@ -278,9 +319,21 @@ void _sym_write_memory(uintptr_t addr, size_t length, Z3_ast expr,
   assert_memory_region_invariant();
   assert(length && "Invalid query for zero-length memory region");
 
+#ifndef NDEBUG
+  std::cout << "Writing " << length << " bytes to address " << std::hex << addr
+            << std::endl;
+  dump_known_regions();
+#endif
+
   auto region = g_memory_regions.find(addr);
-  assert((region != g_memory_regions.end()) && (addr + length <= region->end) &&
-         "Unknown memory region");
+
+#ifndef NDEBUG
+  if (region != g_memory_regions.end())
+    std::cout << "Found region " << *region << std::endl;
+#endif
+
+  assert((region != g_memory_regions.end()) && (region->start <= addr) &&
+         (addr + length <= region->end) && "Unknown memory region");
 
   Z3_ast *shadow = &region->shadow[addr - region->start];
   for (size_t i = 0; i < length; i++) {
@@ -295,13 +348,13 @@ void _sym_memcpy(uintptr_t dest, uintptr_t src, size_t length) {
   assert_memory_region_invariant();
 
   auto srcRegion = g_memory_regions.find(src);
-  assert((srcRegion != g_memory_regions.end()) && (src + length <= srcRegion->end) &&
-         "Unknown memory region");
+  assert((srcRegion != g_memory_regions.end()) &&
+         (src + length <= srcRegion->end) && "Unknown memory region");
   Z3_ast *srcShadow = &srcRegion->shadow[src - srcRegion->start];
 
   auto destRegion = g_memory_regions.find(dest);
-  assert((destRegion != g_memory_regions.end()) && (dest + length <= destRegion->end) &&
-         "Unknown memory region");
+  assert((destRegion != g_memory_regions.end()) &&
+         (dest + length <= destRegion->end) && "Unknown memory region");
   Z3_ast *destShadow = &destRegion->shadow[dest - destRegion->start];
 
   memcpy(destShadow, srcShadow, length * sizeof(Z3_ast));

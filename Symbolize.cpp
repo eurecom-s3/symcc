@@ -141,8 +141,26 @@ public:
                           ConstantInt::get(IRB.getInt8Ty(), C->getBitWidth())});
       IRB.restoreIP(oldInsertionPoint);
     } else if (auto A = dyn_cast<Argument>(V)) {
-      ret = IRB.CreateCall(SP.getParameterExpression,
-                           ConstantInt::get(IRB.getInt8Ty(), A->getArgNo()));
+      if (A->getParent()->getName() == "main") {
+        // We don't have symbolic parameters in main.
+        // TODO fix when we have a symbolic libc
+        if (A->getType()->isIntegerTy()) {
+          ret = IRB.CreateCall(
+              SP.buildInteger,
+              {IRB.CreateZExt(A, IRB.getInt64Ty()),
+               ConstantInt::get(IRB.getInt8Ty(),
+                                A->getType()->getIntegerBitWidth())});
+        } else if (A->getType()->isPointerTy()) {
+          ret = IRB.CreateCall(SP.buildInteger,
+                               {IRB.CreatePtrToInt(A, SP.intPtrType),
+                                ConstantInt::get(IRB.getInt8Ty(), SP.ptrBits)});
+        } else {
+          llvm_unreachable("Unknown argument type for main");
+        }
+      } else {
+        ret = IRB.CreateCall(SP.getParameterExpression,
+                             ConstantInt::get(IRB.getInt8Ty(), A->getArgNo()));
+      }
     } else if (auto gep = dyn_cast<GEPOperator>(V)) {
       ret = handleGEPOperator(*gep, IRB);
     } else if (auto bc = dyn_cast<BitCastOperator>(V)) {
@@ -186,7 +204,7 @@ public:
     // computations at the symbolic level.
 
     auto expr = getOrCreateSymbolicExpression(I.getPointerOperand(), IRB);
-    auto pointerSizeValue = ConstantInt::get(IRB.getInt64Ty(), SP.ptrBits);
+    auto pointerSizeValue = ConstantInt::get(IRB.getInt8Ty(), SP.ptrBits);
 
     for (auto type_it = gep_type_begin(I), type_end = gep_type_end(I);
          type_it != type_end; ++type_it) {
@@ -330,13 +348,13 @@ public:
         // These are safe to ignore.
         break;
       case Intrinsic::memcpy: {
-        auto destExpr = getOrCreateSymbolicExpression(I.getOperand(0), IRB);
-        auto srcExpr = getOrCreateSymbolicExpression(I.getOperand(1), IRB);
-
+        // auto destExpr = getOrCreateSymbolicExpression(I.getOperand(0), IRB);
+        // auto srcExpr = getOrCreateSymbolicExpression(I.getOperand(1), IRB);
         // TODO generate diverging inputs for the source and destination of the
         // copy operation
 
-        IRB.CreateCall(SP.memcpy, {I.getOperand(0), I.getOperand(2)});
+        IRB.CreateCall(SP.memcpy,
+                       {I.getOperand(0), I.getOperand(1), I.getOperand(2)});
         break;
       }
       default:
@@ -377,14 +395,37 @@ public:
 
   void visitLoadInst(LoadInst &I) {
     IRBuilder<> IRB(&I);
-    symbolicExpressions[&I] = IRB.CreateLoad(
-        getOrCreateSymbolicExpression(I.getPointerOperand(), IRB));
+    // symbolicExpressions[&I] = IRB.CreateLoad(
+    //     getOrCreateSymbolicExpression(I.getPointerOperand(), IRB));
+
+    auto addr = I.getPointerOperand();
+    // auto addrExpr = getOrCreateSymbolicExpression(addr, IRB);
+    // TODO generate diverging inputs for addrExpr
+
+    symbolicExpressions[&I] = IRB.CreateCall(
+        SP.readMemory,
+        {IRB.CreatePtrToInt(addr, SP.intPtrType),
+         ConstantInt::get(SP.intPtrType,
+                          SP.dataLayout->getTypeStoreSize(I.getType())),
+         ConstantInt::get(IRB.getInt8Ty(),
+                          SP.dataLayout->isLittleEndian() ? 1 : 0)});
   }
 
   void visitStoreInst(StoreInst &I) {
     IRBuilder<> IRB(&I);
-    IRB.CreateStore(getOrCreateSymbolicExpression(I.getValueOperand(), IRB),
-                    getOrCreateSymbolicExpression(I.getPointerOperand(), IRB));
+
+    // auto addrExpr = getOrCreateSymbolicExpression(I.getPointerOperand(),
+    // IRB);
+    // TODO generate diverging input for the target address
+
+    IRB.CreateCall(
+        SP.writeMemory,
+        {IRB.CreatePtrToInt(I.getPointerOperand(), SP.intPtrType),
+         ConstantInt::get(SP.intPtrType, SP.dataLayout->getTypeStoreSize(
+                                             I.getValueOperand()->getType())),
+         getOrCreateSymbolicExpression(I.getValueOperand(), IRB),
+         ConstantInt::get(IRB.getInt8Ty(),
+                          SP.dataLayout->isLittleEndian() ? 1 : 0)});
   }
 
   void visitGetElementPtrInst(GetElementPtrInst &I) {
