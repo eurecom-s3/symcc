@@ -21,14 +21,14 @@ constexpr int kMaxFunctionArguments = 256;
 /// We assume that there can only ever be a single allocation per address, so
 /// the regions do not overlap.
 struct MemoryRegion {
-  uintptr_t start, end; // end is one past the last byte
+  uint8_t *start, *end; // end is one past the last byte
   Z3_ast *shadow;
 
   bool operator<(const MemoryRegion &other) const { return end <= other.start; }
 };
 
-bool operator<(const MemoryRegion &r, uintptr_t addr) { return r.end <= addr; }
-bool operator<(uintptr_t addr, const MemoryRegion &r) { return addr < r.start; }
+bool operator<(const MemoryRegion &r, uint8_t *addr) { return r.end <= addr; }
+bool operator<(uint8_t *addr, const MemoryRegion &r) { return addr < r.start; }
 
 #ifndef NDEBUG
 std::ostream &operator<<(std::ostream &out, const MemoryRegion &region) {
@@ -60,7 +60,7 @@ std::set<MemoryRegion, std::less<>> g_memory_regions;
 /// Make sure that g_memory_regions doesn't contain any overlapping memory
 /// regions.
 void assert_memory_region_invariant() {
-  uintptr_t last_end = 0;
+  uint8_t *last_end = nullptr;
   for (auto &region : g_memory_regions) {
     assert((region.start >= last_end) && "Overlapping memory regions");
     last_end = region.end;
@@ -263,7 +263,7 @@ Z3_ast _sym_push_path_constraint(Z3_ast constraint, int taken) {
   return newConstraint;
 }
 
-void _sym_register_memory(uintptr_t addr, Z3_ast *shadow, size_t length) {
+void _sym_register_memory(uint8_t *addr, Z3_ast *shadow, size_t length) {
   assert_memory_region_invariant();
 
 #ifndef NDEBUG
@@ -292,11 +292,10 @@ void _sym_initialize_memory(uint8_t *addr, Z3_ast *shadow, size_t length) {
     shadow[i] = _sym_build_integer(addr[i], 8);
   }
 
-  // TODO fix
-  _sym_register_memory((uintptr_t)addr, shadow, length);
+  _sym_register_memory(addr, shadow, length);
 }
 
-Z3_ast _sym_read_memory(uintptr_t addr, size_t length, bool little_endian) {
+Z3_ast _sym_read_memory(uint8_t *addr, size_t length, bool little_endian) {
   assert_memory_region_invariant();
   assert(length && "Invalid query for zero-length memory region");
 
@@ -328,7 +327,7 @@ Z3_ast _sym_read_memory(uintptr_t addr, size_t length, bool little_endian) {
   return expr;
 }
 
-void _sym_write_memory(uintptr_t addr, size_t length, Z3_ast expr,
+void _sym_write_memory(uint8_t *addr, size_t length, Z3_ast expr,
                        bool little_endian) {
   assert_memory_region_invariant();
   assert(length && "Invalid query for zero-length memory region");
@@ -358,7 +357,7 @@ void _sym_write_memory(uintptr_t addr, size_t length, Z3_ast expr,
   }
 }
 
-void _sym_memcpy(uintptr_t dest, uintptr_t src, size_t length) {
+void _sym_memcpy(uint8_t *dest, uint8_t *src, size_t length) {
   assert_memory_region_invariant();
 
   auto srcRegion = g_memory_regions.find(src);

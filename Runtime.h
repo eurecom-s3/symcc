@@ -68,12 +68,12 @@ Z3_ast _sym_push_path_constraint(Z3_ast constraint, int taken);
 /*
  * Memory management
  */
-void _sym_register_memory(uintptr_t addr, Z3_ast *shadow, size_t length);
+void _sym_register_memory(uint8_t *addr, Z3_ast *shadow, size_t length);
 void _sym_initialize_memory(uint8_t *addr, Z3_ast *shadow, size_t length);
-Z3_ast _sym_read_memory(uintptr_t addr, size_t length, bool little_endian);
-void _sym_write_memory(uintptr_t addr, size_t length, Z3_ast expr,
+Z3_ast _sym_read_memory(uint8_t *addr, size_t length, bool little_endian);
+void _sym_write_memory(uint8_t *addr, size_t length, Z3_ast expr,
                        bool little_endian);
-void _sym_memcpy(uintptr_t dest, uintptr_t src, size_t length);
+void _sym_memcpy(uint8_t *dest, uint8_t *src, size_t length);
 }
 
 #endif
