@@ -271,3 +271,21 @@ Z3_ast _sym_read_memory(uintptr_t addr, size_t length, bool little_endian) {
 
   return expr;
 }
+
+void _sym_write_memory(uintptr_t addr, size_t length, Z3_ast expr,
+                       bool little_endian) {
+  assert_memory_region_invariant();
+  assert(length && "Invalid query for zero-length memory region");
+
+  auto region = g_memory_regions.find(addr);
+  assert((region != g_memory_regions.end()) && (addr + length <= region->end) &&
+         "Unknown memory region");
+
+  Z3_ast *shadow = &region->shadow[addr - region->start];
+  for (size_t i = 0; i < length; i++) {
+    shadow[i] = little_endian
+                    ? Z3_mk_extract(g_context, 8 * (i + 1) - 1, 8 * i, expr)
+                    : Z3_mk_extract(g_context, (length - i) * 8 - 1,
+                                    (length - i - 1) * 8, expr);
+  }
+}
