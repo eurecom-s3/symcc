@@ -61,6 +61,7 @@ private:
   Value *registerMemory{};
   Value *readMemory{};
   Value *writeMemory{};
+  Value *initializeMemory{};
 
   /// Mapping from icmp predicates to the functions that build the corresponding
   /// symbolic expressions.
@@ -84,32 +85,6 @@ private:
 
   friend class Symbolizer;
 };
-
-constexpr int kExpectedMaxStructElements = 10;
-
-/// Return the appropriate type for storing symbolic expressions.
-Type *expressionType(Type *type) {
-  if (type->isSingleValueType()) {
-    return Type::getInt8PtrTy(type->getContext());
-  }
-
-  if (type->isArrayTy()) {
-    return ArrayType::get(expressionType(type->getArrayElementType()),
-                          type->getArrayNumElements());
-  }
-
-  if (type->isStructTy()) {
-    SmallVector<Type *, kExpectedMaxStructElements> exprSubtypes;
-    for (auto *subtype : type->subtypes()) {
-      exprSubtypes.push_back(expressionType(subtype));
-    }
-
-    return StructType::get(type->getContext(), exprSubtypes);
-  }
-
-  errs() << "Warning: cannot determine expression type for " << *type << '\n';
-  llvm_unreachable("Unable to determine expression type");
-}
 
 class Symbolizer : public InstVisitor<Symbolizer> {
 public:
@@ -395,8 +370,6 @@ public:
 
   void visitLoadInst(LoadInst &I) {
     IRBuilder<> IRB(&I);
-    // symbolicExpressions[&I] = IRB.CreateLoad(
-    //     getOrCreateSymbolicExpression(I.getPointerOperand(), IRB));
 
     auto addr = I.getPointerOperand();
     // auto addrExpr = getOrCreateSymbolicExpression(addr, IRB);
@@ -510,21 +483,7 @@ public:
     errs() << "Warning: unknown instruction " << I << '\n';
   }
 
-  //
-  // Helpers
-  //
-
-  /// Generate code that computes the size of the given type.
-  Value *sizeOfType(Type *type, IRBuilder<> &IRB) {
-    return IRB.CreatePtrToInt(
-        IRB.CreateGEP(ConstantPointerNull::get(type->getPointerTo()),
-                      IRB.getInt32(1)),
-        IRB.getInt64Ty());
-  }
-
 private:
-  static constexpr int kExpectedMaxGEPIndices = 5;
-
   const SymbolizePass &SP;
 
   /// Mapping from SSA values to symbolic expressions.
@@ -636,16 +595,21 @@ bool SymbolizePass::doInitialization(Module &M) {
                                      intPtrType, int8T);
   writeMemory = M.getOrInsertFunction("_sym_write_memory", voidT, intPtrType,
                                       intPtrType, ptrT, int8T);
+  initializeMemory = M.getOrInsertFunction("_sym_initialize_memory", voidT,
+                                           intPtrType, ptrT, intPtrType);
 
   // For each global variable, we need another global variable that holds the
   // corresponding symbolic expression.
   for (auto &global : M.globals()) {
-    auto exprType = expressionType(global.getValueType());
+    auto valueLength = dataLayout->getTypeAllocSize(global.getValueType());
+    auto shadowType = ArrayType::get(IRB.getInt8PtrTy(), valueLength);
+
     // The expression has to be initialized at run time and can therefore never
     // be constant, even if the value that it represents is.
     globalExpressions[&global] =
-        new GlobalVariable(M, exprType, false, global.getLinkage(),
-                           Constant::getNullValue(exprType),
+        new GlobalVariable(M, shadowType,
+                           /* isConstant */ false, global.getLinkage(),
+                           Constant::getNullValue(shadowType),
                            global.getName() + ".sym_expr", &global);
   }
 
@@ -655,60 +619,16 @@ bool SymbolizePass::doInitialization(Module &M) {
       M, kSymCtorName, "_sym_initialize", {}, {});
   IRB.SetInsertPoint(ctor->getEntryBlock().getTerminator());
   for (auto &&[value, expression] : globalExpressions) {
-    buildGlobalInitialization(expression, value, IRB);
+    IRB.CreateCall(
+        initializeMemory,
+        {IRB.CreatePtrToInt(value, intPtrType),
+         IRB.CreateBitCast(expression, ptrT),
+         ConstantInt::get(intPtrType,
+                          expression->getValueType()->getArrayNumElements())});
   }
   appendToGlobalCtors(M, ctor, 0);
 
   return true;
-}
-
-void SymbolizePass::buildGlobalInitialization(Value *expression, Value *value,
-                                              IRBuilder<> &IRB) {
-  auto valueType = value->getType()->getPointerElementType();
-  if (valueType->isIntegerTy()) {
-    auto intValue = IRB.CreateLoad(value);
-    auto intExpr = IRB.CreateCall(
-        buildInteger, {IRB.CreateZExt(intValue, IRB.getInt64Ty()),
-                       IRB.getInt8(valueType->getIntegerBitWidth())});
-    IRB.CreateStore(intExpr, expression);
-  } else if (valueType->isArrayTy()) {
-    Value *target;
-    switch (valueType->getArrayElementType()->getIntegerBitWidth()) {
-    case 8:
-      target = initializeArray8;
-      break;
-    case 16:
-      target = initializeArray16;
-      break;
-    case 32:
-      target = initializeArray32;
-      break;
-    case 64:
-      target = initializeArray64;
-      break;
-    default:
-      llvm_unreachable("Unhandled global array element type");
-    }
-
-    IRB.CreateCall(
-        target,
-        {IRB.CreateBitCast(expression, PointerType::get(IRB.getInt8PtrTy(), 0)),
-         IRB.CreateBitCast(
-             value, PointerType::get(valueType->getArrayElementType(), 0)),
-         IRB.getInt64(valueType->getArrayNumElements())});
-  } else if (valueType->isStructTy()) {
-    for (unsigned element = 0, numElements = valueType->getStructNumElements();
-         element < numElements; element++) {
-      auto elementExprPtr =
-          IRB.CreateGEP(expression, {IRB.getInt32(0), IRB.getInt32(element)});
-      auto elementValuePtr =
-          IRB.CreateGEP(value, {IRB.getInt32(0), IRB.getInt32(element)});
-      buildGlobalInitialization(elementExprPtr, elementValuePtr, IRB);
-    }
-  } else {
-    llvm_unreachable(
-        "Don't know how to initialize expression for global variable");
-  }
 }
 
 bool SymbolizePass::runOnFunction(Function &F) {

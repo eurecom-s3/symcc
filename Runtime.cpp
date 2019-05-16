@@ -282,6 +282,20 @@ void _sym_register_memory(uintptr_t addr, Z3_ast *shadow, size_t length) {
   g_memory_regions.insert({addr, addr + length, shadow});
 }
 
+void _sym_initialize_memory(uint8_t *addr, Z3_ast *shadow, size_t length) {
+#ifndef NDEBUG
+  std::cout << "Initializing " << length << " bytes of memory at " << std::hex
+            << addr << std::endl;
+#endif
+
+  for (size_t i = 0; i < length; i++) {
+    shadow[i] = _sym_build_integer(addr[i], 8);
+  }
+
+  // TODO fix
+  _sym_register_memory((uintptr_t)addr, shadow, length);
+}
+
 Z3_ast _sym_read_memory(uintptr_t addr, size_t length, bool little_endian) {
   assert_memory_region_invariant();
   assert(length && "Invalid query for zero-length memory region");
