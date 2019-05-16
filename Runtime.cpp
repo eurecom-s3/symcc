@@ -1,6 +1,7 @@
 #include "Runtime.h"
 #include <algorithm>
 #include <cassert>
+#include <cstring>
 #include <set>
 
 /* TODO Eventually we'll want to inline as much of this as possible. I'm keeping
@@ -288,4 +289,20 @@ void _sym_write_memory(uintptr_t addr, size_t length, Z3_ast expr,
                     : Z3_mk_extract(g_context, (length - i) * 8 - 1,
                                     (length - i - 1) * 8, expr);
   }
+}
+
+void _sym_memcpy(uintptr_t dest, uintptr_t src, size_t length) {
+  assert_memory_region_invariant();
+
+  auto srcRegion = g_memory_regions.find(src);
+  assert((srcRegion != g_memory_regions.end()) && (src + length <= srcRegion->end) &&
+         "Unknown memory region");
+  Z3_ast *srcShadow = &srcRegion->shadow[src - srcRegion->start];
+
+  auto destRegion = g_memory_regions.find(dest);
+  assert((destRegion != g_memory_regions.end()) && (dest + length <= destRegion->end) &&
+         "Unknown memory region");
+  Z3_ast *destShadow = &destRegion->shadow[dest - destRegion->start];
+
+  memcpy(destShadow, srcShadow, length * sizeof(Z3_ast));
 }

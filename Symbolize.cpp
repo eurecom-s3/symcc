@@ -57,6 +57,7 @@ private:
   Value *initializeArray16{};
   Value *initializeArray32{};
   Value *initializeArray64{};
+  Value *memcpy{};
 
   /// Mapping from icmp predicates to the functions that build the corresponding
   /// symbolic expressions.
@@ -248,9 +249,6 @@ public:
     // negated) condition to the path constraints and copy the symbolic
     // expression over from the chosen argument.
 
-    // TODO The code we generate here causes the negation to be built in any
-    // case, even when it's not used. Is this cheaper than a conditional branch?
-
     IRBuilder<> IRB(&I);
     IRB.CreateCall(SP.pushPathConstraint,
                    {getOrCreateSymbolicExpression(I.getCondition(), IRB),
@@ -331,12 +329,11 @@ public:
       case Intrinsic::memcpy: {
         auto destExpr = getOrCreateSymbolicExpression(I.getOperand(0), IRB);
         auto srcExpr = getOrCreateSymbolicExpression(I.getOperand(1), IRB);
-        IRB.CreateCall(
-            callee,
-            {IRB.CreateBitCast(destExpr, IRB.getInt8PtrTy()),
-             IRB.CreateBitCast(srcExpr, IRB.getInt8PtrTy()),
-             sizeOfType(srcExpr->getType()->getPointerElementType(), IRB),
-             I.getOperand(3)});
+
+        // TODO generate diverging inputs for the source and destination of the
+        // copy operation
+
+        IRB.CreateCall(SP.memcpy, {I.getOperand(0), I.getOperand(2)});
         break;
       }
       default:
@@ -512,32 +509,32 @@ bool SymbolizePass::doInitialization(Module &M) {
   ptrBits = M.getDataLayout().getPointerSizeInBits();
 
   IRBuilder<> IRB(M.getContext());
-  auto exprT = IRB.getInt8PtrTy();
+  auto ptrT = IRB.getInt8PtrTy();
   auto int8T = IRB.getInt8Ty();
   auto voidT = IRB.getVoidTy();
 
-  buildInteger = M.getOrInsertFunction("_sym_build_integer", exprT,
+  buildInteger = M.getOrInsertFunction("_sym_build_integer", ptrT,
                                        IRB.getInt64Ty(), int8T);
-  buildNullPointer = M.getOrInsertFunction("_sym_build_null_pointer", exprT);
-  buildNeg = M.getOrInsertFunction("_sym_build_neg", exprT, exprT);
-  buildSExt = M.getOrInsertFunction("_sym_build_sext", exprT, exprT, int8T);
-  buildZExt = M.getOrInsertFunction("_sym_build_zext", exprT, exprT, int8T);
-  buildTrunc = M.getOrInsertFunction("_sym_build_trunc", exprT, exprT, int8T);
-  pushPathConstraint = M.getOrInsertFunction("_sym_push_path_constraint", exprT,
-                                             exprT, IRB.getInt1Ty());
+  buildNullPointer = M.getOrInsertFunction("_sym_build_null_pointer", ptrT);
+  buildNeg = M.getOrInsertFunction("_sym_build_neg", ptrT, ptrT);
+  buildSExt = M.getOrInsertFunction("_sym_build_sext", ptrT, ptrT, int8T);
+  buildZExt = M.getOrInsertFunction("_sym_build_zext", ptrT, ptrT, int8T);
+  buildTrunc = M.getOrInsertFunction("_sym_build_trunc", ptrT, ptrT, int8T);
+  pushPathConstraint = M.getOrInsertFunction("_sym_push_path_constraint", ptrT,
+                                             ptrT, IRB.getInt1Ty());
 
   setParameterExpression = M.getOrInsertFunction(
-      "_sym_set_parameter_expression", voidT, int8T, exprT);
+      "_sym_set_parameter_expression", voidT, int8T, ptrT);
   getParameterExpression =
-      M.getOrInsertFunction("_sym_get_parameter_expression", exprT, int8T);
+      M.getOrInsertFunction("_sym_get_parameter_expression", ptrT, int8T);
   setReturnExpression =
-      M.getOrInsertFunction("_sym_set_return_expression", voidT, exprT);
+      M.getOrInsertFunction("_sym_set_return_expression", voidT, ptrT);
   getReturnExpression =
-      M.getOrInsertFunction("_sym_get_return_expression", exprT);
+      M.getOrInsertFunction("_sym_get_return_expression", ptrT);
 
 #define LOAD_BINARY_OPERATOR_HANDLER(constant, name)                           \
   binaryOperatorHandlers[Instruction::constant] =                              \
-      M.getOrInsertFunction("_sym_build_" #name, exprT, exprT, exprT);
+      M.getOrInsertFunction("_sym_build_" #name, ptrT, ptrT, ptrT);
 
   // TODO make sure that we use the correct variant (signed or unsigned)
   LOAD_BINARY_OPERATOR_HANDLER(Add, add)
@@ -558,7 +555,7 @@ bool SymbolizePass::doInitialization(Module &M) {
 
 #define LOAD_COMPARISON_HANDLER(constant, name)                                \
   comparisonHandlers[CmpInst::constant] =                                      \
-      M.getOrInsertFunction("_sym_build_" #name, exprT, exprT, exprT);
+      M.getOrInsertFunction("_sym_build_" #name, ptrT, ptrT, ptrT);
 
   LOAD_COMPARISON_HANDLER(ICMP_EQ, equal)
   LOAD_COMPARISON_HANDLER(ICMP_NE, not_equal)
@@ -575,7 +572,7 @@ bool SymbolizePass::doInitialization(Module &M) {
 
 #define LOAD_ARRAY_INITIALIZER(bits)                                           \
   initializeArray##bits = M.getOrInsertFunction(                               \
-      "_sym_initialize_array_" #bits, voidT, PointerType::get(exprT, 0),       \
+      "_sym_initialize_array_" #bits, voidT, PointerType::get(ptrT, 0),        \
       PointerType::getInt##bits##PtrTy(M.getContext()), IRB.getInt64Ty());
 
   LOAD_ARRAY_INITIALIZER(8)
@@ -584,6 +581,8 @@ bool SymbolizePass::doInitialization(Module &M) {
   LOAD_ARRAY_INITIALIZER(64)
 
 #undef LOAD_ARRAY_INITIALIZER
+
+  memcpy = M.getOrInsertFunction("_sym_memcpy", voidT, ptrT, ptrT, intPtrType);
 
   // For each global variable, we need another global variable that holds the
   // corresponding symbolic expression.

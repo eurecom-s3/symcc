@@ -72,6 +72,7 @@ void _sym_register_memory(uintptr_t addr, uintptr_t shadow, size_t length);
 Z3_ast _sym_read_memory(uintptr_t addr, size_t length, bool little_endian);
 void _sym_write_memory(uintptr_t addr, size_t length, Z3_ast expr,
                        bool little_endian);
+void _sym_memcpy(uintptr_t dest, uintptr_t src, size_t length);
 }
 
 #endif
