@@ -1,4 +1,5 @@
 #include <llvm/IR/Function.h>
+#include <llvm/IR/GetElementPtrTypeIterator.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/InstVisitor.h>
 #include <llvm/IR/InstrTypes.h>
@@ -41,21 +42,21 @@ private:
   // Runtime functions
   //
 
-  Value *buildInteger;
-  Value *buildNullPointer;
-  Value *buildNeg;
-  Value *buildSExt;
-  Value *buildZExt;
-  Value *buildTrunc;
-  Value *pushPathConstraint;
-  Value *getParameterExpression;
-  Value *setParameterExpression;
-  Value *setReturnExpression;
-  Value *getReturnExpression;
-  Value *initializeArray8;
-  Value *initializeArray16;
-  Value *initializeArray32;
-  Value *initializeArray64;
+  Value *buildInteger{};
+  Value *buildNullPointer{};
+  Value *buildNeg{};
+  Value *buildSExt{};
+  Value *buildZExt{};
+  Value *buildTrunc{};
+  Value *pushPathConstraint{};
+  Value *getParameterExpression{};
+  Value *setParameterExpression{};
+  Value *setReturnExpression{};
+  Value *getReturnExpression{};
+  Value *initializeArray8{};
+  Value *initializeArray16{};
+  Value *initializeArray32{};
+  Value *initializeArray64{};
 
   /// Mapping from icmp predicates to the functions that build the corresponding
   /// symbolic expressions.
@@ -67,6 +68,15 @@ private:
 
   /// Mapping from global variables to their corresponding symbolic expressions.
   ValueMap<GlobalVariable *, GlobalVariable *> globalExpressions;
+
+  /// The data layout of the currently processed module.
+  const DataLayout *dataLayout;
+
+  /// An integer type at least as wide as a pointer.
+  IntegerType *intPtrType{};
+
+  /// The width in bits of pointers in the module.
+  unsigned ptrBits{};
 
   friend class Symbolizer;
 };
@@ -108,13 +118,6 @@ public:
       return exprIt->second;
     }
 
-    if (auto global = dyn_cast<GlobalVariable>(V)) {
-      if (auto exprIt = SP.globalExpressions.find(global);
-          exprIt != SP.globalExpressions.end()) {
-        return exprIt->second;
-      }
-    }
-
     Value *ret = nullptr;
 
     if (auto C = dyn_cast<ConstantInt>(V)) {
@@ -141,10 +144,9 @@ public:
     } else if (auto bc = dyn_cast<BitCastOperator>(V)) {
       ret = handleBitCastOperator(*bc, IRB);
     } else if (auto gv = dyn_cast<GlobalValue>(V)) {
-      // TODO symbolic handling of pointers to functions and global variables?
       ret = IRB.CreateCall(SP.buildInteger,
-                           {IRB.CreatePtrToInt(gv, IRB.getInt64Ty()),
-                            ConstantInt::get(IRB.getInt8Ty(), 64)});
+                           {IRB.CreatePtrToInt(gv, SP.intPtrType),
+                            ConstantInt::get(IRB.getInt8Ty(), SP.ptrBits)});
     } else if (isa<ConstantPointerNull>(V)) {
       // Return immediately to avoid caching. The null pointer may be used in
       // multiple unrelated places, so we either have to load it early enough in
@@ -174,10 +176,56 @@ public:
   }
 
   Value *handleGEPOperator(GEPOperator &I, IRBuilder<> &IRB) {
-    SmallVector<Value *, kExpectedMaxGEPIndices> indices(I.idx_begin(),
-                                                         I.idx_end());
-    return IRB.CreateGEP(
-        getOrCreateSymbolicExpression(I.getPointerOperand(), IRB), indices);
+    // GEP performs address calculations but never actually accesses memory. In
+    // order to represent the result of a GEP symbolically, we start from the
+    // symbolic expression of the original pointer and duplicate its
+    // computations at the symbolic level.
+
+    auto expr = getOrCreateSymbolicExpression(I.getPointerOperand(), IRB);
+    auto pointerSizeValue = ConstantInt::get(IRB.getInt64Ty(), SP.ptrBits);
+
+    for (auto type_it = gep_type_begin(I), type_end = gep_type_end(I);
+         type_it != type_end; ++type_it) {
+      auto index = type_it.getOperand();
+
+      // There are two cases for the calculation:
+      // 1. If the indexed type is a struct, we need to add the offset of the
+      //    desired member.
+      // 2. If it is an array or a pointer, compute the offset of the desired
+      //    element.
+      Value *offset;
+      if (auto structType = type_it.getStructTypeOrNull()) {
+        // Structs can only be indexed with constants
+        // (https://llvm.org/docs/LangRef.html#getelementptr-instruction).
+
+        unsigned memberIndex = cast<ConstantInt>(index)->getZExtValue();
+        unsigned memberOffset = SP.dataLayout->getStructLayout(structType)
+                                    ->getElementOffset(memberIndex);
+        offset = IRB.CreateCall(
+            SP.buildInteger, {ConstantInt::get(IRB.getInt64Ty(), memberOffset),
+                              pointerSizeValue});
+      } else {
+        if (auto ci = dyn_cast<ConstantInt>(index); ci && ci->isZero()) {
+          // Fast path: an index of zero means that no calculations are
+          // performed.
+          continue;
+        }
+
+        unsigned elementSize =
+            SP.dataLayout->getTypeAllocSize(type_it.getIndexedType());
+        auto elementSizeExpr = IRB.CreateCall(
+            SP.buildInteger, {ConstantInt::get(IRB.getInt64Ty(), elementSize),
+                              pointerSizeValue});
+        auto indexExpr = getOrCreateSymbolicExpression(index, IRB);
+        offset = IRB.CreateCall(SP.binaryOperatorHandlers[Instruction::Mul],
+                                {indexExpr, elementSizeExpr});
+      }
+
+      expr = IRB.CreateCall(SP.binaryOperatorHandlers[Instruction::Add],
+                            {expr, offset});
+    }
+
+    return expr;
   }
 
   //
@@ -459,6 +507,9 @@ static struct RegisterStandardPasses Y(PassManagerBuilder::EP_EarlyAsPossible,
 
 bool SymbolizePass::doInitialization(Module &M) {
   DEBUG(errs() << "Symbolizer module init\n");
+  dataLayout = &M.getDataLayout();
+  intPtrType = M.getDataLayout().getIntPtrType(M.getContext());
+  ptrBits = M.getDataLayout().getPointerSizeInBits();
 
   IRBuilder<> IRB(M.getContext());
   auto exprT = IRB.getInt8PtrTy();
