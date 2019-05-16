@@ -1,7 +1,8 @@
 // RUN: %verify_o2
 // RUN: %symcc -O2 %s -o %t
 // RUN: %t | FileCheck %s
-// RUN: %symcc -O2 -emit-llvm -S %s -o - | FileCheck --check-prefix=BITCODE %s
+// This test is disabled until we can move the pass behind the optimizer in the pipeline:
+// RUN-disabled: %symcc -O2 -emit-llvm -S %s -o - | FileCheck --check-prefix=BITCODE %s
 //
 // Here we test two things:
 // 1. We can compile the file, and executing it symbolically results in solving
