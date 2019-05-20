@@ -208,12 +208,22 @@ public:
           continue;
         }
 
+        // TODO optimize? If the index is constant, we can perform the
+        // multiplication ourselves instead of having the solver do it. Also, if
+        // the element size is 1, we can omit the multiplication.
+
         unsigned elementSize =
             SP.dataLayout->getTypeAllocSize(type_it.getIndexedType());
         auto elementSizeExpr = IRB.CreateCall(
             SP.buildInteger, {ConstantInt::get(IRB.getInt64Ty(), elementSize),
                               pointerSizeValue});
         auto indexExpr = getOrCreateSymbolicExpression(index, IRB);
+        if (auto indexWidth = index->getType()->getIntegerBitWidth();
+            indexWidth != 64) {
+          indexExpr = IRB.CreateCall(
+              SP.buildZExt,
+              {indexExpr, ConstantInt::get(IRB.getInt8Ty(), 64 - indexWidth)});
+        }
         offset = IRB.CreateCall(SP.binaryOperatorHandlers[Instruction::Mul],
                                 {indexExpr, elementSizeExpr});
       }
