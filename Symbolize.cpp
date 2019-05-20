@@ -429,6 +429,20 @@ public:
         {I.getOperand(0), IRB.getInt8(I.getDestTy()->getIntegerBitWidth())});
   }
 
+  void visitIntToPtrInst(IntToPtrInst &I) {
+    IRBuilder<> IRB(&I);
+    symbolicExpressions[&I] =
+        getOrCreateSymbolicExpression(I.getOperand(0), IRB);
+    // TODO handle truncation and zero extension
+  }
+
+  void visitPtrToIntInst(PtrToIntInst &I) {
+    IRBuilder<> IRB(&I);
+    symbolicExpressions[&I] =
+        getOrCreateSymbolicExpression(I.getOperand(0), IRB);
+    // TODO handle truncation and zero extension
+  }
+
   void visitCastInst(CastInst &I) {
     auto opcode = I.getOpcode();
     if (opcode != Instruction::SExt && opcode != Instruction::ZExt) {
@@ -487,6 +501,10 @@ public:
     }
 
     symbolicExpressions[&I] = exprPHI;
+  }
+
+  void visitUnreachableInst(UnreachableInst &) {
+    // Nothing to do here...
   }
 
   void visitInstruction(Instruction &I) {
