@@ -4,7 +4,7 @@
 #include <cstring>
 #include <set>
 
-#ifndef NDEBUG
+#ifdef DEBUG_RUNTIME
 #include <iostream>
 // Helper to print pointers properly.
 #define P(ptr) static_cast<void *>(ptr)
@@ -32,7 +32,7 @@ struct MemoryRegion {
 bool operator<(const MemoryRegion &r, uint8_t *addr) { return r.end <= addr; }
 bool operator<(uint8_t *addr, const MemoryRegion &r) { return addr < r.start; }
 
-#ifndef NDEBUG
+#ifdef DEBUG_RUNTIME
 std::ostream &operator<<(std::ostream &out, const MemoryRegion &region) {
   out << "<" << P(region.start) << ", " << P(region.end) << ">";
   return out;
@@ -58,7 +58,7 @@ Z3_ast g_null_pointer;
 /// non-overlapping.
 std::set<MemoryRegion, std::less<>> g_memory_regions;
 
-#ifndef NDEBUG
+#ifdef DEBUG_RUNTIME
 /// Make sure that g_memory_regions doesn't contain any overlapping memory
 /// regions.
 void assert_memory_region_invariant() {
@@ -72,7 +72,7 @@ void assert_memory_region_invariant() {
 #define assert_memory_region_invariant() ((void)0)
 #endif
 
-#ifndef NDEBUG
+#ifdef DEBUG_RUNTIME
 void dump_known_regions() {
   std::cout << "Known regions:" << std::endl;
   for (auto &region : g_memory_regions) {
@@ -268,7 +268,7 @@ Z3_ast _sym_push_path_constraint(Z3_ast constraint, int taken) {
 void _sym_register_memory(uint8_t *addr, Z3_ast *shadow, size_t length) {
   assert_memory_region_invariant();
 
-#ifndef NDEBUG
+#ifdef DEBUG_RUNTIME
   std::cout << "Registering memory from " << P(addr) << " to "
             << P(addr + length) << std::endl;
 #endif
@@ -276,7 +276,7 @@ void _sym_register_memory(uint8_t *addr, Z3_ast *shadow, size_t length) {
   // Remove overlapping regions, if any.
   auto first = g_memory_regions.lower_bound(addr);
   auto last = g_memory_regions.upper_bound(addr + length - 1);
-#ifndef NDEBUG
+#ifdef DEBUG_RUNTIME
   printf("Erasing %ld memory objects\n", std::distance(first, last));
 #endif
   g_memory_regions.erase(first, last);
@@ -285,7 +285,7 @@ void _sym_register_memory(uint8_t *addr, Z3_ast *shadow, size_t length) {
 }
 
 void _sym_initialize_memory(uint8_t *addr, Z3_ast *shadow, size_t length) {
-#ifndef NDEBUG
+#ifdef DEBUG_RUNTIME
   std::cout << "Initializing " << length << " bytes of memory at " << P(addr)
             << std::endl;
 #endif
@@ -301,7 +301,7 @@ Z3_ast _sym_read_memory(uint8_t *addr, size_t length, bool little_endian) {
   assert_memory_region_invariant();
   assert(length && "Invalid query for zero-length memory region");
 
-#ifndef NDEBUG
+#ifdef DEBUG_RUNTIME
   std::cout << "Reading " << length << " bytes from address " << P(addr)
             << std::endl;
   dump_known_regions();
@@ -309,7 +309,7 @@ Z3_ast _sym_read_memory(uint8_t *addr, size_t length, bool little_endian) {
 
   auto region = g_memory_regions.find(addr);
 
-#ifndef NDEBUG
+#ifdef DEBUG_RUNTIME
   if (region != g_memory_regions.end())
     std::cout << "Found region " << *region << std::endl;
 #endif
@@ -334,7 +334,7 @@ void _sym_write_memory(uint8_t *addr, size_t length, Z3_ast expr,
   assert_memory_region_invariant();
   assert(length && "Invalid query for zero-length memory region");
 
-#ifndef NDEBUG
+#ifdef DEBUG_RUNTIME
   std::cout << "Writing " << length << " bytes to address " << P(addr)
             << std::endl;
   dump_known_regions();
@@ -342,7 +342,7 @@ void _sym_write_memory(uint8_t *addr, size_t length, Z3_ast expr,
 
   auto region = g_memory_regions.find(addr);
 
-#ifndef NDEBUG
+#ifdef DEBUG_RUNTIME
   if (region != g_memory_regions.end())
     std::cout << "Found region " << *region << std::endl;
 #endif
