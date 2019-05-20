@@ -16,9 +16,8 @@ struct line {
     struct point end;
 };
 
-// TODO array of structures
-
 static struct point g_point = {1, 2};
+static struct point g_point_array[] = {{1, 2}, {3, 4}, {5, 6}};
 
 int main(int argc, char* argv[]) {
     int x = _sym_build_variable("x", 5, 32);
@@ -42,6 +41,11 @@ int main(int argc, char* argv[]) {
     // CHECK: Trying to solve
     // CHECK: Found diverging input
     // CHECK: no
+
+    printf("%s\n", (g_point_array[1].x < x) ? "yes" : "no");
+    // CHECK: Trying to solve
+    // CHECK: Found diverging input
+    // CHECK: yes
 
     // Nested structs
 
