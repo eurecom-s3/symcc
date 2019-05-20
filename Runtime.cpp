@@ -6,6 +6,8 @@
 
 #ifndef NDEBUG
 #include <iostream>
+// Helper to print pointers properly.
+#define P(ptr) static_cast<void *>(ptr)
 #endif
 
 /* TODO Eventually we'll want to inline as much of this as possible. I'm keeping
@@ -32,7 +34,7 @@ bool operator<(uint8_t *addr, const MemoryRegion &r) { return addr < r.start; }
 
 #ifndef NDEBUG
 std::ostream &operator<<(std::ostream &out, const MemoryRegion &region) {
-  out << "<" << std::hex << region.start << ", " << region.end << ">";
+  out << "<" << P(region.start) << ", " << P(region.end) << ">";
   return out;
 }
 #endif
@@ -267,8 +269,8 @@ void _sym_register_memory(uint8_t *addr, Z3_ast *shadow, size_t length) {
   assert_memory_region_invariant();
 
 #ifndef NDEBUG
-  std::cout << "Registering memory from " << std::hex << addr << " to "
-            << addr + length << std::endl;
+  std::cout << "Registering memory from " << P(addr) << " to "
+            << P(addr + length) << std::endl;
 #endif
 
   // Remove overlapping regions, if any.
@@ -284,8 +286,8 @@ void _sym_register_memory(uint8_t *addr, Z3_ast *shadow, size_t length) {
 
 void _sym_initialize_memory(uint8_t *addr, Z3_ast *shadow, size_t length) {
 #ifndef NDEBUG
-  std::cout << "Initializing " << length << " bytes of memory at " << std::hex
-            << addr << std::endl;
+  std::cout << "Initializing " << length << " bytes of memory at " << P(addr)
+            << std::endl;
 #endif
 
   for (size_t i = 0; i < length; i++) {
@@ -300,8 +302,8 @@ Z3_ast _sym_read_memory(uint8_t *addr, size_t length, bool little_endian) {
   assert(length && "Invalid query for zero-length memory region");
 
 #ifndef NDEBUG
-  std::cout << "Reading " << length << " bytes from address " << std::hex
-            << addr << std::endl;
+  std::cout << "Reading " << length << " bytes from address " << P(addr)
+            << std::endl;
   dump_known_regions();
 #endif
 
@@ -333,7 +335,7 @@ void _sym_write_memory(uint8_t *addr, size_t length, Z3_ast expr,
   assert(length && "Invalid query for zero-length memory region");
 
 #ifndef NDEBUG
-  std::cout << "Writing " << length << " bytes to address " << std::hex << addr
+  std::cout << "Writing " << length << " bytes to address " << P(addr)
             << std::endl;
   dump_known_regions();
 #endif
