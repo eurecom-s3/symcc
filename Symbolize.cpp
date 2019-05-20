@@ -235,6 +235,70 @@ public:
     return expr;
   }
 
+  void handleIntrinsicCall(CallInst &I) {
+    auto callee = I.getCalledFunction();
+
+    switch (callee->getIntrinsicID()) {
+    case Intrinsic::lifetime_start:
+    case Intrinsic::lifetime_end:
+      // These are safe to ignore.
+      break;
+    case Intrinsic::memcpy: {
+      // auto destExpr = getOrCreateSymbolicExpression(I.getOperand(0), IRB);
+      // auto srcExpr = getOrCreateSymbolicExpression(I.getOperand(1), IRB);
+      // TODO generate diverging inputs for the source and destination of the
+      // copy operation
+
+      IRBuilder<> IRB(&I);
+      IRB.CreateCall(SP.memcpy,
+                     {I.getOperand(0), I.getOperand(1), I.getOperand(2)});
+      break;
+    }
+    default:
+      errs() << "Warning: unhandled LLVM intrinsic " << callee->getName()
+             << '\n';
+      break;
+    }
+  }
+
+  void handleRegularCall(CallInst &I) {
+    IRBuilder<> IRB(&I);
+    auto targetName = I.getCalledFunction()->getName();
+    bool isBuildVariable = (targetName == "_sym_build_variable");
+
+    if (targetName.startswith("_sym_") && !isBuildVariable)
+      return;
+
+    if (!isBuildVariable) {
+      for (Use &arg : I.args())
+        IRB.CreateCall(
+            SP.setParameterExpression,
+            {ConstantInt::get(IRB.getInt8Ty(), arg.getOperandNo()),
+             IRB.CreateBitCast(getOrCreateSymbolicExpression(arg, IRB),
+                               IRB.getInt8PtrTy())});
+    }
+
+    IRB.SetInsertPoint(I.getNextNonDebugInstruction());
+    // TODO get the expression only if the function set one
+    symbolicExpressions[&I] = IRB.CreateCall(SP.getReturnExpression);
+  }
+
+  void handleInlineAssembly(CallInst &I) {
+    if (I.getType()->isVoidTy()) {
+      errs() << "Warning: skipping over inline assembly " << I << '\n';
+      return;
+    }
+
+    errs() << "Warning: losing track of symbolic expressions at indirect "
+              "call or inline assembly "
+           << I << '\n';
+
+    IRBuilder<> IRB(I.getNextNode());
+    symbolicExpressions[&I] = IRB.CreateCall(
+        SP.buildInteger, {IRB.CreateZExtOrBitCast(&I, IRB.getInt64Ty()),
+                          IRB.getInt8(I.getType()->getPrimitiveSizeInBits())});
+  }
+
   //
   // Implementation of InstVisitor
   //
@@ -310,56 +374,14 @@ public:
     // TODO handle indirect calls
     // TODO prevent instrumentation of our own functions with attributes
 
-    Function *callee = I.getCalledFunction();
-    bool isIndirect = (callee == nullptr);
-    if (isIndirect) {
-      errs()
-          << "Warning: losing track of symbolic expressions at indirect call "
-          << I << '\n';
-      return;
-    }
-
-    bool isBuildVariable = (callee->getName() == "_sym_build_variable");
-    bool isSymRuntimeFunction = callee->getName().startswith("_sym_");
-    if (!isBuildVariable && isSymRuntimeFunction)
-      return;
-
-    IRBuilder<> IRB(&I);
-
-    if (callee->isIntrinsic()) {
-      switch (callee->getIntrinsicID()) {
-      case Intrinsic::lifetime_start:
-      case Intrinsic::lifetime_end:
-        // These are safe to ignore.
-        break;
-      case Intrinsic::memcpy: {
-        // auto destExpr = getOrCreateSymbolicExpression(I.getOperand(0), IRB);
-        // auto srcExpr = getOrCreateSymbolicExpression(I.getOperand(1), IRB);
-        // TODO generate diverging inputs for the source and destination of the
-        // copy operation
-
-        IRB.CreateCall(SP.memcpy,
-                       {I.getOperand(0), I.getOperand(1), I.getOperand(2)});
-        break;
-      }
-      default:
-        errs() << "Warning: unhandled LLVM intrinsic " << callee->getName()
-               << '\n';
-        break;
-      }
+    if (I.isInlineAsm()) {
+      handleInlineAssembly(I);
+    } else if (I.isIndirectCall()) {
+      errs() << "Warning: indirect calls aren't supported yet\n";
+    } else if (I.getCalledFunction()->isIntrinsic()) {
+      handleIntrinsicCall(I);
     } else {
-      if (!isBuildVariable) {
-        for (Use &arg : I.args())
-          IRB.CreateCall(
-              SP.setParameterExpression,
-              {ConstantInt::get(IRB.getInt8Ty(), arg.getOperandNo()),
-               IRB.CreateBitCast(getOrCreateSymbolicExpression(arg, IRB),
-                                 IRB.getInt8PtrTy())});
-      }
-
-      IRB.SetInsertPoint(I.getNextNonDebugInstruction());
-      // TODO get the expression only if the function set one
-      symbolicExpressions[&I] = IRB.CreateCall(SP.getReturnExpression);
+      handleRegularCall(I);
     }
   }
 
