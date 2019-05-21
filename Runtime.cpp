@@ -10,6 +10,10 @@
 #define P(ptr) static_cast<void *>(ptr)
 #endif
 
+#define FSORT(is_double)                                                       \
+  (is_double ? Z3_mk_fpa_sort_double(g_context)                                \
+             : Z3_mk_fpa_sort_single(g_context))
+
 /* TODO Eventually we'll want to inline as much of this as possible. I'm keeping
    it in C for now because that makes it easier to experiment with new features,
    but I expect that a lot of the functions will stay so simple that we can
@@ -42,6 +46,9 @@ std::ostream &operator<<(std::ostream &out, const MemoryRegion &region) {
 /// The global Z3 context.
 Z3_context g_context;
 
+/// The global floating-point rounding mode.
+Z3_ast g_rounding_mode;
+
 /// The global Z3 solver.
 Z3_solver g_solver; // TODO make thread-local
 
@@ -50,8 +57,8 @@ Z3_ast g_return_value;
 Z3_ast g_function_arguments[kMaxFunctionArguments];
 // TODO make thread-local
 
-/// A Z3 representation of the null pointer, for efficiency.
-Z3_ast g_null_pointer;
+// Some global constants for efficiency.
+Z3_ast g_null_pointer, g_true, g_false;
 
 /// The set of known memory regions. The container is a sorted set to make
 /// retrieval by address efficient. Remember that we assume regions to be
@@ -93,11 +100,15 @@ void _sym_initialize(void) {
   g_context = Z3_mk_context(cfg);
   Z3_del_config(cfg);
 
+  g_rounding_mode = Z3_mk_fpa_round_nearest_ties_to_even(g_context);
+
   g_solver = Z3_mk_solver(g_context);
   Z3_solver_inc_ref(g_context, g_solver);
 
   g_null_pointer =
       Z3_mk_int(g_context, 0, Z3_mk_bv_sort(g_context, 8 * sizeof(void *)));
+  g_true = Z3_mk_true(g_context);
+  g_false = Z3_mk_false(g_context);
 }
 
 #define SYM_INITIALIZE_ARRAY(bits)                                             \
@@ -121,6 +132,12 @@ Z3_ast _sym_build_integer(uint64_t value, uint8_t bits) {
   return Z3_mk_int(g_context, value, Z3_mk_bv_sort(g_context, bits));
 }
 
+Z3_ast _sym_build_float(double value, int is_double) {
+  return Z3_mk_fpa_numeral_double(g_context, value,
+                                  is_double ? Z3_mk_fpa_sort_double(g_context)
+                                            : Z3_mk_fpa_sort_single(g_context));
+}
+
 uint32_t _sym_build_variable(const char *name, uint32_t value, uint8_t bits) {
   /* TODO find a way to make this more generic, not just for uint32_t */
 
@@ -136,6 +153,8 @@ uint32_t _sym_build_variable(const char *name, uint32_t value, uint8_t bits) {
 }
 
 Z3_ast _sym_build_null_pointer(void) { return g_null_pointer; }
+Z3_ast _sym_build_true(void) { return g_true; }
+Z3_ast _sym_build_false(void) { return g_false; }
 
 Z3_ast _sym_build_add(Z3_ast a, Z3_ast b) {
   return Z3_mk_bvadd(g_context, a, b);
@@ -151,6 +170,26 @@ Z3_ast _sym_build_signed_rem(Z3_ast a, Z3_ast b) {
 
 Z3_ast _sym_build_shift_left(Z3_ast a, Z3_ast b) {
   return Z3_mk_bvshl(g_context, a, b);
+}
+
+Z3_ast _sym_build_fp_add(Z3_ast a, Z3_ast b) {
+  return Z3_mk_fpa_add(g_context, g_rounding_mode, a, b);
+}
+
+Z3_ast _sym_build_fp_sub(Z3_ast a, Z3_ast b) {
+  return Z3_mk_fpa_sub(g_context, g_rounding_mode, a, b);
+}
+
+Z3_ast _sym_build_fp_mul(Z3_ast a, Z3_ast b) {
+  return Z3_mk_fpa_mul(g_context, g_rounding_mode, a, b);
+}
+
+Z3_ast _sym_build_fp_div(Z3_ast a, Z3_ast b) {
+  return Z3_mk_fpa_div(g_context, g_rounding_mode, a, b);
+}
+
+Z3_ast _sym_build_fp_rem(Z3_ast a, Z3_ast b) {
+  return Z3_mk_fpa_rem(g_context, a, b);
 }
 
 Z3_ast _sym_build_neg(Z3_ast expr) { return Z3_mk_not(g_context, expr); }
@@ -195,6 +234,30 @@ Z3_ast _sym_build_not_equal(Z3_ast a, Z3_ast b) {
   return Z3_mk_not(g_context, _sym_build_equal(a, b));
 }
 
+Z3_ast _sym_build_float_ordered_greater_than(Z3_ast a, Z3_ast b) {
+  return Z3_mk_fpa_gt(g_context, a, b);
+}
+
+Z3_ast _sym_build_float_ordered_greater_equal(Z3_ast a, Z3_ast b) {
+  return Z3_mk_fpa_geq(g_context, a, b);
+}
+
+Z3_ast _sym_build_float_ordered_less_than(Z3_ast a, Z3_ast b) {
+  return Z3_mk_fpa_lt(g_context, a, b);
+}
+
+Z3_ast _sym_build_float_ordered_less_equal(Z3_ast a, Z3_ast b) {
+  return Z3_mk_fpa_leq(g_context, a, b);
+}
+
+Z3_ast _sym_build_float_ordered_equal(Z3_ast a, Z3_ast b) {
+  return Z3_mk_fpa_eq(g_context, a, b);
+}
+
+Z3_ast _sym_build_float_ordered_not_equal(Z3_ast a, Z3_ast b) {
+  return Z3_mk_not(g_context, _sym_build_float_ordered_equal(a, b));
+}
+
 Z3_ast _sym_build_sext(Z3_ast expr, uint8_t bits) {
   return Z3_mk_sign_ext(g_context, bits, expr);
 }
@@ -205,6 +268,24 @@ Z3_ast _sym_build_zext(Z3_ast expr, uint8_t bits) {
 
 Z3_ast _sym_build_trunc(Z3_ast expr, uint8_t bits) {
   return Z3_mk_extract(g_context, bits - 1, 0, expr);
+}
+
+Z3_ast _sym_build_int_to_float(Z3_ast value, int is_double) {
+  return Z3_mk_fpa_to_fp_signed(g_context, g_rounding_mode, value,
+                                FSORT(is_double));
+}
+
+Z3_ast _sym_build_float_to_float(Z3_ast expr, int to_double) {
+  return Z3_mk_fpa_to_fp_float(g_context, g_rounding_mode, expr,
+                               FSORT(to_double));
+}
+
+Z3_ast _sym_build_bits_to_float(Z3_ast expr, int to_double) {
+  return Z3_mk_fpa_to_fp_bv(g_context, expr, FSORT(to_double));
+}
+
+Z3_ast _sym_build_float_to_bits(Z3_ast expr) {
+  return Z3_mk_fpa_to_ieee_bv(g_context, expr);
 }
 
 void _sym_set_parameter_expression(uint8_t index, Z3_ast expr) {

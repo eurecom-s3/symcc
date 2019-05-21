@@ -43,11 +43,18 @@ private:
   //
 
   Value *buildInteger{};
+  Value *buildFloat{};
   Value *buildNullPointer{};
+  Value *buildTrue{};
+  Value *buildFalse{};
   Value *buildNeg{};
   Value *buildSExt{};
   Value *buildZExt{};
   Value *buildTrunc{};
+  Value *buildIntToFloat{};
+  Value *buildFloatToFloat{};
+  Value *buildBitsToFloat{};
+  Value *buildFloatToBits{};
   Value *pushPathConstraint{};
   Value *getParameterExpression{};
   Value *setParameterExpression{};
@@ -99,7 +106,7 @@ public:
 
     Value *ret = nullptr;
 
-    if (auto C = dyn_cast<ConstantInt>(V)) {
+    if (isa<ConstantData>(V)) {
       // Constants may be used in multiple places throughout a function.
       // Ideally, we'd make sure that in such cases the symbolic expression is
       // generated as early as necessary but no earlier. For now, we just create
@@ -110,10 +117,23 @@ public:
                              ->getParent()
                              ->getEntryBlock()
                              .getFirstNonPHI());
-      ret =
-          IRB.CreateCall(SP.buildInteger,
-                         {IRB.CreateZExt(C, IRB.getInt64Ty()),
-                          ConstantInt::get(IRB.getInt8Ty(), C->getBitWidth())});
+
+      if (auto C = dyn_cast<ConstantInt>(V)) {
+        // Special case: LLVM uses the type i1 to represent Boolean values, but
+        // for Z3 we have to create expressions of a separate sort.
+        if (C->getBitWidth() == 1) {
+          ret = IRB.CreateCall(C->isOne() ? SP.buildTrue : SP.buildFalse, {});
+        } else {
+          ret = IRB.CreateCall(SP.buildInteger,
+                               {IRB.CreateZExt(C, IRB.getInt64Ty()),
+                                IRB.getInt8(C->getBitWidth())});
+        }
+      } else if (auto F = dyn_cast<ConstantFP>(V)) {
+        ret = IRB.CreateCall(SP.buildFloat,
+                             {IRB.CreateFPExt(F, IRB.getDoubleTy()),
+                              IRB.getInt1(F->getType()->isDoubleTy())});
+      }
+
       IRB.restoreIP(oldInsertionPoint);
     } else if (auto A = dyn_cast<Argument>(V)) {
       if (A->getParent()->getName() == "main") {
@@ -328,13 +348,13 @@ public:
         getOrCreateSymbolicExpression(I.getFalseValue(), IRB));
   }
 
-  void visitICmpInst(ICmpInst &I) {
-    // ICmp is integer comparison; we simply include it in the resulting
-    // expression.
+  void visitCmpInst(CmpInst &I) {
+    // ICmp is integer comparison, FCmp compares floating-point values; we
+    // simply include either in the resulting expression.
 
     IRBuilder<> IRB(&I);
     Value *handler = SP.comparisonHandlers.at(I.getPredicate());
-    assert(handler && "Unable to handle icmp variant");
+    assert(handler && "Unable to handle icmp/fcmp variant");
     symbolicExpressions[&I] = IRB.CreateCall(
         handler, {getOrCreateSymbolicExpression(I.getOperand(0), IRB),
                   getOrCreateSymbolicExpression(I.getOperand(1), IRB)});
@@ -407,13 +427,21 @@ public:
     // auto addrExpr = getOrCreateSymbolicExpression(addr, IRB);
     // TODO generate diverging inputs for addrExpr
 
-    symbolicExpressions[&I] = IRB.CreateCall(
+    auto dataType = I.getType();
+    auto data = IRB.CreateCall(
         SP.readMemory,
         {IRB.CreatePtrToInt(addr, SP.intPtrType),
          ConstantInt::get(SP.intPtrType,
-                          SP.dataLayout->getTypeStoreSize(I.getType())),
+                          SP.dataLayout->getTypeStoreSize(dataType)),
          ConstantInt::get(IRB.getInt8Ty(),
                           SP.dataLayout->isLittleEndian() ? 1 : 0)});
+
+    if (dataType->isFloatingPointTy()) {
+      data = IRB.CreateCall(SP.buildBitsToFloat,
+                            {data, IRB.getInt1(dataType->isDoubleTy())});
+    }
+
+    symbolicExpressions[&I] = data;
   }
 
   void visitStoreInst(StoreInst &I) {
@@ -423,14 +451,19 @@ public:
     // IRB);
     // TODO generate diverging input for the target address
 
-    IRB.CreateCall(
-        SP.writeMemory,
-        {IRB.CreatePtrToInt(I.getPointerOperand(), SP.intPtrType),
-         ConstantInt::get(SP.intPtrType, SP.dataLayout->getTypeStoreSize(
-                                             I.getValueOperand()->getType())),
-         getOrCreateSymbolicExpression(I.getValueOperand(), IRB),
-         ConstantInt::get(IRB.getInt8Ty(),
-                          SP.dataLayout->isLittleEndian() ? 1 : 0)});
+    auto data = getOrCreateSymbolicExpression(I.getValueOperand(), IRB);
+    auto dataType = I.getValueOperand()->getType();
+    if (dataType->isFloatingPointTy()) {
+      data = IRB.CreateCall(SP.buildFloatToBits, data);
+    }
+
+    IRB.CreateCall(SP.writeMemory,
+                   {IRB.CreatePtrToInt(I.getPointerOperand(), SP.intPtrType),
+                    ConstantInt::get(SP.intPtrType,
+                                     SP.dataLayout->getTypeStoreSize(dataType)),
+                    data,
+                    ConstantInt::get(IRB.getInt8Ty(),
+                                     SP.dataLayout->isLittleEndian() ? 1 : 0)});
   }
 
   void visitGetElementPtrInst(GetElementPtrInst &I) {
@@ -463,6 +496,30 @@ public:
     symbolicExpressions[&I] =
         getOrCreateSymbolicExpression(I.getOperand(0), IRB);
     // TODO handle truncation and zero extension
+  }
+
+  void visitSIToFPInst(SIToFPInst &I) {
+    IRBuilder<> IRB(&I);
+    symbolicExpressions[&I] =
+        IRB.CreateCall(SP.buildIntToFloat,
+                       {getOrCreateSymbolicExpression(I.getOperand(0), IRB),
+                        IRB.getInt1(I.getDestTy()->isDoubleTy())});
+  }
+
+  void visitFPExtInst(FPExtInst &I) {
+    IRBuilder<> IRB(&I);
+    symbolicExpressions[&I] =
+        IRB.CreateCall(SP.buildFloatToFloat,
+                       {getOrCreateSymbolicExpression(I.getOperand(0), IRB),
+                        IRB.getInt1(I.getDestTy()->isDoubleTy())});
+  }
+
+  void visitFPTruncInst(FPTruncInst &I) {
+    IRBuilder<> IRB(&I);
+    symbolicExpressions[&I] =
+        IRB.CreateCall(SP.buildFloatToFloat,
+                       {getOrCreateSymbolicExpression(I.getOperand(0), IRB),
+                        IRB.getInt1(I.getDestTy()->isDoubleTy())});
   }
 
   void visitCastInst(CastInst &I) {
@@ -541,7 +598,7 @@ private:
   /// For pointer values, the stored value is not an expression but a pointer to
   /// the expression of the referenced value.
   ValueMap<Value *, Value *> symbolicExpressions;
-};
+}; // namespace
 
 void addSymbolizePass(const PassManagerBuilder & /* unused */,
                       legacy::PassManagerBase &PM) {
@@ -571,11 +628,23 @@ bool SymbolizePass::doInitialization(Module &M) {
 
   buildInteger = M.getOrInsertFunction("_sym_build_integer", ptrT,
                                        IRB.getInt64Ty(), int8T);
+  buildFloat = M.getOrInsertFunction("_sym_build_float", ptrT,
+                                     IRB.getDoubleTy(), IRB.getInt1Ty());
   buildNullPointer = M.getOrInsertFunction("_sym_build_null_pointer", ptrT);
+  buildTrue = M.getOrInsertFunction("_sym_build_true", ptrT);
+  buildFalse = M.getOrInsertFunction("_sym_build_false", ptrT);
   buildNeg = M.getOrInsertFunction("_sym_build_neg", ptrT, ptrT);
   buildSExt = M.getOrInsertFunction("_sym_build_sext", ptrT, ptrT, int8T);
   buildZExt = M.getOrInsertFunction("_sym_build_zext", ptrT, ptrT, int8T);
   buildTrunc = M.getOrInsertFunction("_sym_build_trunc", ptrT, ptrT, int8T);
+  buildIntToFloat = M.getOrInsertFunction("_sym_build_int_to_float", ptrT, ptrT,
+                                          IRB.getInt1Ty());
+  buildFloatToFloat = M.getOrInsertFunction("_sym_build_float_to_float", ptrT,
+                                            ptrT, IRB.getInt1Ty());
+  buildBitsToFloat = M.getOrInsertFunction("_sym_build_bits_to_float", ptrT,
+                                           ptrT, IRB.getInt1Ty());
+  buildFloatToBits =
+      M.getOrInsertFunction("_sym_build_float_to_bits", ptrT, ptrT);
   pushPathConstraint = M.getOrInsertFunction("_sym_push_path_constraint", ptrT,
                                              ptrT, IRB.getInt1Ty());
 
@@ -607,6 +676,13 @@ bool SymbolizePass::doInitialization(Module &M) {
   LOAD_BINARY_OPERATOR_HANDLER(Or, or)
   LOAD_BINARY_OPERATOR_HANDLER(Xor, xor)
 
+  // Floating-point arithmetic
+  LOAD_BINARY_OPERATOR_HANDLER(FAdd, fp_add)
+  LOAD_BINARY_OPERATOR_HANDLER(FSub, fp_sub)
+  LOAD_BINARY_OPERATOR_HANDLER(FMul, fp_mul)
+  LOAD_BINARY_OPERATOR_HANDLER(FDiv, fp_div)
+  LOAD_BINARY_OPERATOR_HANDLER(FRem, fp_rem)
+
 #undef LOAD_BINARY_OPERATOR_HANDLER
 
 #define LOAD_COMPARISON_HANDLER(constant, name)                                \
@@ -623,6 +699,14 @@ bool SymbolizePass::doInitialization(Module &M) {
   LOAD_COMPARISON_HANDLER(ICMP_SGE, signed_greater_equal)
   LOAD_COMPARISON_HANDLER(ICMP_SLT, signed_less_than)
   LOAD_COMPARISON_HANDLER(ICMP_SLE, signed_less_equal)
+
+  // Floating-point comparisons
+  LOAD_COMPARISON_HANDLER(FCMP_OGT, float_ordered_greater_than)
+  LOAD_COMPARISON_HANDLER(FCMP_OGE, float_ordered_greater_equal)
+  LOAD_COMPARISON_HANDLER(FCMP_OLT, float_ordered_less_than)
+  LOAD_COMPARISON_HANDLER(FCMP_OLE, float_ordered_less_equal)
+  LOAD_COMPARISON_HANDLER(FCMP_OEQ, float_ordered_equal)
+  LOAD_COMPARISON_HANDLER(FCMP_ONE, float_ordered_not_equal)
 
 #undef LOAD_COMPARISON_HANDLER
 
