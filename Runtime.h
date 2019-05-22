@@ -101,6 +101,8 @@ Z3_ast _sym_read_memory(uint8_t *addr, size_t length, bool little_endian);
 void _sym_write_memory(uint8_t *addr, size_t length, Z3_ast expr,
                        bool little_endian);
 void _sym_memcpy(uint8_t *dest, uint8_t *src, size_t length);
+Z3_ast _sym_build_extract(Z3_ast expr, uint64_t offset, uint64_t length,
+                          bool little_endian);
 }
 
 #endif

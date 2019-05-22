@@ -69,6 +69,7 @@ private:
   Value *readMemory{};
   Value *writeMemory{};
   Value *initializeMemory{};
+  Value *buildExtract{};
 
   /// Mapping from icmp predicates to the functions that build the corresponding
   /// symbolic expressions.
@@ -179,6 +180,10 @@ public:
 
     symbolicExpressions[V] = ret;
     return ret;
+  }
+
+  bool isLittleEndian(Type *type) {
+    return (!type->isAggregateType() && SP.dataLayout->isLittleEndian());
   }
 
   //
@@ -433,8 +438,7 @@ public:
         {IRB.CreatePtrToInt(addr, SP.intPtrType),
          ConstantInt::get(SP.intPtrType,
                           SP.dataLayout->getTypeStoreSize(dataType)),
-         ConstantInt::get(IRB.getInt8Ty(),
-                          SP.dataLayout->isLittleEndian() ? 1 : 0)});
+         ConstantInt::get(IRB.getInt8Ty(), isLittleEndian(dataType) ? 1 : 0)});
 
     if (dataType->isFloatingPointTy()) {
       data = IRB.CreateCall(SP.buildBitsToFloat,
@@ -580,6 +584,36 @@ public:
     }
 
     symbolicExpressions[&I] = exprPHI;
+  }
+
+  void visitExtractValueInst(ExtractValueInst &I) {
+    uint64_t offset = 0;
+    auto indexedType = I.getAggregateOperand()->getType();
+    for (auto index : I.indices()) {
+      // All indices in an extractvalue instruction are constant:
+      // https://llvm.org/docs/LangRef.html#extractvalue-instruction
+
+      if (auto structType = dyn_cast<StructType>(indexedType)) {
+        offset +=
+            SP.dataLayout->getStructLayout(structType)->getElementOffset(index);
+        indexedType = structType->getElementType(index);
+      } else {
+        auto arrayType = cast<ArrayType>(indexedType);
+        unsigned elementSize =
+            SP.dataLayout->getTypeAllocSize(arrayType->getArrayElementType());
+        offset += elementSize * index;
+        indexedType = arrayType->getArrayElementType();
+      }
+    }
+
+    IRBuilder<> IRB(&I);
+    auto aggregateExpr =
+        getOrCreateSymbolicExpression(I.getAggregateOperand(), IRB);
+    symbolicExpressions[&I] = IRB.CreateCall(
+        SP.buildExtract,
+        {aggregateExpr, IRB.getInt64(offset),
+         IRB.getInt64(SP.dataLayout->getTypeStoreSize(I.getType())),
+         IRB.getInt8(isLittleEndian(I.getType()) ? 1 : 0)});
   }
 
   void visitUnreachableInst(UnreachableInst &) {
@@ -731,6 +765,9 @@ bool SymbolizePass::doInitialization(Module &M) {
                                       intPtrType, ptrT, int8T);
   initializeMemory = M.getOrInsertFunction("_sym_initialize_memory", voidT,
                                            intPtrType, ptrT, intPtrType);
+  buildExtract =
+      M.getOrInsertFunction("_sym_build_extract", ptrT, ptrT, IRB.getInt64Ty(),
+                            IRB.getInt64Ty(), int8T);
 
   // For each global variable, we need another global variable that holds the
   // corresponding symbolic expression.

@@ -475,3 +475,27 @@ void _sym_memcpy(uint8_t *dest, uint8_t *src, size_t length) {
 
   memcpy(destShadow, srcShadow, length * sizeof(Z3_ast));
 }
+
+Z3_ast _sym_build_extract(Z3_ast expr, uint64_t offset, uint64_t length,
+                          bool little_endian) {
+  unsigned totalBits =
+      Z3_get_bv_sort_size(g_context, Z3_get_sort(g_context, expr));
+  assert((totalBits % 8 == 0) && "Aggregate type contains partial bytes");
+
+  Z3_ast result;
+  if (little_endian) {
+    result = Z3_mk_extract(g_context, totalBits - offset * 8 - 1,
+                           totalBits - offset * 8 - 8, expr);
+    for (size_t i = 1; i < length; i++) {
+      result = Z3_mk_concat(
+          g_context, result,
+          Z3_mk_extract(g_context, totalBits - (offset + i) * 8 - 1,
+                        totalBits - (offset + i + 1) * 8, expr));
+    }
+  } else {
+    result = Z3_mk_extract(g_context, totalBits - offset * 8 - 1,
+                           totalBits - (offset + length) * 8, expr);
+  }
+
+  return result;
+}
