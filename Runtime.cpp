@@ -164,12 +164,32 @@ Z3_ast _sym_build_mul(Z3_ast a, Z3_ast b) {
   return Z3_mk_bvmul(g_context, a, b);
 }
 
+Z3_ast _sym_build_unsigned_div(Z3_ast a, Z3_ast b) {
+  return Z3_mk_bvudiv(g_context, a, b);
+}
+
+Z3_ast _sym_build_signed_div(Z3_ast a, Z3_ast b) {
+  return Z3_mk_bvsdiv(g_context, a, b);
+}
+
+Z3_ast _sym_build_unsigned_rem(Z3_ast a, Z3_ast b) {
+  return Z3_mk_bvurem(g_context, a, b);
+}
+
 Z3_ast _sym_build_signed_rem(Z3_ast a, Z3_ast b) {
   return Z3_mk_bvsrem(g_context, a, b);
 }
 
 Z3_ast _sym_build_shift_left(Z3_ast a, Z3_ast b) {
   return Z3_mk_bvshl(g_context, a, b);
+}
+
+Z3_ast _sym_build_logical_shift_right(Z3_ast a, Z3_ast b) {
+  return Z3_mk_bvlshr(g_context, a, b);
+}
+
+Z3_ast _sym_build_arithmetic_shift_right(Z3_ast a, Z3_ast b) {
+  return Z3_mk_bvashr(g_context, a, b);
 }
 
 Z3_ast _sym_build_fp_add(Z3_ast a, Z3_ast b) {
