@@ -782,6 +782,12 @@ bool SymbolizePass::doInitialization(Module &M) {
   LOAD_COMPARISON_HANDLER(FCMP_OEQ, float_ordered_equal)
   LOAD_COMPARISON_HANDLER(FCMP_ONE, float_ordered_not_equal)
   LOAD_COMPARISON_HANDLER(FCMP_UNO, float_unordered)
+  LOAD_COMPARISON_HANDLER(FCMP_UGT, float_unordered_greater_than)
+  LOAD_COMPARISON_HANDLER(FCMP_UGE, float_unordered_greater_equal)
+  LOAD_COMPARISON_HANDLER(FCMP_ULT, float_unordered_less_than)
+  LOAD_COMPARISON_HANDLER(FCMP_ULE, float_unordered_less_equal)
+  LOAD_COMPARISON_HANDLER(FCMP_UEQ, float_unordered_equal)
+  LOAD_COMPARISON_HANDLER(FCMP_UNE, float_unordered_not_equal)
 
 #undef LOAD_COMPARISON_HANDLER
 
