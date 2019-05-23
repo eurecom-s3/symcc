@@ -178,6 +178,13 @@ public:
                              ConstantInt::get(IRB.getInt8Ty(), SP.ptrBits)});
     }
 
+    if (auto CE = dyn_cast<ConstantExpr>(V)) {
+      if (CE->isCast())
+        return getOrCreateSymbolicExpression(CE->getOperand(0), IRB);
+      if (CE->isCompare())
+        return handleComparison(CE, IRB);
+    }
+
     DEBUG(errs() << "Unable to obtain a symbolic expression for " << *V
                  << '\n');
     llvm_unreachable("No symbolic expression for value");
@@ -282,28 +289,6 @@ public:
     }
   }
 
-  void handleRegularCall(CallInst &I) {
-    IRBuilder<> IRB(&I);
-    auto targetName = I.getCalledFunction()->getName();
-    bool isBuildVariable = (targetName == "_sym_build_variable");
-
-    if (targetName.startswith("_sym_") && !isBuildVariable)
-      return;
-
-    if (!isBuildVariable) {
-      for (Use &arg : I.args())
-        IRB.CreateCall(
-            SP.setParameterExpression,
-            {ConstantInt::get(IRB.getInt8Ty(), arg.getOperandNo()),
-             IRB.CreateBitCast(getOrCreateSymbolicExpression(arg, IRB),
-                               IRB.getInt8PtrTy())});
-    }
-
-    IRB.SetInsertPoint(I.getNextNonDebugInstruction());
-    // TODO get the expression only if the function set one
-    symbolicExpressions[&I] = IRB.CreateCall(SP.getReturnExpression);
-  }
-
   void handleInlineAssembly(CallInst &I) {
     if (I.getType()->isVoidTy()) {
       errs() << "Warning: skipping over inline assembly " << I << '\n';
@@ -316,6 +301,18 @@ public:
 
     IRBuilder<> IRB(I.getNextNode());
     symbolicExpressions[&I] = createConstantExpression(&I, IRB);
+  }
+
+  template <class InstOrConstExpr>
+  Value *handleComparison(InstOrConstExpr *I, IRBuilder<> &IRB) {
+    // ICmp is integer comparison, FCmp compares floating-point values; we
+    // simply include either in the resulting expression.
+
+    Value *handler = SP.comparisonHandlers.at(I->getPredicate());
+    assert(handler && "Unable to handle icmp/fcmp variant");
+    return IRB.CreateCall(
+        handler, {getOrCreateSymbolicExpression(I->getOperand(0), IRB),
+                  getOrCreateSymbolicExpression(I->getOperand(1), IRB)});
   }
 
   //
@@ -348,15 +345,8 @@ public:
   }
 
   void visitCmpInst(CmpInst &I) {
-    // ICmp is integer comparison, FCmp compares floating-point values; we
-    // simply include either in the resulting expression.
-
     IRBuilder<> IRB(&I);
-    Value *handler = SP.comparisonHandlers.at(I.getPredicate());
-    assert(handler && "Unable to handle icmp/fcmp variant");
-    symbolicExpressions[&I] = IRB.CreateCall(
-        handler, {getOrCreateSymbolicExpression(I.getOperand(0), IRB),
-                  getOrCreateSymbolicExpression(I.getOperand(1), IRB)});
+    symbolicExpressions[&I] = handleComparison(&I, IRB);
   }
 
   void visitReturnInst(ReturnInst &I) {
@@ -390,18 +380,40 @@ public:
   }
 
   void visitCallInst(CallInst &I) {
-    // TODO handle indirect calls
     // TODO prevent instrumentation of our own functions with attributes
 
     if (I.isInlineAsm()) {
       handleInlineAssembly(I);
-    } else if (I.isIndirectCall()) {
-      errs() << "Warning: indirect calls aren't supported yet\n";
-    } else if (I.getCalledFunction()->isIntrinsic()) {
-      handleIntrinsicCall(I);
-    } else {
-      handleRegularCall(I);
+      return;
     }
+
+    if (!I.isIndirectCall() && I.getCalledFunction()->isIntrinsic()) {
+      handleIntrinsicCall(I);
+      return;
+    }
+
+    // TODO if this is an indirect call, create a diverging input
+
+    IRBuilder<> IRB(&I);
+    auto targetName =
+        I.isIndirectCall() ? StringRef{} : I.getCalledFunction()->getName();
+    bool isBuildVariable = (targetName == "_sym_build_variable");
+
+    if (targetName.startswith("_sym_") && !isBuildVariable)
+      return;
+
+    if (!isBuildVariable) {
+      for (Use &arg : I.args())
+        IRB.CreateCall(
+            SP.setParameterExpression,
+            {ConstantInt::get(IRB.getInt8Ty(), arg.getOperandNo()),
+             IRB.CreateBitCast(getOrCreateSymbolicExpression(arg, IRB),
+                               IRB.getInt8PtrTy())});
+    }
+
+    IRB.SetInsertPoint(I.getNextNonDebugInstruction());
+    // TODO get the expression only if the function set one
+    symbolicExpressions[&I] = IRB.CreateCall(SP.getReturnExpression);
   }
 
   void visitAllocaInst(AllocaInst &I) {
