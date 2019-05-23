@@ -63,10 +63,6 @@ private:
   Value *setParameterExpression{};
   Value *setReturnExpression{};
   Value *getReturnExpression{};
-  Value *initializeArray8{};
-  Value *initializeArray16{};
-  Value *initializeArray32{};
-  Value *initializeArray64{};
   Value *memcpy{};
   Value *registerMemory{};
   Value *readMemory{};
@@ -167,20 +163,7 @@ public:
         if (A->getParent()->getName() == "main") {
           // We don't have symbolic parameters in main.
           // TODO fix when we have a symbolic libc
-          if (A->getType()->isIntegerTy()) {
-            ret = IRB.CreateCall(
-                SP.buildInteger,
-                {IRB.CreateZExt(A, IRB.getInt64Ty()),
-                 ConstantInt::get(IRB.getInt8Ty(),
-                                  A->getType()->getIntegerBitWidth())});
-          } else if (A->getType()->isPointerTy()) {
-            ret =
-                IRB.CreateCall(SP.buildInteger,
-                               {IRB.CreatePtrToInt(A, SP.intPtrType),
-                                ConstantInt::get(IRB.getInt8Ty(), SP.ptrBits)});
-          } else {
-            llvm_unreachable("Unknown argument type for main");
-          }
+          ret = createConstantExpression(A, IRB);
         } else {
           ret =
               IRB.CreateCall(SP.getParameterExpression,
@@ -790,18 +773,6 @@ bool SymbolizePass::doInitialization(Module &M) {
   LOAD_COMPARISON_HANDLER(FCMP_UNE, float_unordered_not_equal)
 
 #undef LOAD_COMPARISON_HANDLER
-
-#define LOAD_ARRAY_INITIALIZER(bits)                                           \
-  initializeArray##bits = M.getOrInsertFunction(                               \
-      "_sym_initialize_array_" #bits, voidT, PointerType::get(ptrT, 0),        \
-      PointerType::getInt##bits##PtrTy(M.getContext()), IRB.getInt64Ty());
-
-  LOAD_ARRAY_INITIALIZER(8)
-  LOAD_ARRAY_INITIALIZER(16)
-  LOAD_ARRAY_INITIALIZER(32)
-  LOAD_ARRAY_INITIALIZER(64)
-
-#undef LOAD_ARRAY_INITIALIZER
 
   memcpy = M.getOrInsertFunction("_sym_memcpy", voidT, ptrT, ptrT, intPtrType);
   registerMemory = M.getOrInsertFunction("_sym_register_memory", voidT,
