@@ -101,6 +101,26 @@ class Symbolizer : public InstVisitor<Symbolizer> {
 public:
   explicit Symbolizer(const SymbolizePass &symPass) : SP(symPass) {}
 
+  /// Create an expression that represents the concrete value.
+  Value *createConstantExpression(Value *V, IRBuilder<> &IRB) {
+    // TODO switch on the type and create the correct expression
+    auto valueType = V->getType();
+
+    if (valueType->isIntegerTy()) {
+      return IRB.CreateCall(SP.buildInteger,
+                            {IRB.CreateZExtOrBitCast(V, IRB.getInt64Ty()),
+                             IRB.getInt8(valueType->getPrimitiveSizeInBits())});
+    }
+
+    if (valueType->isPointerTy()) {
+      return IRB.CreateCall(
+          SP.buildInteger,
+          {IRB.CreatePtrToInt(V, IRB.getInt64Ty()), IRB.getInt8(SP.ptrBits)});
+    }
+
+    llvm_unreachable("Unhandled type for constant expression");
+  }
+
   /// Load or create the symbolic expression for a value.
   Value *getOrCreateSymbolicExpression(Value *V, IRBuilder<> &IRB) {
     if (auto exprIt = symbolicExpressions.find(V);
@@ -110,11 +130,18 @@ public:
 
     Value *ret = nullptr;
 
-    if (isa<ConstantData>(V)) {
-      // Constants may be used in multiple places throughout a function.
-      // Ideally, we'd make sure that in such cases the symbolic expression is
-      // generated as early as necessary but no earlier. For now, we just create
-      // it at the very beginning of the function.
+    if (isa<ConstantData>(V) || isa<Argument>(V)) {
+      if (isa<ConstantPointerNull>(V)) {
+        // Return immediately to avoid caching. The null pointer may be used in
+        // multiple unrelated places, so we either have to load it early enough
+        // in the function or reload it every time.
+        return IRB.CreateCall(SP.buildNullPointer, {});
+      }
+
+      // Constants and arguments may be used in multiple places throughout a
+      // function. Ideally, we'd make sure that in such cases the symbolic
+      // expression is generated as early as necessary but no earlier. For now,
+      // we just create it at the very beginning of the function.
 
       auto oldInsertionPoint = IRB.saveIP();
       IRB.SetInsertPoint(oldInsertionPoint.getBlock()
@@ -136,30 +163,32 @@ public:
         ret = IRB.CreateCall(SP.buildFloat,
                              {IRB.CreateFPExt(F, IRB.getDoubleTy()),
                               IRB.getInt1(F->getType()->isDoubleTy())});
+      } else if (auto A = dyn_cast<Argument>(V)) {
+        if (A->getParent()->getName() == "main") {
+          // We don't have symbolic parameters in main.
+          // TODO fix when we have a symbolic libc
+          if (A->getType()->isIntegerTy()) {
+            ret = IRB.CreateCall(
+                SP.buildInteger,
+                {IRB.CreateZExt(A, IRB.getInt64Ty()),
+                 ConstantInt::get(IRB.getInt8Ty(),
+                                  A->getType()->getIntegerBitWidth())});
+          } else if (A->getType()->isPointerTy()) {
+            ret =
+                IRB.CreateCall(SP.buildInteger,
+                               {IRB.CreatePtrToInt(A, SP.intPtrType),
+                                ConstantInt::get(IRB.getInt8Ty(), SP.ptrBits)});
+          } else {
+            llvm_unreachable("Unknown argument type for main");
+          }
+        } else {
+          ret =
+              IRB.CreateCall(SP.getParameterExpression,
+                             ConstantInt::get(IRB.getInt8Ty(), A->getArgNo()));
+        }
       }
 
       IRB.restoreIP(oldInsertionPoint);
-    } else if (auto A = dyn_cast<Argument>(V)) {
-      if (A->getParent()->getName() == "main") {
-        // We don't have symbolic parameters in main.
-        // TODO fix when we have a symbolic libc
-        if (A->getType()->isIntegerTy()) {
-          ret = IRB.CreateCall(
-              SP.buildInteger,
-              {IRB.CreateZExt(A, IRB.getInt64Ty()),
-               ConstantInt::get(IRB.getInt8Ty(),
-                                A->getType()->getIntegerBitWidth())});
-        } else if (A->getType()->isPointerTy()) {
-          ret = IRB.CreateCall(SP.buildInteger,
-                               {IRB.CreatePtrToInt(A, SP.intPtrType),
-                                ConstantInt::get(IRB.getInt8Ty(), SP.ptrBits)});
-        } else {
-          llvm_unreachable("Unknown argument type for main");
-        }
-      } else {
-        ret = IRB.CreateCall(SP.getParameterExpression,
-                             ConstantInt::get(IRB.getInt8Ty(), A->getArgNo()));
-      }
     } else if (auto gep = dyn_cast<GEPOperator>(V)) {
       ret = handleGEPOperator(*gep, IRB);
     } else if (auto bc = dyn_cast<BitCastOperator>(V)) {
@@ -168,11 +197,6 @@ public:
       ret = IRB.CreateCall(SP.buildInteger,
                            {IRB.CreatePtrToInt(gv, SP.intPtrType),
                             ConstantInt::get(IRB.getInt8Ty(), SP.ptrBits)});
-    } else if (isa<ConstantPointerNull>(V)) {
-      // Return immediately to avoid caching. The null pointer may be used in
-      // multiple unrelated places, so we either have to load it early enough in
-      // the function or reload it every time.
-      return IRB.CreateCall(SP.buildNullPointer, {});
     }
 
     if (ret == nullptr) {
@@ -188,11 +212,6 @@ public:
   bool isLittleEndian(Type *type) {
     return (!type->isAggregateType() && SP.dataLayout->isLittleEndian());
   }
-
-  //
-  // Handling of operators that exist both as instructions and as constant
-  // expressions
-  //
 
   Value *handleBitCastOperator(BitCastOperator &I, IRBuilder<> &IRB) {
     assert(I.getSrcTy()->isPointerTy() && I.getDestTy()->isPointerTy() &&
@@ -322,9 +341,7 @@ public:
            << I << '\n';
 
     IRBuilder<> IRB(I.getNextNode());
-    symbolicExpressions[&I] = IRB.CreateCall(
-        SP.buildInteger, {IRB.CreateZExtOrBitCast(&I, IRB.getInt64Ty()),
-                          IRB.getInt8(I.getType()->getPrimitiveSizeInBits())});
+    symbolicExpressions[&I] = createConstantExpression(&I, IRB);
   }
 
   //
@@ -487,8 +504,8 @@ public:
   void visitTruncInst(TruncInst &I) {
     IRBuilder<> IRB(&I);
     symbolicExpressions[&I] = IRB.CreateCall(
-        SP.buildTrunc,
-        {I.getOperand(0), IRB.getInt8(I.getDestTy()->getIntegerBitWidth())});
+        SP.buildTrunc, {getOrCreateSymbolicExpression(I.getOperand(0), IRB),
+                        IRB.getInt8(I.getDestTy()->getIntegerBitWidth())});
   }
 
   void visitIntToPtrInst(IntToPtrInst &I) {
