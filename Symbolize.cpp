@@ -6,6 +6,7 @@
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/ValueMap.h>
+#include <llvm/IR/Verifier.h>
 #include <llvm/Pass.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
@@ -833,8 +834,10 @@ bool SymbolizePass::runOnFunction(Function &F) {
   DEBUG(errs().write_escaped(F.getName()) << '\n');
 
   Symbolizer symbolizer(*this);
-  symbolizer.visit(F);
   // DEBUG(errs() << F << '\n');
+  symbolizer.visit(F);
+  assert(!verifyFunction(F, &errs()) &&
+         "SymbolizePass produced invalid bitcode");
 
   return true;
 }

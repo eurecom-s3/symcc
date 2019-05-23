@@ -1,4 +1,3 @@
-// RUN: %verify_o2
 // RUN: %symcc -O2 %s -o %t
 // RUN: %t | FileCheck %s
 //

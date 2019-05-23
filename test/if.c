@@ -1,4 +1,3 @@
-// RUN: %verify_o2
 // RUN: %symcc -O2 %s -o %t
 // RUN: %t | FileCheck %s
 // This test is disabled until we can move the pass behind the optimizer in the pipeline:
