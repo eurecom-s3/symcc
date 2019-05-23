@@ -67,6 +67,7 @@ Z3_ast _sym_build_float_ordered_less_than(Z3_ast a, Z3_ast b);
 Z3_ast _sym_build_float_ordered_less_equal(Z3_ast a, Z3_ast b);
 Z3_ast _sym_build_float_ordered_equal(Z3_ast a, Z3_ast b);
 Z3_ast _sym_build_float_ordered_not_equal(Z3_ast a, Z3_ast b);
+Z3_ast _sym_build_float_unordered(Z3_ast a, Z3_ast b);
 
 /*
  * Casts
