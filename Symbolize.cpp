@@ -124,72 +124,63 @@ public:
       return exprIt->second;
     }
 
-    Value *ret = nullptr;
+    // Constants and arguments may be used in multiple places throughout a
+    // function. Ideally, we'd make sure that in such cases the symbolic
+    // expression is generated as early as necessary but no earlier. This is
+    // complicated by the requirement to generate symbolic expressions in the
+    // right order whenever they depend on each other. For now, we just recreate
+    // such expressions every time, i.e., we don't cache them.
 
-    if (isa<ConstantData>(V) || isa<Argument>(V)) {
-      if (isa<ConstantPointerNull>(V)) {
-        // Return immediately to avoid caching. The null pointer may be used in
-        // multiple unrelated places, so we either have to load it early enough
-        // in the function or reload it every time.
-        return IRB.CreateCall(SP.buildNullPointer, {});
-      }
-
-      // Constants and arguments may be used in multiple places throughout a
-      // function. Ideally, we'd make sure that in such cases the symbolic
-      // expression is generated as early as necessary but no earlier. For now,
-      // we just create it at the very beginning of the function.
-
-      auto oldInsertionPoint = IRB.saveIP();
-      IRB.SetInsertPoint(oldInsertionPoint.getBlock()
-                             ->getParent()
-                             ->getEntryBlock()
-                             .getFirstNonPHI());
-
-      if (auto C = dyn_cast<ConstantInt>(V)) {
-        // Special case: LLVM uses the type i1 to represent Boolean values, but
-        // for Z3 we have to create expressions of a separate sort.
-        if (C->getBitWidth() == 1) {
-          ret = IRB.CreateCall(C->isOne() ? SP.buildTrue : SP.buildFalse, {});
-        } else {
-          ret = IRB.CreateCall(SP.buildInteger,
-                               {IRB.CreateZExt(C, IRB.getInt64Ty()),
-                                IRB.getInt8(C->getBitWidth())});
-        }
-      } else if (auto F = dyn_cast<ConstantFP>(V)) {
-        ret = IRB.CreateCall(SP.buildFloat,
-                             {IRB.CreateFPExt(F, IRB.getDoubleTy()),
-                              IRB.getInt1(F->getType()->isDoubleTy())});
-      } else if (auto A = dyn_cast<Argument>(V)) {
-        if (A->getParent()->getName() == "main") {
-          // We don't have symbolic parameters in main.
-          // TODO fix when we have a symbolic libc
-          ret = createConstantExpression(A, IRB);
-        } else {
-          ret =
-              IRB.CreateCall(SP.getParameterExpression,
-                             ConstantInt::get(IRB.getInt8Ty(), A->getArgNo()));
-        }
-      }
-
-      IRB.restoreIP(oldInsertionPoint);
-    } else if (auto gep = dyn_cast<GEPOperator>(V)) {
-      ret = handleGEPOperator(*gep, IRB);
-    } else if (auto bc = dyn_cast<BitCastOperator>(V)) {
-      ret = handleBitCastOperator(*bc, IRB);
-    } else if (auto gv = dyn_cast<GlobalValue>(V)) {
-      ret = IRB.CreateCall(SP.buildInteger,
-                           {IRB.CreatePtrToInt(gv, SP.intPtrType),
-                            ConstantInt::get(IRB.getInt8Ty(), SP.ptrBits)});
+    if (isa<ConstantPointerNull>(V)) {
+      return IRB.CreateCall(SP.buildNullPointer, {});
     }
 
-    if (ret == nullptr) {
-      DEBUG(errs() << "Unable to obtain a symbolic expression for " << *V
-                   << '\n');
-      assert(!"No symbolic expression for value");
+    if (auto C = dyn_cast<ConstantInt>(V)) {
+      // Special case: LLVM uses the type i1 to represent Boolean values, but
+      // for Z3 we have to create expressions of a separate sort.
+      if (C->getBitWidth() == 1) {
+        return IRB.CreateCall(C->isOne() ? SP.buildTrue : SP.buildFalse, {});
+      }
+
+      return IRB.CreateCall(
+          SP.buildInteger,
+          {IRB.CreateZExt(C, IRB.getInt64Ty()), IRB.getInt8(C->getBitWidth())});
     }
 
-    symbolicExpressions[V] = ret;
-    return ret;
+    if (auto F = dyn_cast<ConstantFP>(V)) {
+      return IRB.CreateCall(SP.buildFloat,
+                            {IRB.CreateFPExt(F, IRB.getDoubleTy()),
+                             IRB.getInt1(F->getType()->isDoubleTy())});
+    }
+
+    if (auto A = dyn_cast<Argument>(V)) {
+      if (A->getParent()->getName() == "main") {
+        // We don't have symbolic parameters in main.
+        // TODO fix when we have a symbolic libc
+        return createConstantExpression(A, IRB);
+      }
+
+      return IRB.CreateCall(SP.getParameterExpression,
+                            ConstantInt::get(IRB.getInt8Ty(), A->getArgNo()));
+    }
+
+    if (auto gep = dyn_cast<GEPOperator>(V)) {
+      return handleGEPOperator(*gep, IRB);
+    }
+
+    if (auto bc = dyn_cast<BitCastOperator>(V)) {
+      return handleBitCastOperator(*bc, IRB);
+    }
+
+    if (auto gv = dyn_cast<GlobalValue>(V)) {
+      return IRB.CreateCall(SP.buildInteger,
+                            {IRB.CreatePtrToInt(gv, SP.intPtrType),
+                             ConstantInt::get(IRB.getInt8Ty(), SP.ptrBits)});
+    }
+
+    DEBUG(errs() << "Unable to obtain a symbolic expression for " << *V
+                 << '\n');
+    llvm_unreachable("No symbolic expression for value");
   }
 
   bool isLittleEndian(Type *type) {
