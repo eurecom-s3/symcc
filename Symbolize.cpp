@@ -387,7 +387,8 @@ public:
       return;
     }
 
-    if (!I.isIndirectCall() && I.getCalledFunction()->isIntrinsic()) {
+    auto callee = I.getCalledFunction();
+    if (callee && callee->isIntrinsic()) {
       handleIntrinsicCall(I);
       return;
     }
@@ -395,8 +396,7 @@ public:
     // TODO if this is an indirect call, create a diverging input
 
     IRBuilder<> IRB(&I);
-    auto targetName =
-        I.isIndirectCall() ? StringRef{} : I.getCalledFunction()->getName();
+    auto targetName = callee ? callee->getName() : StringRef{};
     bool isBuildVariable = (targetName == "_sym_build_variable");
 
     if (targetName.startswith("_sym_") && !isBuildVariable)
