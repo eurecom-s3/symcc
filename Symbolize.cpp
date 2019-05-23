@@ -55,6 +55,8 @@ private:
   Value *buildFloatToFloat{};
   Value *buildBitsToFloat{};
   Value *buildFloatToBits{};
+  Value *buildFloatToSignedInt{};
+  Value *buildFloatToUnsignedInt{};
   Value *pushPathConstraint{};
   Value *getParameterExpression{};
   Value *setParameterExpression{};
@@ -526,6 +528,22 @@ public:
                         IRB.getInt1(I.getDestTy()->isDoubleTy())});
   }
 
+  void visitFPToSI(FPToSIInst &I) {
+    IRBuilder<> IRB(&I);
+    symbolicExpressions[&I] =
+        IRB.CreateCall(SP.buildFloatToSignedInt,
+                       {getOrCreateSymbolicExpression(I.getOperand(0), IRB),
+                        IRB.getInt8(I.getType()->getIntegerBitWidth())});
+  }
+
+  void visitFPToUI(FPToUIInst &I) {
+    IRBuilder<> IRB(&I);
+    symbolicExpressions[&I] =
+        IRB.CreateCall(SP.buildFloatToUnsignedInt,
+                       {getOrCreateSymbolicExpression(I.getOperand(0), IRB),
+                        IRB.getInt8(I.getType()->getIntegerBitWidth())});
+  }
+
   void visitCastInst(CastInst &I) {
     auto opcode = I.getOpcode();
     if (opcode != Instruction::SExt && opcode != Instruction::ZExt) {
@@ -679,6 +697,10 @@ bool SymbolizePass::doInitialization(Module &M) {
                                            ptrT, IRB.getInt1Ty());
   buildFloatToBits =
       M.getOrInsertFunction("_sym_build_float_to_bits", ptrT, ptrT);
+  buildFloatToSignedInt = M.getOrInsertFunction(
+      "_sym_build_float_to_signed_integer", ptrT, ptrT, int8T);
+  buildFloatToUnsignedInt = M.getOrInsertFunction(
+      "_sym_build_float_to_unsigned_integer", ptrT, ptrT, int8T);
   pushPathConstraint = M.getOrInsertFunction("_sym_push_path_constraint", ptrT,
                                              ptrT, IRB.getInt1Ty());
 

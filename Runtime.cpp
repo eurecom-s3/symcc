@@ -308,6 +308,16 @@ Z3_ast _sym_build_float_to_bits(Z3_ast expr) {
   return Z3_mk_fpa_to_ieee_bv(g_context, expr);
 }
 
+Z3_ast _sym_build_float_to_signed_integer(Z3_ast expr, uint8_t bits) {
+  return Z3_mk_fpa_to_sbv(g_context, Z3_mk_fpa_round_toward_zero(g_context),
+                          expr, bits);
+}
+
+Z3_ast _sym_build_float_to_unsigned_integer(Z3_ast expr, uint8_t bits) {
+  return Z3_mk_fpa_to_ubv(g_context, Z3_mk_fpa_round_toward_zero(g_context),
+                          expr, bits);
+}
+
 void _sym_set_parameter_expression(uint8_t index, Z3_ast expr) {
   g_function_arguments[index] = expr;
 }

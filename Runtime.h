@@ -78,6 +78,8 @@ Z3_ast _sym_build_int_to_float(Z3_ast value, int is_double);
 Z3_ast _sym_build_float_to_float(Z3_ast expr, int to_double);
 Z3_ast _sym_build_bits_to_float(Z3_ast expr, int to_double);
 Z3_ast _sym_build_float_to_bits(Z3_ast expr);
+Z3_ast _sym_build_float_to_signed_integer(Z3_ast expr, uint8_t bits);
+Z3_ast _sym_build_float_to_unsigned_integer(Z3_ast expr, uint8_t bits);
 
 /*
  * Function-call helpers
