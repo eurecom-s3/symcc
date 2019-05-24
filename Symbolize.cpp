@@ -791,16 +791,22 @@ bool SymbolizePass::doInitialization(Module &M) {
   // For each global variable, we need another global variable that holds the
   // corresponding symbolic expression.
   for (auto &global : M.globals()) {
-    auto valueLength = dataLayout->getTypeAllocSize(global.getValueType());
-    auto shadowType = ArrayType::get(IRB.getInt8PtrTy(), valueLength);
+    Type *shadowType;
+    if (global.isDeclaration()) {
+      shadowType = IRB.getInt8PtrTy();
+    } else {
+      auto valueLength = dataLayout->getTypeAllocSize(global.getValueType());
+      shadowType = ArrayType::get(IRB.getInt8PtrTy(), valueLength);
+    }
 
     // The expression has to be initialized at run time and can therefore never
     // be constant, even if the value that it represents is.
-    globalExpressions[&global] =
-        new GlobalVariable(M, shadowType,
-                           /* isConstant */ false, global.getLinkage(),
-                           Constant::getNullValue(shadowType),
-                           global.getName() + ".sym_expr", &global);
+    globalExpressions[&global] = new GlobalVariable(
+        M, shadowType,
+        /* isConstant */ false, global.getLinkage(),
+        global.isDeclaration() ? nullptr : Constant::getNullValue(shadowType),
+        global.getName() + ".sym_expr", &global, global.getThreadLocalMode(),
+        global.isExternallyInitialized());
   }
 
   // Insert a constructor that initializes the runtime and any globals.
@@ -809,6 +815,10 @@ bool SymbolizePass::doInitialization(Module &M) {
       M, kSymCtorName, "_sym_initialize", {}, {});
   IRB.SetInsertPoint(ctor->getEntryBlock().getTerminator());
   for (auto &&[value, expression] : globalExpressions) {
+    // External globals are initialized in their respective module.
+    if (value->isDeclaration())
+      continue;
+
     IRB.CreateCall(
         initializeMemory,
         {IRB.CreatePtrToInt(value, intPtrType),
