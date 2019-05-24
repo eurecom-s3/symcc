@@ -178,11 +178,14 @@ public:
                              ConstantInt::get(IRB.getInt8Ty(), SP.ptrBits)});
     }
 
-    if (auto CE = dyn_cast<ConstantExpr>(V)) {
-      if (CE->isCast())
-        return getOrCreateSymbolicExpression(CE->getOperand(0), IRB);
-      if (CE->isCompare())
-        return handleComparison(CE, IRB);
+    if (isa<ConstantExpr>(V)) {
+      // This is a constant, so we can just create a constant expression from
+      // the result of the computation. For now, just reuse the expression; it
+      // would be more efficient to transform it into an instruction and only
+      // reuse the value. However, in optimized builds the optimizer should take
+      // care of the transformation automatically.
+
+      return createConstantExpression(V, IRB);
     }
 
     DEBUG(errs() << "Unable to obtain a symbolic expression for " << *V
@@ -303,18 +306,6 @@ public:
     symbolicExpressions[&I] = createConstantExpression(&I, IRB);
   }
 
-  template <class InstOrConstExpr>
-  Value *handleComparison(InstOrConstExpr *I, IRBuilder<> &IRB) {
-    // ICmp is integer comparison, FCmp compares floating-point values; we
-    // simply include either in the resulting expression.
-
-    Value *handler = SP.comparisonHandlers.at(I->getPredicate());
-    assert(handler && "Unable to handle icmp/fcmp variant");
-    return IRB.CreateCall(
-        handler, {getOrCreateSymbolicExpression(I->getOperand(0), IRB),
-                  getOrCreateSymbolicExpression(I->getOperand(1), IRB)});
-  }
-
   //
   // Implementation of InstVisitor
   //
@@ -345,8 +336,15 @@ public:
   }
 
   void visitCmpInst(CmpInst &I) {
+    // ICmp is integer comparison, FCmp compares floating-point values; we
+    // simply include either in the resulting expression.
+
     IRBuilder<> IRB(&I);
-    symbolicExpressions[&I] = handleComparison(&I, IRB);
+    Value *handler = SP.comparisonHandlers.at(I.getPredicate());
+    assert(handler && "Unable to handle icmp/fcmp variant");
+    symbolicExpressions[&I] = IRB.CreateCall(
+        handler, {getOrCreateSymbolicExpression(I.getOperand(0), IRB),
+                  getOrCreateSymbolicExpression(I.getOperand(1), IRB)});
   }
 
   void visitReturnInst(ReturnInst &I) {
