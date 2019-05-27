@@ -285,6 +285,16 @@ public:
                      {I.getOperand(0), I.getOperand(1), I.getOperand(2)});
       break;
     }
+    case Intrinsic::stacksave: {
+      // The intrinsic returns an opaque pointer that should only be passed to
+      // the stackrestore intrinsic later. We treat the pointer as a constant.
+      IRBuilder<> IRB(I.getNextNode());
+      symbolicExpressions[&I] = createConstantExpression(&I, IRB);
+      break;
+    }
+    case Intrinsic::stackrestore:
+      // Ignored; see comment on stacksave above.
+      break;
     default:
       errs() << "Warning: unhandled LLVM intrinsic " << callee->getName()
              << '\n';
