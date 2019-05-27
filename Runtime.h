@@ -81,7 +81,7 @@ Z3_ast _sym_build_float_unordered_not_equal(Z3_ast a, Z3_ast b);
 Z3_ast _sym_build_sext(Z3_ast expr, uint8_t bits);
 Z3_ast _sym_build_zext(Z3_ast expr, uint8_t bits);
 Z3_ast _sym_build_trunc(Z3_ast expr, uint8_t bits);
-Z3_ast _sym_build_int_to_float(Z3_ast value, int is_double);
+Z3_ast _sym_build_int_to_float(Z3_ast value, int is_double, int is_signed);
 Z3_ast _sym_build_float_to_float(Z3_ast expr, int to_double);
 Z3_ast _sym_build_bits_to_float(Z3_ast expr, int to_double);
 Z3_ast _sym_build_float_to_bits(Z3_ast expr);

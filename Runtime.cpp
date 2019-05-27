@@ -293,7 +293,7 @@ Z3_ast _sym_build_float_unordered_greater_than(Z3_ast a, Z3_ast b) {
   return Z3_mk_or(g_context, 2, checks);
 }
 
-Z3_ast _sym_build_float_unordered_greater_equal(Z3_ast a, Z3_ast b)  {
+Z3_ast _sym_build_float_unordered_greater_equal(Z3_ast a, Z3_ast b) {
   Z3_ast checks[3];
   checks[0] = Z3_mk_fpa_is_nan(g_context, a);
   checks[1] = Z3_mk_fpa_is_nan(g_context, b);
@@ -301,7 +301,7 @@ Z3_ast _sym_build_float_unordered_greater_equal(Z3_ast a, Z3_ast b)  {
   return Z3_mk_or(g_context, 2, checks);
 }
 
-Z3_ast _sym_build_float_unordered_less_than(Z3_ast a, Z3_ast b)  {
+Z3_ast _sym_build_float_unordered_less_than(Z3_ast a, Z3_ast b) {
   Z3_ast checks[3];
   checks[0] = Z3_mk_fpa_is_nan(g_context, a);
   checks[1] = Z3_mk_fpa_is_nan(g_context, b);
@@ -309,7 +309,7 @@ Z3_ast _sym_build_float_unordered_less_than(Z3_ast a, Z3_ast b)  {
   return Z3_mk_or(g_context, 2, checks);
 }
 
-Z3_ast _sym_build_float_unordered_less_equal(Z3_ast a, Z3_ast b)  {
+Z3_ast _sym_build_float_unordered_less_equal(Z3_ast a, Z3_ast b) {
   Z3_ast checks[3];
   checks[0] = Z3_mk_fpa_is_nan(g_context, a);
   checks[1] = Z3_mk_fpa_is_nan(g_context, b);
@@ -317,7 +317,7 @@ Z3_ast _sym_build_float_unordered_less_equal(Z3_ast a, Z3_ast b)  {
   return Z3_mk_or(g_context, 2, checks);
 }
 
-Z3_ast _sym_build_float_unordered_equal(Z3_ast a, Z3_ast b)  {
+Z3_ast _sym_build_float_unordered_equal(Z3_ast a, Z3_ast b) {
   Z3_ast checks[3];
   checks[0] = Z3_mk_fpa_is_nan(g_context, a);
   checks[1] = Z3_mk_fpa_is_nan(g_context, b);
@@ -325,7 +325,7 @@ Z3_ast _sym_build_float_unordered_equal(Z3_ast a, Z3_ast b)  {
   return Z3_mk_or(g_context, 2, checks);
 }
 
-Z3_ast _sym_build_float_unordered_not_equal(Z3_ast a, Z3_ast b)  {
+Z3_ast _sym_build_float_unordered_not_equal(Z3_ast a, Z3_ast b) {
   Z3_ast checks[3];
   checks[0] = Z3_mk_fpa_is_nan(g_context, a);
   checks[1] = Z3_mk_fpa_is_nan(g_context, b);
@@ -345,9 +345,11 @@ Z3_ast _sym_build_trunc(Z3_ast expr, uint8_t bits) {
   return Z3_mk_extract(g_context, bits - 1, 0, expr);
 }
 
-Z3_ast _sym_build_int_to_float(Z3_ast value, int is_double) {
-  return Z3_mk_fpa_to_fp_signed(g_context, g_rounding_mode, value,
-                                FSORT(is_double));
+Z3_ast _sym_build_int_to_float(Z3_ast value, int is_double, int is_signed) {
+  return is_signed ? Z3_mk_fpa_to_fp_signed(g_context, g_rounding_mode, value,
+                                            FSORT(is_double))
+                   : Z3_mk_fpa_to_fp_unsigned(g_context, g_rounding_mode, value,
+                                              FSORT(is_double));
 }
 
 Z3_ast _sym_build_float_to_float(Z3_ast expr, int to_double) {

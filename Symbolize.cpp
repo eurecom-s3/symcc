@@ -511,7 +511,17 @@ public:
     symbolicExpressions[&I] =
         IRB.CreateCall(SP.buildIntToFloat,
                        {getOrCreateSymbolicExpression(I.getOperand(0), IRB),
-                        IRB.getInt1(I.getDestTy()->isDoubleTy())});
+                        IRB.getInt1(I.getDestTy()->isDoubleTy()),
+                        /* is_signed */ IRB.getInt1(true)});
+  }
+
+  void visitUIToFPInst(UIToFPInst &I) {
+    IRBuilder<> IRB(&I);
+    symbolicExpressions[&I] =
+        IRB.CreateCall(SP.buildIntToFloat,
+                       {getOrCreateSymbolicExpression(I.getOperand(0), IRB),
+                        IRB.getInt1(I.getDestTy()->isDoubleTy()),
+                        /* is_signed */ IRB.getInt1(false)});
   }
 
   void visitFPExtInst(FPExtInst &I) {
@@ -692,7 +702,7 @@ bool SymbolizePass::doInitialization(Module &M) {
   buildZExt = M.getOrInsertFunction("_sym_build_zext", ptrT, ptrT, int8T);
   buildTrunc = M.getOrInsertFunction("_sym_build_trunc", ptrT, ptrT, int8T);
   buildIntToFloat = M.getOrInsertFunction("_sym_build_int_to_float", ptrT, ptrT,
-                                          IRB.getInt1Ty());
+                                          IRB.getInt1Ty(), IRB.getInt1Ty());
   buildFloatToFloat = M.getOrInsertFunction("_sym_build_float_to_float", ptrT,
                                             ptrT, IRB.getInt1Ty());
   buildBitsToFloat = M.getOrInsertFunction("_sym_build_bits_to_float", ptrT,
