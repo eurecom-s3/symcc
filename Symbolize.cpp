@@ -295,6 +295,12 @@ public:
     case Intrinsic::stackrestore:
       // Ignored; see comment on stacksave above.
       break;
+    case Intrinsic::expect: {
+      // Just a hint for the optimizer; the value is the first parameter.
+      IRBuilder<> IRB(&I);
+      symbolicExpressions[&I] = getOrCreateSymbolicExpression(I.getArgOperand(0), IRB);
+      break;
+    }
     default:
       errs() << "Warning: unhandled LLVM intrinsic " << callee->getName()
              << '\n';
