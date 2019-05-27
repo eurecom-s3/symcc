@@ -197,6 +197,31 @@ public:
     return (!type->isAggregateType() && SP.dataLayout->isLittleEndian());
   }
 
+  /// Finish the processing of PHI nodes.
+  ///
+  /// This assumes that there is a dummy PHI node for each such instruction in
+  /// the function, and that we have recorded all PHI nodes in the member
+  /// phiNodes. In other words, the function has to be called after all
+  /// instructions have been processed in order to fix up PHI nodes. See the
+  /// documentation of member phiNodes for why we process PHI nodes in two
+  /// steps.
+  void finalizePHINodes() {
+    for (auto phi : phiNodes) {
+      for (unsigned incoming = 0, totalIncoming = phi->getNumIncomingValues();
+           incoming < totalIncoming; incoming++) {
+        auto block = phi->getIncomingBlock(incoming);
+        // Any code we may have to generate for the symbolic expressions will
+        // have to live in the basic block that the respective value comes from:
+        // PHI nodes can't be preceded by regular code in a basic block.
+        IRBuilder<> blockIRB(block->getTerminator());
+        auto symbolicPHI = cast<PHINode>(symbolicExpressions[phi]);
+        symbolicPHI->addIncoming(getOrCreateSymbolicExpression(
+                                     phi->getIncomingValue(incoming), blockIRB),
+                                 block);
+      }
+    }
+  }
+
   Value *handleBitCastOperator(BitCastOperator &I, IRBuilder<> &IRB) {
     assert(I.getSrcTy()->isPointerTy() && I.getDestTy()->isPointerTy() &&
            "Unhandled non-pointer bit cast");
@@ -298,7 +323,8 @@ public:
     case Intrinsic::expect: {
       // Just a hint for the optimizer; the value is the first parameter.
       IRBuilder<> IRB(&I);
-      symbolicExpressions[&I] = getOrCreateSymbolicExpression(I.getArgOperand(0), IRB);
+      symbolicExpressions[&I] =
+          getOrCreateSymbolicExpression(I.getArgOperand(0), IRB);
       break;
     }
     default:
@@ -614,21 +640,11 @@ public:
     // PHI nodes just assign values based on the origin of the last jump, so we
     // assign the corresponding symbolic expression the same way.
 
+    phiNodes.push_back(&I);     // to be finalized later, see finalizePHINodes
+
     IRBuilder<> IRB(&I);
     unsigned numIncomingValues = I.getNumIncomingValues();
-
     auto exprPHI = IRB.CreatePHI(IRB.getInt8PtrTy(), numIncomingValues);
-    for (unsigned incoming = 0; incoming < numIncomingValues; incoming++) {
-      auto block = I.getIncomingBlock(incoming);
-      // Any code we may have to generate for the symbolic expressions will have
-      // to live in the basic block that the respective value comes from: PHI
-      // nodes can't be preceded by regular code in a basic block.
-      IRBuilder<> blockIRB(block->getTerminator());
-      exprPHI->addIncoming(
-          getOrCreateSymbolicExpression(I.getIncomingValue(incoming), blockIRB),
-          block);
-    }
-
     symbolicExpressions[&I] = exprPHI;
   }
 
@@ -671,6 +687,8 @@ public:
   }
 
 private:
+  static constexpr unsigned kExpectedMaxPHINodesPerFunction = 16;
+
   const SymbolizePass &SP;
 
   /// Mapping from SSA values to symbolic expressions.
@@ -678,6 +696,14 @@ private:
   /// For pointer values, the stored value is not an expression but a pointer to
   /// the expression of the referenced value.
   ValueMap<Value *, Value *> symbolicExpressions;
+
+  /// A record of all PHI nodes in this function.
+  ///
+  /// PHI nodes may refer to themselves, in which case we run into an infinite
+  /// loop when trying to generate symbolic expressions recursively. Therefore,
+  /// we only insert a dummy symbolic expression for each PHI node and fix it
+  /// after all instructions have been processed.
+  SmallVector<PHINode *, kExpectedMaxPHINodesPerFunction> phiNodes;
 }; // namespace
 
 void addSymbolizePass(const PassManagerBuilder & /* unused */,
@@ -867,6 +893,7 @@ bool SymbolizePass::runOnFunction(Function &F) {
   Symbolizer symbolizer(*this);
   // DEBUG(errs() << F << '\n');
   symbolizer.visit(F);
+  symbolizer.finalizePHINodes();
   assert(!verifyFunction(F, &errs()) &&
          "SymbolizePass produced invalid bitcode");
 
