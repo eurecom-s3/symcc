@@ -640,7 +640,7 @@ public:
     // PHI nodes just assign values based on the origin of the last jump, so we
     // assign the corresponding symbolic expression the same way.
 
-    phiNodes.push_back(&I);     // to be finalized later, see finalizePHINodes
+    phiNodes.push_back(&I); // to be finalized later, see finalizePHINodes
 
     IRBuilder<> IRB(&I);
     unsigned numIncomingValues = I.getNumIncomingValues();
@@ -676,6 +676,68 @@ public:
         {aggregateExpr, IRB.getInt64(offset),
          IRB.getInt64(SP.dataLayout->getTypeStoreSize(I.getType())),
          IRB.getInt8(isLittleEndian(I.getType()) ? 1 : 0)});
+  }
+
+  void visitSwitchInst(SwitchInst &I) {
+    // Switch compares a value against a set of integer constants; duplicate
+    // constants are not allowed
+    // (https://llvm.org/docs/LangRef.html#switch-instruction). We can't just
+    // push the new path constraint at the jump destinations, because the
+    // destination blocks may be the targets of other jumps as well. Therefore,
+    // we insert a series of new blocks that construct and push the respective
+    // path constraint before jumping to the original target.
+
+    // TODO should we try to generate inputs for *all* other paths?
+
+    IRBuilder<> IRB(&I);
+    auto conditionExpr = getOrCreateSymbolicExpression(I.getCondition(), IRB);
+
+    // The default case needs to assert that the condition doesn't equal any of
+    // the cases.
+    if (I.getNumCases() > 0) {
+      auto finalDest = I.getDefaultDest();
+      auto constraintBlock = BasicBlock::Create(
+          I.getContext(), /* name */ "", finalDest->getParent(), finalDest);
+      I.setDefaultDest(constraintBlock);
+      IRB.SetInsertPoint(constraintBlock);
+
+      auto currentCase = I.case_begin();
+      auto constraint = IRB.CreateCall(
+          SP.comparisonHandlers[CmpInst::ICMP_NE],
+          {conditionExpr,
+           createConstantExpression(currentCase->getCaseValue(), IRB)});
+      ++currentCase;
+
+      for (auto endCase = I.case_end(); currentCase != endCase; ++currentCase) {
+        constraint = IRB.CreateCall(
+            SP.binaryOperatorHandlers[Instruction::And],
+            {constraint,
+             IRB.CreateCall(
+                 SP.comparisonHandlers[CmpInst::ICMP_NE],
+                 {conditionExpr, createConstantExpression(
+                                     currentCase->getCaseValue(), IRB)})});
+      }
+
+      IRB.CreateCall(SP.pushPathConstraint, {constraint, IRB.getInt1(true)});
+      IRB.CreateBr(finalDest);
+    }
+
+    // The individual cases just assert that the condition equals their
+    // respective value.
+    for (auto &caseHandle : I.cases()) {
+      auto finalDest = caseHandle.getCaseSuccessor();
+      auto constraintBlock = BasicBlock::Create(
+          I.getContext(), /* name */ "", finalDest->getParent(), finalDest);
+      caseHandle.setSuccessor(constraintBlock);
+      IRB.SetInsertPoint(constraintBlock);
+
+      auto constraint = IRB.CreateCall(
+          SP.comparisonHandlers[CmpInst::ICMP_EQ],
+          {conditionExpr,
+           createConstantExpression(caseHandle.getCaseValue(), IRB)});
+      IRB.CreateCall(SP.pushPathConstraint, {constraint, IRB.getInt1(true)});
+      IRB.CreateBr(finalDest);
+    }
   }
 
   void visitUnreachableInst(UnreachableInst &) {
