@@ -373,6 +373,18 @@ public:
                          {getOrCreateSymbolicExpression(I.getOperand(0), IRB)});
       break;
     }
+    case Intrinsic::cttz: {
+      // Count trailing zeros. Expressing this symbolically is difficult, so for
+      // now we just concretize.
+
+      errs() << "Warning: concretizing number of trailing zeros of "
+             << I.getOperand(0) << "\n";
+      IRBuilder<> IRB(I.getNextNode());
+      symbolicExpressions[&I] = IRB.CreateCall(
+          SP.buildInteger, {IRB.CreateZExt(I.getOperand(0), IRB.getInt64Ty()),
+                            IRB.getInt8(I.getType()->getIntegerBitWidth())});
+      break;
+    }
     default:
       errs() << "Warning: unhandled LLVM intrinsic " << callee->getName()
              << '\n';
