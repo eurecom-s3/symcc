@@ -388,6 +388,17 @@ public:
                             IRB.getInt8(I.getType()->getIntegerBitWidth())});
       break;
     }
+    case Intrinsic::returnaddress: {
+      // Obtain the return address of the current function or one of its parents
+      // on the stack. We just concretize.
+
+      errs() << "Warning: using concrete value for return address\n";
+      IRBuilder<> IRB(I.getNextNode());
+      symbolicExpressions[&I] = IRB.CreateCall(
+          SP.buildInteger,
+          {IRB.CreatePtrToInt(&I, SP.intPtrType), IRB.getInt8(SP.ptrBits)});
+      break;
+    }
     default:
       errs() << "Warning: unhandled LLVM intrinsic " << callee->getName()
              << '\n';
