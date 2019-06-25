@@ -543,6 +543,19 @@ void _sym_memcpy(uint8_t *dest, uint8_t *src, size_t length) {
   memcpy(destShadow, srcShadow, length * sizeof(Z3_ast));
 }
 
+void _sym_memset(uint8_t *memory, Z3_ast value, size_t length) {
+  assert_memory_region_invariant();
+
+  auto region = g_memory_regions.find(memory);
+  assert((region != g_memory_regions.end()) &&
+         (memory + length <= region->end) && "Unknown memory region");
+
+  Z3_ast *shadow = &region->shadow[memory - region->start];
+  for (size_t index = 0; index < length; index++) {
+    shadow[index] = value;
+  }
+}
+
 Z3_ast _sym_build_extract(Z3_ast expr, uint64_t offset, uint64_t length,
                           bool little_endian) {
   unsigned totalBits =

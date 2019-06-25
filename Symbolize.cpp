@@ -64,6 +64,7 @@ private:
   Value *setReturnExpression{};
   Value *getReturnExpression{};
   Value *memcpy{};
+  Value *memset{};
   Value *registerMemory{};
   Value *readMemory{};
   Value *writeMemory{};
@@ -302,12 +303,22 @@ public:
     case Intrinsic::memcpy: {
       // auto destExpr = getOrCreateSymbolicExpression(I.getOperand(0), IRB);
       // auto srcExpr = getOrCreateSymbolicExpression(I.getOperand(1), IRB);
-      // TODO generate diverging inputs for the source and destination of the
-      // copy operation
+      // TODO generate diverging inputs for the source, destination and length
+      // of the copy operation
 
       IRBuilder<> IRB(&I);
       IRB.CreateCall(SP.memcpy,
                      {I.getOperand(0), I.getOperand(1), I.getOperand(2)});
+      break;
+    }
+    case Intrinsic::memset: {
+      // TODO generate diverging inputs for the memory and length operands
+
+      IRBuilder<> IRB(&I);
+      IRB.CreateCall(SP.memset,
+                     {I.getOperand(0),
+                      getOrCreateSymbolicExpression(I.getOperand(1), IRB),
+                      IRB.CreateZExt(I.getOperand(2), IRB.getInt64Ty())});
       break;
     }
     case Intrinsic::stacksave: {
@@ -890,6 +901,8 @@ bool SymbolizePass::doInitialization(Module &M) {
 #undef LOAD_COMPARISON_HANDLER
 
   memcpy = M.getOrInsertFunction("_sym_memcpy", voidT, ptrT, ptrT, intPtrType);
+  memset =
+      M.getOrInsertFunction("_sym_memset", voidT, ptrT, ptrT, IRB.getInt64Ty());
   registerMemory = M.getOrInsertFunction("_sym_register_memory", voidT,
                                          intPtrType, ptrT, intPtrType);
   readMemory = M.getOrInsertFunction("_sym_read_memory", ptrT, intPtrType,
