@@ -216,9 +216,7 @@ Z3_ast _sym_build_fp_rem(Z3_ast a, Z3_ast b) {
   return Z3_mk_fpa_rem(g_context, a, b);
 }
 
-Z3_ast _sym_build_fp_abs(Z3_ast a) {
-  return Z3_mk_fpa_abs(g_context, a);
-}
+Z3_ast _sym_build_fp_abs(Z3_ast a) { return Z3_mk_fpa_abs(g_context, a); }
 
 Z3_ast _sym_build_neg(Z3_ast expr) { return Z3_mk_not(g_context, expr); }
 
@@ -261,6 +259,18 @@ Z3_ast _sym_build_equal(Z3_ast a, Z3_ast b) {
 Z3_ast _sym_build_not_equal(Z3_ast a, Z3_ast b) {
   return Z3_mk_not(g_context, _sym_build_equal(a, b));
 }
+
+Z3_ast _sym_build_and(Z3_ast a, Z3_ast b) {
+  Z3_ast args[] = {a, b};
+  return Z3_mk_and(g_context, 2, args);
+}
+
+Z3_ast _sym_build_or(Z3_ast a, Z3_ast b) {
+  Z3_ast args[] = {a, b};
+  return Z3_mk_or(g_context, 2, args);
+}
+
+Z3_ast _sym_build_xor(Z3_ast a, Z3_ast b) { return Z3_mk_xor(g_context, a, b); }
 
 Z3_ast _sym_build_float_ordered_greater_than(Z3_ast a, Z3_ast b) {
   return Z3_mk_fpa_gt(g_context, a, b);

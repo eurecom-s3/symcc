@@ -61,6 +61,9 @@ Z3_ast _sym_build_unsigned_greater_than(Z3_ast a, Z3_ast b);
 Z3_ast _sym_build_unsigned_greater_equal(Z3_ast a, Z3_ast b);
 Z3_ast _sym_build_equal(Z3_ast a, Z3_ast b);
 Z3_ast _sym_build_not_equal(Z3_ast a, Z3_ast b);
+Z3_ast _sym_build_and(Z3_ast a, Z3_ast b);
+Z3_ast _sym_build_or(Z3_ast a, Z3_ast b);
+Z3_ast _sym_build_xor(Z3_ast a, Z3_ast b);
 
 Z3_ast _sym_build_float_ordered_greater_than(Z3_ast a, Z3_ast b);
 Z3_ast _sym_build_float_ordered_greater_equal(Z3_ast a, Z3_ast b);
