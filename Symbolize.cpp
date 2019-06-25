@@ -58,6 +58,7 @@ private:
   Value *buildFloatToBits{};
   Value *buildFloatToSignedInt{};
   Value *buildFloatToUnsignedInt{};
+  Value *buildFloatAbs{};
   Value *pushPathConstraint{};
   Value *getParameterExpression{};
   Value *setParameterExpression{};
@@ -337,6 +338,16 @@ public:
       IRBuilder<> IRB(&I);
       symbolicExpressions[&I] =
           getOrCreateSymbolicExpression(I.getArgOperand(0), IRB);
+      break;
+    }
+    case Intrinsic::fabs: {
+      // Floating-point absolute value; use the runtime to build the
+      // corresponding symbolic expression.
+
+      IRBuilder<> IRB(&I);
+      symbolicExpressions[&I] =
+          IRB.CreateCall(SP.buildFloatAbs,
+                         {getOrCreateSymbolicExpression(I.getOperand(0), IRB)});
       break;
     }
     default:
@@ -829,6 +840,7 @@ bool SymbolizePass::doInitialization(Module &M) {
       "_sym_build_float_to_signed_integer", ptrT, ptrT, int8T);
   buildFloatToUnsignedInt = M.getOrInsertFunction(
       "_sym_build_float_to_unsigned_integer", ptrT, ptrT, int8T);
+  buildFloatAbs = M.getOrInsertFunction("_sym_build_fp_abs", ptrT, ptrT);
   pushPathConstraint = M.getOrInsertFunction("_sym_push_path_constraint", ptrT,
                                              ptrT, IRB.getInt1Ty());
 

@@ -45,6 +45,7 @@ Z3_ast _sym_build_fp_sub(Z3_ast a, Z3_ast b);
 Z3_ast _sym_build_fp_mul(Z3_ast a, Z3_ast b);
 Z3_ast _sym_build_fp_div(Z3_ast a, Z3_ast b);
 Z3_ast _sym_build_fp_rem(Z3_ast a, Z3_ast b);
+Z3_ast _sym_build_fp_abs(Z3_ast a);
 
 /*
  * Boolean operations
