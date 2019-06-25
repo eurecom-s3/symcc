@@ -160,6 +160,10 @@ Z3_ast _sym_build_add(Z3_ast a, Z3_ast b) {
   return Z3_mk_bvadd(g_context, a, b);
 }
 
+Z3_ast _sym_build_sub(Z3_ast a, Z3_ast b) {
+  return Z3_mk_bvsub(g_context, a, b);
+}
+
 Z3_ast _sym_build_mul(Z3_ast a, Z3_ast b) {
   return Z3_mk_bvmul(g_context, a, b);
 }
