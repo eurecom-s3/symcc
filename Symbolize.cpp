@@ -955,6 +955,10 @@ bool SymbolizePass::doInitialization(Module &M) {
   // For each global variable, we need another global variable that holds the
   // corresponding symbolic expression.
   for (auto &global : M.globals()) {
+    // Don't create symbolic shadows for LLVM's special variables.
+    if (global.getName().startswith("llvm."))
+      continue;
+
     Type *shadowType;
     if (global.isDeclaration()) {
       shadowType = IRB.getInt8PtrTy();
