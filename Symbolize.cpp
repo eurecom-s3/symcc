@@ -373,15 +373,18 @@ public:
                          {getOrCreateSymbolicExpression(I.getOperand(0), IRB)});
       break;
     }
-    case Intrinsic::cttz: {
-      // Count trailing zeros. Expressing this symbolically is difficult, so for
-      // now we just concretize.
+    case Intrinsic::cttz:
+    case Intrinsic::ctpop:
+    case Intrinsic::ctlz: {
+      // Various bit-count operations. Expressing these symbolically is
+      // difficult, so for now we just concretize.
 
-      errs() << "Warning: concretizing number of trailing zeros of "
-             << I.getOperand(0) << "\n";
+      errs() << "Warning: losing track of symbolic expressions at bit-count "
+                "operation "
+             << I << "\n";
       IRBuilder<> IRB(I.getNextNode());
       symbolicExpressions[&I] = IRB.CreateCall(
-          SP.buildInteger, {IRB.CreateZExt(I.getOperand(0), IRB.getInt64Ty()),
+          SP.buildInteger, {IRB.CreateZExt(&I, IRB.getInt64Ty()),
                             IRB.getInt8(I.getType()->getIntegerBitWidth())});
       break;
     }
