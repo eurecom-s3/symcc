@@ -116,6 +116,29 @@ public:
           {IRB.CreatePtrToInt(V, IRB.getInt64Ty()), IRB.getInt8(SP.ptrBits)});
     }
 
+    if (valueType->isStructTy()) {
+      // In unoptimized code we may see structures in SSA registers. What we
+      // want is a single bit-vector expression describing their contents, but
+      // unfortunately we can't take the address of a register. We fix the
+      // problem with a hack: we write the register to memory and initialize the
+      // expression from there.
+      //
+      // An alternative would be to change the representation of structures in
+      // SSA registers to "shadow structures" that contain one expression per
+      // member. However, this would put an additional burden on the handling of
+      // cast instructions, because expressions would have to be converted
+      // between different representations according to the type.
+
+      auto memory = IRB.CreateAlloca(V->getType());
+      IRB.CreateStore(V, memory);
+      return IRB.CreateCall(
+          SP.readMemory,
+          {IRB.CreatePtrToInt(memory, SP.intPtrType),
+           ConstantInt::get(SP.intPtrType,
+                            SP.dataLayout->getTypeStoreSize(V->getType())),
+           IRB.getInt8(0)});
+    }
+
     llvm_unreachable("Unhandled type for constant expression");
   }
 
@@ -778,8 +801,9 @@ private:
 
   /// Mapping from SSA values to symbolic expressions.
   ///
-  /// For pointer values, the stored value is not an expression but a pointer to
-  /// the expression of the referenced value.
+  /// For pointer values, the stored value is an expression describing the value
+  /// of the pointer itself (i.e., the address, not the referenced value). For
+  /// structure values, the expression is a single large bit vector.
   ValueMap<Value *, Value *> symbolicExpressions;
 
   /// A record of all PHI nodes in this function.
