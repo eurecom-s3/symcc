@@ -298,6 +298,7 @@ public:
     switch (callee->getIntrinsicID()) {
     case Intrinsic::lifetime_start:
     case Intrinsic::lifetime_end:
+    case Intrinsic::dbg_declare:
       // These are safe to ignore.
       break;
     case Intrinsic::memcpy: {
