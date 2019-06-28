@@ -8,11 +8,12 @@ compilation. In essence, it inserts code that computes symbolic expressions for
 each value in the program. The actual computation happens through calls to a
 support library at run time.
 
-To build the pass, make sure that LLVM 8 and Z3 are installed, create a build
-directory somewhere, and execute the following commands inside the build
-directory:
+To build the pass and the support library, make sure that LLVM 8 and Z3 are
+installed and obtain the source code of compiler-rt from the LLVM project. Note
+that it is not necessary to build compiler-rt. Then create a build directory
+somewhere, and execute the following commands inside it:
 
-$ cmake -G Ninja /path/to/compiler/sources
+$ cmake -G Ninja -DCOMPILER_RT_SOURCE=/path/to/compiler-rt /path/to/compiler/sources
 $ ninja
 
 If LLVM is installed in a non-standard location, add the CMake parameter
@@ -43,8 +44,9 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
-Save the code as "test.c". In addition to regular compilation, we need to load
-the compiler pass and link the object file against the symbolic runtime:
+Save the code as "test.c". To compile it with symbolic execution built in, we
+need to load the compiler pass and link the object file against the symbolic
+runtime:
 
 $ clang -O3 -Xclang -load -Xclang ./libSymbolize.so -L. -lSymRuntime \
     test.c -o test

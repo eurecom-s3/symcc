@@ -43,6 +43,9 @@ std::ostream &operator<<(std::ostream &out, const MemoryRegion &region) {
 }
 #endif
 
+/// Indicate whether the runtime has been initialized.
+bool g_initialized = false;
+
 /// The global Z3 context.
 Z3_context g_context;
 
@@ -90,8 +93,17 @@ void dump_known_regions() {
 
 } // namespace
 
+void initialize_interception();
+
 void _sym_initialize(void) {
-  /* TODO prevent repeated initialization */
+  if (g_initialized)
+    return;
+
+  g_initialized = true;
+
+#ifdef DEBUG_RUNTIME
+  std::cout << "Initializing symbolic runtime" << std::endl;
+#endif
 
   Z3_config cfg;
 
@@ -109,6 +121,8 @@ void _sym_initialize(void) {
       Z3_mk_int(g_context, 0, Z3_mk_bv_sort(g_context, 8 * sizeof(void *)));
   g_true = Z3_mk_true(g_context);
   g_false = Z3_mk_false(g_context);
+
+  initialize_interception();
 }
 
 #define SYM_INITIALIZE_ARRAY(bits)                                             \
@@ -463,7 +477,8 @@ void _sym_register_memory(uint8_t *addr, Z3_ast *shadow, size_t length) {
   auto first = g_memory_regions.lower_bound(addr);
   auto last = g_memory_regions.upper_bound(addr + length - 1);
 #ifdef DEBUG_RUNTIME
-  printf("Erasing %ld memory objects\n", std::distance(first, last));
+  if (first != last)
+    printf("Erasing %ld memory objects\n", std::distance(first, last));
 #endif
   g_memory_regions.erase(first, last);
 
