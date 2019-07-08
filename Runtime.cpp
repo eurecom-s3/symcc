@@ -93,7 +93,10 @@ void dump_known_regions() {
 
 } // namespace
 
-void initialize_interception();
+// The initializer for the interception framework is linked directly into the
+// binary. We call it from the run-time library's initialization routine to make
+// sure that everything is in place before the hooks are activated.
+extern "C" void _initialize_interception();
 
 void _sym_initialize(void) {
   if (g_initialized)
@@ -122,7 +125,7 @@ void _sym_initialize(void) {
   g_true = Z3_mk_true(g_context);
   g_false = Z3_mk_false(g_context);
 
-  initialize_interception();
+  _initialize_interception();
 }
 
 #define SYM_INITIALIZE_ARRAY(bits)                                             \
@@ -417,7 +420,12 @@ void *_sym_get_parameter_expression(uint8_t index) {
 
 void _sym_set_return_expression(Z3_ast expr) { g_return_value = expr; }
 
-Z3_ast _sym_get_return_expression(void) { return g_return_value; }
+Z3_ast _sym_get_return_expression(void) {
+  auto result = g_return_value;
+  // TODO this is a safeguard that can eventually be removed
+  g_return_value = nullptr;
+  return result;
+}
 
 Z3_ast _sym_push_path_constraint(Z3_ast constraint, int taken) {
   constraint = Z3_simplify(g_context, constraint);

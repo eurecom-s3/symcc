@@ -29,18 +29,22 @@ if (NOT LLVM_ENABLE_RTTI)
   set_target_properties(Symbolize PROPERTIES COMPILE_FLAGS "-fno-rtti")
 endif()
 
+add_library(SymRuntime SHARED Runtime.cpp)
+target_link_libraries(SymRuntime "z3")
+
 set(COMPILER_RT_SOURCE CACHE PATH "Path to the source code of compiler-rt")
 if (NOT EXISTS "${COMPILER_RT_SOURCE}/lib/interception")
   message(FATAL_ERROR "Please set COMPILER_RT_SOURCE to the path \
 containing the source code of compiler-rt!")
 endif()
 
-add_library(SymRuntime SHARED
-  Runtime.cpp
+add_library(SymIntercept STATIC
   Interception.cpp
   "${COMPILER_RT_SOURCE}/lib/interception/interception_linux.cc")
 
-target_include_directories(SymRuntime PRIVATE "${COMPILER_RT_SOURCE}/lib")
-target_link_libraries(SymRuntime "z3")
+target_include_directories(SymIntercept PRIVATE "${COMPILER_RT_SOURCE}/lib")
+set_property(TARGET SymIntercept PROPERTY POSITION_INDEPENDENT_CODE ON)
+
+configure_file("symcc.in" "symcc")
 
 add_subdirectory(test)
