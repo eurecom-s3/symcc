@@ -2,10 +2,10 @@
 #include <algorithm>
 #include <cassert>
 #include <cstring>
+#include <iostream>
 #include <set>
 
 #ifdef DEBUG_RUNTIME
-#include <iostream>
 // Helper to print pointers properly.
 #define P(ptr) static_cast<void *>(ptr)
 #endif
@@ -78,6 +78,12 @@ void dump_known_regions() {
 }
 #endif
 
+void handle_z3_error(Z3_context c, Z3_error_code e) {
+  assert(c == g_context && "Z3 error in unknown context");
+  std::cerr << Z3_get_error_msg(g_context, e) << std::endl;
+  assert(!"Z3 error");
+}
+
 } // namespace
 
 void _sym_initialize(void) {
@@ -96,6 +102,8 @@ void _sym_initialize(void) {
   Z3_set_param_value(cfg, "model", "true");
   g_context = Z3_mk_context(cfg);
   Z3_del_config(cfg);
+
+  Z3_set_error_handler(g_context, handle_z3_error);
 
   g_rounding_mode = Z3_mk_fpa_round_nearest_ties_to_even(g_context);
 
