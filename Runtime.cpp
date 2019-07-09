@@ -116,23 +116,6 @@ void _sym_initialize(void) {
   g_false = Z3_mk_false(g_context);
 }
 
-#define SYM_INITIALIZE_ARRAY(bits)                                             \
-  extern "C" void _sym_initialize_array_##bits(                                \
-      Z3_ast expression[], void *value, size_t n_elements) {                   \
-    uint##bits##_t *typed_value = static_cast<uint##bits##_t *>(value);        \
-    for (size_t i = 0; i < n_elements; i++) {                                  \
-      expression[i] = Z3_mk_int(g_context, typed_value[i],                     \
-                                Z3_mk_bv_sort(g_context, bits));               \
-    }                                                                          \
-  }
-
-SYM_INITIALIZE_ARRAY(8)
-SYM_INITIALIZE_ARRAY(16)
-SYM_INITIALIZE_ARRAY(32)
-SYM_INITIALIZE_ARRAY(64)
-
-#undef SYM_INITIALIZE_ARRAY
-
 Z3_ast _sym_build_integer(uint64_t value, uint8_t bits) {
   return Z3_mk_int(g_context, value, Z3_mk_bv_sort(g_context, bits));
 }
