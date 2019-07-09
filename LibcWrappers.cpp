@@ -49,7 +49,7 @@ ssize_t SYM(read)(int fildes, void *buf, size_t nbyte) {
   auto result = read(fildes, buf, nbyte);
   auto region = _sym_get_memory_region(buf);
   auto byteBuf = static_cast<uint8_t *>(buf);
-  assert(region && (byteBuf + nbyte < region->end) && "Unknown memory region");
+  assert(region && (byteBuf + nbyte <= region->end) && "Unknown memory region");
   _sym_initialize_memory(byteBuf, region->shadow + (byteBuf - region->start),
                          nbyte);
   return result;
