@@ -9,7 +9,4 @@ exec $cc                                        \
      "$@"                                       \
      -L"$runtime_dir"                           \
      -lSymRuntime                               \
-     -lSymIntercept                             \
-     -lstdc++                                   \
-     -ldl                                       \
      -Wl,-rpath,"$runtime_dir"

@@ -8,4 +8,4 @@ add_custom_target(test
   COMMENT "Testing the system..."
   USES_TERMINAL)
 
-add_dependencies(test SymIntercept SymRuntime Symbolize)
+add_dependencies(test SymRuntime Symbolize)

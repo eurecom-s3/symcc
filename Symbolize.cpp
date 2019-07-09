@@ -1,3 +1,4 @@
+#include <llvm/ADT/StringSet.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/GetElementPtrTypeIterator.h>
 #include <llvm/IR/IRBuilder.h>
@@ -862,6 +863,21 @@ bool SymbolizePass::doInitialization(Module &M) {
   intPtrType = M.getDataLayout().getIntPtrType(M.getContext());
   ptrBits = M.getDataLayout().getPointerSizeInBits();
 
+  // Redirect calls to external functions to the corresponding wrappers and
+  // rename internal functions.
+  static const StringSet<> kFunctionsNoHook = {"printf", "err", "exit", "write",
+                                               "munmap",
+                                               // TODO
+                                               "cgc_rint", "cgc_pow", "cgc_log10", "__isoc99_sscanf", "strlen", "__errno_location", "memset", "select"};
+  for (auto &function : M.functions()) {
+    auto name = function.getName();
+    if (kFunctionsNoHook.count(name) || name == "main" ||
+        name.startswith("llvm.") || name == "_sym_build_variable")
+      continue;
+
+    function.setName("__symbolized_" + name);
+  }
+
   IRBuilder<> IRB(M.getContext());
   auto ptrT = IRB.getInt8PtrTy();
   auto int8T = IRB.getInt8Ty();
@@ -1026,11 +1042,12 @@ bool SymbolizePass::doInitialization(Module &M) {
 }
 
 bool SymbolizePass::runOnFunction(Function &F) {
-  if (F.getName() == kSymCtorName)
+  auto functionName = F.getName();
+  if (functionName == kSymCtorName)
     return false;
 
   DEBUG(errs() << "Symbolizing function ");
-  DEBUG(errs().write_escaped(F.getName()) << '\n');
+  DEBUG(errs().write_escaped(functionName) << '\n');
 
   Symbolizer symbolizer(*this);
   // DEBUG(errs() << F << '\n');

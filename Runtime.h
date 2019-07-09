@@ -113,10 +113,31 @@ void _sym_initialize_memory(uint8_t *addr, Z3_ast *shadow, size_t length);
 Z3_ast _sym_read_memory(uint8_t *addr, size_t length, bool little_endian);
 void _sym_write_memory(uint8_t *addr, size_t length, Z3_ast expr,
                        bool little_endian);
-void _sym_memcpy(uint8_t *dest, uint8_t *src, size_t length);
+void _sym_memcpy(uint8_t *dest, const uint8_t *src, size_t length);
 void _sym_memset(uint8_t *memory, Z3_ast value, size_t length);
 Z3_ast _sym_build_extract(Z3_ast expr, uint64_t offset, uint64_t length,
                           bool little_endian);
 }
+
+//
+// Extended C++ interface
+//
+
+/// Memory regions represent a consecutive range of allocated bytes in memory.
+/// We assume that there can only ever be a single allocation per address, so
+/// the regions do not overlap.
+struct MemoryRegion {
+  uint8_t *start, *end; // end is one past the last byte
+  Z3_ast *shadow;
+
+  bool operator<(const MemoryRegion &other) const { return end <= other.start; }
+};
+
+bool operator<(const MemoryRegion &r, const uint8_t *addr);
+bool operator<(const uint8_t *addr, const MemoryRegion &r);
+
+/// Return the MemoryRegion for the given address or a null pointer if it
+/// doesn't belong to any known region.
+const MemoryRegion *_sym_get_memory_region(const void *memory);
 
 #endif

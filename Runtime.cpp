@@ -23,19 +23,6 @@ namespace {
 
 constexpr int kMaxFunctionArguments = 256;
 
-/// Memory regions represent a consecutive range of allocated bytes in memory.
-/// We assume that there can only ever be a single allocation per address, so
-/// the regions do not overlap.
-struct MemoryRegion {
-  uint8_t *start, *end; // end is one past the last byte
-  Z3_ast *shadow;
-
-  bool operator<(const MemoryRegion &other) const { return end <= other.start; }
-};
-
-bool operator<(const MemoryRegion &r, uint8_t *addr) { return r.end <= addr; }
-bool operator<(uint8_t *addr, const MemoryRegion &r) { return addr < r.start; }
-
 #ifdef DEBUG_RUNTIME
 std::ostream &operator<<(std::ostream &out, const MemoryRegion &region) {
   out << "<" << P(region.start) << ", " << P(region.end) << ">";
@@ -93,11 +80,6 @@ void dump_known_regions() {
 
 } // namespace
 
-// The initializer for the interception framework is linked directly into the
-// binary. We call it from the run-time library's initialization routine to make
-// sure that everything is in place before the hooks are activated.
-extern "C" void _initialize_interception();
-
 void _sym_initialize(void) {
   if (g_initialized)
     return;
@@ -124,8 +106,6 @@ void _sym_initialize(void) {
       Z3_mk_int(g_context, 0, Z3_mk_bv_sort(g_context, 8 * sizeof(void *)));
   g_true = Z3_mk_true(g_context);
   g_false = Z3_mk_false(g_context);
-
-  _initialize_interception();
 }
 
 #define SYM_INITIALIZE_ARRAY(bits)                                             \
@@ -516,15 +496,15 @@ Z3_ast _sym_read_memory(uint8_t *addr, size_t length, bool little_endian) {
   dump_known_regions();
 #endif
 
-  auto region = g_memory_regions.find(addr);
+  auto region = _sym_get_memory_region(addr);
 
 #ifdef DEBUG_RUNTIME
-  if (region != g_memory_regions.end())
+  if (region)
     std::cout << "Found region " << *region << std::endl;
 #endif
 
-  assert((region != g_memory_regions.end()) && (region->start <= addr) &&
-         (addr + length <= region->end) && "Unknown memory region");
+  assert(region && (region->start <= addr) && (addr + length <= region->end) &&
+         "Unknown memory region");
 
   Z3_ast *shadow = &region->shadow[addr - region->start];
   Z3_ast expr = shadow[0];
@@ -549,15 +529,15 @@ void _sym_write_memory(uint8_t *addr, size_t length, Z3_ast expr,
   dump_known_regions();
 #endif
 
-  auto region = g_memory_regions.find(addr);
+  auto region = _sym_get_memory_region(addr);
 
 #ifdef DEBUG_RUNTIME
-  if (region != g_memory_regions.end())
+  if (region)
     std::cout << "Found region " << *region << std::endl;
 #endif
 
-  assert((region != g_memory_regions.end()) && (region->start <= addr) &&
-         (addr + length <= region->end) && "Unknown memory region");
+  assert(region && (region->start <= addr) && (addr + length <= region->end) &&
+         "Unknown memory region");
 
   Z3_ast *shadow = &region->shadow[addr - region->start];
   for (size_t i = 0; i < length; i++) {
@@ -568,17 +548,17 @@ void _sym_write_memory(uint8_t *addr, size_t length, Z3_ast expr,
   }
 }
 
-void _sym_memcpy(uint8_t *dest, uint8_t *src, size_t length) {
+void _sym_memcpy(uint8_t *dest, const uint8_t *src, size_t length) {
   assert_memory_region_invariant();
 
-  auto srcRegion = g_memory_regions.find(src);
-  assert((srcRegion != g_memory_regions.end()) &&
-         (src + length <= srcRegion->end) && "Unknown memory region");
+  auto srcRegion = _sym_get_memory_region(src);
+  assert(srcRegion && (src + length <= srcRegion->end) &&
+         "Unknown memory region");
   Z3_ast *srcShadow = &srcRegion->shadow[src - srcRegion->start];
 
-  auto destRegion = g_memory_regions.find(dest);
-  assert((destRegion != g_memory_regions.end()) &&
-         (dest + length <= destRegion->end) && "Unknown memory region");
+  auto destRegion = _sym_get_memory_region(dest);
+  assert(destRegion && (dest + length <= destRegion->end) &&
+         "Unknown memory region");
   Z3_ast *destShadow = &destRegion->shadow[dest - destRegion->start];
 
   memcpy(destShadow, srcShadow, length * sizeof(Z3_ast));
@@ -587,9 +567,8 @@ void _sym_memcpy(uint8_t *dest, uint8_t *src, size_t length) {
 void _sym_memset(uint8_t *memory, Z3_ast value, size_t length) {
   assert_memory_region_invariant();
 
-  auto region = g_memory_regions.find(memory);
-  assert((region != g_memory_regions.end()) &&
-         (memory + length <= region->end) && "Unknown memory region");
+  auto region = _sym_get_memory_region(memory);
+  assert(region && (memory + length <= region->end) && "Unknown memory region");
 
   Z3_ast *shadow = &region->shadow[memory - region->start];
   for (size_t index = 0; index < length; index++) {
@@ -619,4 +598,20 @@ Z3_ast _sym_build_extract(Z3_ast expr, uint64_t offset, uint64_t length,
   }
 
   return result;
+}
+
+bool operator<(const MemoryRegion &r, const uint8_t *addr) {
+  return r.end <= addr;
+}
+bool operator<(const uint8_t *addr, const MemoryRegion &r) {
+  return addr < r.start;
+}
+
+const MemoryRegion *_sym_get_memory_region(const void *memory) {
+  auto result =
+      g_memory_regions.find(reinterpret_cast<const uint8_t *>(memory));
+  if (result == g_memory_regions.end())
+    return nullptr;
+
+  return &*result;
 }
