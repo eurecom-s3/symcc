@@ -100,6 +100,7 @@ void _sym_initialize(void) {
 
   cfg = Z3_mk_config();
   Z3_set_param_value(cfg, "model", "true");
+  Z3_set_param_value(cfg, "timeout", "10000"); // milliseconds
   g_context = Z3_mk_context(cfg);
   Z3_del_config(cfg);
 
