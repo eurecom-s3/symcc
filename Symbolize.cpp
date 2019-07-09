@@ -865,10 +865,11 @@ bool SymbolizePass::doInitialization(Module &M) {
 
   // Redirect calls to external functions to the corresponding wrappers and
   // rename internal functions.
-  static const StringSet<> kFunctionsNoHook = {"printf", "err", "exit", "write",
-                                               "munmap",
-                                               // TODO
-                                               "cgc_rint", "cgc_pow", "cgc_log10", "__isoc99_sscanf", "strlen", "__errno_location", "memset", "select"};
+  static const StringSet<> kFunctionsNoHook = {
+      "printf", "err", "exit", "munmap",
+      // TODO
+      "cgc_rint", "cgc_pow", "cgc_log10", "__isoc99_sscanf", "strlen",
+      "__errno_location"};
   for (auto &function : M.functions()) {
     auto name = function.getName();
     if (kFunctionsNoHook.count(name) || name == "main" ||
