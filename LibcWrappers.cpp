@@ -54,6 +54,7 @@ ssize_t SYM(read)(int fildes, void *buf, size_t nbyte) {
   assert(region && (byteBuf + nbyte <= region->end) && "Unknown memory region");
   _sym_initialize_memory(byteBuf, region->shadow + (byteBuf - region->start),
                          nbyte);
+  _sym_set_return_expression(_sym_build_integer(result, sizeof(result) * 8));
   return result;
 }
 
