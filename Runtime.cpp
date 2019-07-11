@@ -148,6 +148,7 @@ uint32_t sym_make_symbolic(const char *name, uint32_t value, uint8_t bits) {
 Z3_ast _sym_build_null_pointer(void) { return g_null_pointer; }
 Z3_ast _sym_build_true(void) { return g_true; }
 Z3_ast _sym_build_false(void) { return g_false; }
+Z3_ast _sym_build_bool(bool value) { return value ? g_true : g_false; }
 
 Z3_ast _sym_build_add(Z3_ast a, Z3_ast b) {
   return Z3_mk_bvadd(g_context, a, b);

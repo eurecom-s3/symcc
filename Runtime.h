@@ -30,6 +30,7 @@ Z3_ast _sym_build_variable(const char *name, uint8_t bits);
 Z3_ast _sym_build_null_pointer();
 Z3_ast _sym_build_true();
 Z3_ast _sym_build_false();
+Z3_ast _sym_build_bool(bool value);
 
 /*
  * Arithmetic

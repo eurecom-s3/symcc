@@ -11,6 +11,7 @@
 #include <llvm/Pass.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
+#include <llvm/Transforms/Utils/BasicBlockUtils.h>
 #include <llvm/Transforms/Utils/ModuleUtils.h>
 #include <llvm/Transforms/Utils/ValueMapper.h>
 
@@ -49,6 +50,7 @@ private:
   Value *buildNullPointer{};
   Value *buildTrue{};
   Value *buildFalse{};
+  Value *buildBool{};
   Value *buildNeg{};
   Value *buildSExt{};
   Value *buildZExt{};
@@ -101,14 +103,25 @@ public:
   explicit Symbolizer(const SymbolizePass &symPass) : SP(symPass) {}
 
   /// Create an expression that represents the concrete value.
-  Value *createConstantExpression(Value *V, IRBuilder<> &IRB) {
-    // TODO switch on the type and create the correct expression
+  Value *createValueExpression(Value *V, IRBuilder<> &IRB) {
     auto valueType = V->getType();
 
     if (valueType->isIntegerTy()) {
+      // Special case: LLVM uses the type i1 to represent Boolean values, but
+      // for Z3 we have to create expressions of a separate sort.
+      if (valueType->getPrimitiveSizeInBits() == 1) {
+        return IRB.CreateCall(SP.buildBool, {V});
+      }
+
       return IRB.CreateCall(SP.buildInteger,
                             {IRB.CreateZExtOrBitCast(V, IRB.getInt64Ty()),
                              IRB.getInt8(valueType->getPrimitiveSizeInBits())});
+    }
+
+    if (valueType->isFloatingPointTy()) {
+      return IRB.CreateCall(SP.buildFloat,
+                            {IRB.CreateFPExt(V, IRB.getDoubleTy()),
+                             IRB.getInt1(valueType->isDoubleTy())});
     }
 
     if (valueType->isPointerTy()) {
@@ -161,29 +174,11 @@ public:
       return IRB.CreateCall(SP.buildNullPointer, {});
     }
 
-    if (auto C = dyn_cast<ConstantInt>(V)) {
-      // Special case: LLVM uses the type i1 to represent Boolean values, but
-      // for Z3 we have to create expressions of a separate sort.
-      if (C->getBitWidth() == 1) {
-        return IRB.CreateCall(C->isOne() ? SP.buildTrue : SP.buildFalse, {});
-      }
-
-      return IRB.CreateCall(
-          SP.buildInteger,
-          {IRB.CreateZExt(C, IRB.getInt64Ty()), IRB.getInt8(C->getBitWidth())});
-    }
-
-    if (auto F = dyn_cast<ConstantFP>(V)) {
-      return IRB.CreateCall(SP.buildFloat,
-                            {IRB.CreateFPExt(F, IRB.getDoubleTy()),
-                             IRB.getInt1(F->getType()->isDoubleTy())});
-    }
-
     if (auto A = dyn_cast<Argument>(V)) {
       if (A->getParent()->getName() == "main") {
         // We don't have symbolic parameters in main.
         // TODO fix when we have a symbolic libc
-        return createConstantExpression(A, IRB);
+        return createValueExpression(A, IRB);
       }
 
       return IRB.CreateCall(SP.getParameterExpression,
@@ -204,14 +199,14 @@ public:
                              ConstantInt::get(IRB.getInt8Ty(), SP.ptrBits)});
     }
 
-    if (isa<ConstantExpr>(V)) {
+    if (isa<Constant>(V)) {
       // This is a constant, so we can just create a constant expression from
       // the result of the computation. For now, just reuse the expression; it
       // would be more efficient to transform it into an instruction and only
       // reuse the value. However, in optimized builds the optimizer should take
       // care of the transformation automatically.
 
-      return createConstantExpression(V, IRB);
+      return createValueExpression(V, IRB);
     }
 
     DEBUG(errs() << "Unable to obtain a symbolic expression for " << *V
@@ -245,6 +240,105 @@ public:
                                      phi->getIncomingValue(incoming), blockIRB),
                                  block);
       }
+    }
+  }
+
+  /// Rewrite symbolic computation to only occur if some operand is symbolic.
+  ///
+  /// We don't want to build up formulas for symbolic computation if all
+  /// operands are concrete. Therefore, this function rewrites all places that
+  /// build up formulas (as recorded during the main pass) to skip formula
+  /// construction if all operands are concrete. Additionally, it inserts code
+  /// that constructs formulas for concrete operands if necessary.
+  ///
+  /// The basic idea is to transform code like this...
+  ///
+  ///   res_expr = call _sym_some_computation(expr1, expr2, ...)
+  ///   res      = some_computation(val1, val2, ...)
+  ///
+  /// ...into this:
+  ///
+  ///   start:
+  ///   expr1_symbolic = icmp ne 0, expr1
+  ///   ...
+  ///   some_symbolic = or expr1_symbolic, ...
+  ///   br some_symbolic, check_arg1, end
+  ///
+  ///   check_arg1:
+  ///   need_expr1 = icmp eq 0, expr1
+  ///   br need_expr1, create_expr1, check_arg2
+  ///
+  ///   create_expr1:
+  ///   new_expr1 = ... (based on val1)
+  ///   br check_arg2
+  ///
+  ///   check_arg2:
+  ///   good_expr1 = phi [expr1, check_arg1], [new_expr1, create_expr1]
+  ///   need_expr2 = ...
+  ///   ...
+  ///
+  ///   sym_computation:
+  ///   sym_expr = call _sym_some_computation(good_expr1, good_expr2, ...)
+  ///   br end
+  ///
+  ///   end:
+  ///   final_expr = phi [null, start], [sym_expr, sym_computation]
+  ///
+  /// The resulting code is much longer but avoids solver calls for all
+  /// operations without symbolic data.
+  void shortCircuitExpressionUses() {
+    for (auto computation : expressionUses) {
+      auto symbolicComputation =
+          cast<CallInst>(symbolicExpressions[computation]);
+      auto newSymbolicComputation =
+          cast<CallInst>(symbolicComputation->clone());
+
+      IRBuilder<> IRB(computation);
+      auto nullExpression = ConstantPointerNull::get(IRB.getInt8PtrTy());
+      auto someSymbolic =
+          IRB.CreateOr(IRB.CreateICmpNE(nullExpression,
+                                        symbolicComputation->getArgOperand(0)),
+                       IRB.CreateICmpNE(nullExpression,
+                                        symbolicComputation->getArgOperand(1)));
+      auto head = computation->getParent();
+      auto slowPath = SplitBlockAndInsertIfThen(someSymbolic, computation,
+                                                /* unreachable */ false);
+
+      for (unsigned arg = 0,
+                    argCount = symbolicComputation->getNumArgOperands();
+           arg < argCount; arg++) {
+        auto argCheckBlock = slowPath->getParent();
+
+        IRB.SetInsertPoint(slowPath);
+        auto needArgExpression = IRB.CreateICmpEQ(
+            nullExpression, symbolicComputation->getArgOperand(arg));
+        auto argExpressionBlock =
+            SplitBlockAndInsertIfThen(needArgExpression, slowPath,
+                                      /* unreachable */ false);
+
+        IRB.SetInsertPoint(argExpressionBlock);
+        auto newArgExpression =
+            createValueExpression(computation->getOperand(arg), IRB);
+
+        IRB.SetInsertPoint(slowPath);
+        auto argExpression = IRB.CreatePHI(IRB.getInt8PtrTy(), 2);
+        argExpression->addIncoming(symbolicComputation->getArgOperand(arg),
+                                   argCheckBlock);
+        argExpression->addIncoming(newArgExpression,
+                                   argExpressionBlock->getParent());
+        newSymbolicComputation->setArgOperand(arg, argExpression);
+      }
+
+      newSymbolicComputation->insertBefore(slowPath);
+
+      IRB.SetInsertPoint(computation);
+      auto finalExpression = IRB.CreatePHI(IRB.getInt8PtrTy(), 2);
+      finalExpression->addIncoming(ConstantPointerNull::get(IRB.getInt8PtrTy()),
+                                   head);
+      finalExpression->addIncoming(newSymbolicComputation,
+                                   slowPath->getParent());
+      symbolicComputation->replaceAllUsesWith(finalExpression);
+      symbolicComputation->eraseFromParent();
     }
   }
 
@@ -351,7 +445,7 @@ public:
       // The intrinsic returns an opaque pointer that should only be passed to
       // the stackrestore intrinsic later. We treat the pointer as a constant.
       IRBuilder<> IRB(I.getNextNode());
-      symbolicExpressions[&I] = createConstantExpression(&I, IRB);
+      symbolicExpressions[&I] = createValueExpression(&I, IRB);
       break;
     }
     case Intrinsic::stackrestore:
@@ -418,7 +512,7 @@ public:
            << I << '\n';
 
     IRBuilder<> IRB(I.getNextNode());
-    symbolicExpressions[&I] = createConstantExpression(&I, IRB);
+    symbolicExpressions[&I] = createValueExpression(&I, IRB);
   }
 
   //
@@ -434,6 +528,7 @@ public:
     symbolicExpressions[&I] = IRB.CreateCall(
         handler, {getOrCreateSymbolicExpression(I.getOperand(0), IRB),
                   getOrCreateSymbolicExpression(I.getOperand(1), IRB)});
+    expressionUses.push_back(&I);
   }
 
   void visitSelectInst(SelectInst &I) {
@@ -778,7 +873,7 @@ public:
       auto constraint = IRB.CreateCall(
           SP.comparisonHandlers[CmpInst::ICMP_NE],
           {conditionExpr,
-           createConstantExpression(currentCase->getCaseValue(), IRB)});
+           createValueExpression(currentCase->getCaseValue(), IRB)});
       ++currentCase;
 
       for (auto endCase = I.case_end(); currentCase != endCase; ++currentCase) {
@@ -787,8 +882,8 @@ public:
             {constraint,
              IRB.CreateCall(
                  SP.comparisonHandlers[CmpInst::ICMP_NE],
-                 {conditionExpr, createConstantExpression(
-                                     currentCase->getCaseValue(), IRB)})});
+                 {conditionExpr,
+                  createValueExpression(currentCase->getCaseValue(), IRB)})});
       }
 
       IRB.CreateCall(SP.pushPathConstraint, {constraint, IRB.getInt1(true)});
@@ -807,7 +902,7 @@ public:
       auto constraint = IRB.CreateCall(
           SP.comparisonHandlers[CmpInst::ICMP_EQ],
           {conditionExpr,
-           createConstantExpression(caseHandle.getCaseValue(), IRB)});
+           createValueExpression(caseHandle.getCaseValue(), IRB)});
       IRB.CreateCall(SP.pushPathConstraint, {constraint, IRB.getInt1(true)});
       IRB.CreateBr(finalDest);
     }
@@ -840,7 +935,19 @@ private:
   /// we only insert a dummy symbolic expression for each PHI node and fix it
   /// after all instructions have been processed.
   SmallVector<PHINode *, kExpectedMaxPHINodesPerFunction> phiNodes;
-}; // namespace
+
+  /// A record of expression uses that can be short-circuited.
+  ///
+  /// Most values in a program are concrete, even if they're not constant (in
+  /// which case we would know that they're concrete at compile time already).
+  /// There is no point in building up formulas if all values involved in a
+  /// computation are concrete, so we short-circuit those cases. Since this
+  /// process requires splitting basic blocks, we can't do it during the main
+  /// analysis phase (because InstVisitor gets out of step if we try).
+  /// Therefore, we keep a record of all the places that construct expressions
+  /// and insert the fast path later.
+  std::vector<Instruction *> expressionUses;
+};
 
 void addSymbolizePass(const PassManagerBuilder & /* unused */,
                       legacy::PassManagerBase &PM) {
@@ -891,6 +998,7 @@ bool SymbolizePass::doInitialization(Module &M) {
   buildNullPointer = M.getOrInsertFunction("_sym_build_null_pointer", ptrT);
   buildTrue = M.getOrInsertFunction("_sym_build_true", ptrT);
   buildFalse = M.getOrInsertFunction("_sym_build_false", ptrT);
+  buildBool = M.getOrInsertFunction("_sym_build_bool", ptrT, IRB.getInt1Ty());
   buildNeg = M.getOrInsertFunction("_sym_build_neg", ptrT, ptrT);
   buildSExt = M.getOrInsertFunction("_sym_build_sext", ptrT, ptrT, int8T);
   buildZExt = M.getOrInsertFunction("_sym_build_zext", ptrT, ptrT, int8T);
@@ -1054,6 +1162,7 @@ bool SymbolizePass::runOnFunction(Function &F) {
   // DEBUG(errs() << F << '\n');
   symbolizer.visit(F);
   symbolizer.finalizePHINodes();
+  symbolizer.shortCircuitExpressionUses();
   assert(!verifyFunction(F, &errs()) &&
          "SymbolizePass produced invalid bitcode");
 
