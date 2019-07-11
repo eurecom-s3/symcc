@@ -11,7 +11,7 @@
 #include <stdio.h>
 #include <stdint.h>
 
-int _sym_build_variable(const char*, int, uint8_t);
+int sym_make_symbolic(const char*, int, uint8_t);
 
 int foo(int a, int b) {
     // BITCODE-NOT: alloca
@@ -29,7 +29,7 @@ int foo(int a, int b) {
 }
 
 int main(int argc, char* argv[]) {
-    int x = _sym_build_variable("x", 5, 32);
+    int x = sym_make_symbolic("x", 5, 32);
     printf("%d\n", foo(x, 7));
     return 0;
 }

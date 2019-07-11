@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <stdint.h>
 
-int _sym_build_variable(const char*, int, uint8_t);
+int sym_make_symbolic(const char*, int, uint8_t);
 
 struct point {
     int x;
@@ -19,7 +19,7 @@ static struct point g_point = {1, 2};
 static struct point g_point_array[] = {{1, 2}, {3, 4}, {5, 6}};
 
 int main(int argc, char* argv[]) {
-    int x = _sym_build_variable("x", 5, 32);
+    int x = sym_make_symbolic("x", 5, 32);
     struct point p = {x, 17};
 
     printf("%s\n", (p.x < 100) ? "yes" : "no");

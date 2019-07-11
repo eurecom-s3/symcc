@@ -15,6 +15,9 @@ int main(int argc, char* argv[]) {
   if (nbytes != 1)
     return 1;
 
+  // CHECK: Trying to solve
+  // CHECK: Found diverging input
+  // CHECK: stdin0 -> #x61
   if (c == 'a')
     printf("Correct\n");
   else

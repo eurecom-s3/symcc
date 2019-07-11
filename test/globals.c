@@ -7,7 +7,7 @@
 #include <stdio.h>
 #include <stdint.h>
 
-int _sym_build_variable(const char*, int, uint8_t);
+int sym_make_symbolic(const char*, int, uint8_t);
 
 int g_increment = 17;
 int g_uninitialized;
@@ -43,7 +43,7 @@ void sum_ints(int x) {
 }
 
 int main(int argc, char* argv[]) {
-    int x = _sym_build_variable("x", 5, 32);
+    int x = sym_make_symbolic("x", 5, 32);
     printf("%d\n", increment(x));
     // CHECK: Trying to solve
     // CHECK: (bvadd #x{{0*}}11 x)

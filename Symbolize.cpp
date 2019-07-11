@@ -510,12 +510,12 @@ public:
 
     IRBuilder<> IRB(&I);
     auto targetName = callee ? callee->getName() : StringRef{};
-    bool isBuildVariable = (targetName == "_sym_build_variable");
+    bool isMakeSymbolic = (targetName == "sym_make_symbolic");
 
-    if (targetName.startswith("_sym_") && !isBuildVariable)
+    if (targetName.startswith("_sym_") && !isMakeSymbolic)
       return;
 
-    if (!isBuildVariable) {
+    if (!isMakeSymbolic) {
       for (Use &arg : I.args())
         IRB.CreateCall(
             SP.setParameterExpression,
@@ -873,7 +873,7 @@ bool SymbolizePass::doInitialization(Module &M) {
   for (auto &function : M.functions()) {
     auto name = function.getName();
     if (kFunctionsNoHook.count(name) || name == "main" ||
-        name.startswith("llvm.") || name == "_sym_build_variable")
+        name.startswith("llvm.") || name == "sym_make_symbolic")
       continue;
 
     function.setName("__symbolized_" + name);

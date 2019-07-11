@@ -3,12 +3,12 @@
 #include <stdio.h>
 #include <stdint.h>
 
-int _sym_build_variable(const char*, int, uint8_t);
+int sym_make_symbolic(const char*, int, uint8_t);
 
 float g_value = 0.1234;
 
 int main(int argc, char* argv[]) {
-    int x = _sym_build_variable("x", 5, 32);
+    int x = sym_make_symbolic("x", 5, 32);
 
     g_value += x;
     printf("%f\n", g_value);

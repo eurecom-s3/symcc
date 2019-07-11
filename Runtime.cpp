@@ -127,7 +127,12 @@ Z3_ast _sym_build_float(double value, int is_double) {
                                             : Z3_mk_fpa_sort_single(g_context));
 }
 
-uint32_t _sym_build_variable(const char *name, uint32_t value, uint8_t bits) {
+Z3_ast _sym_build_variable(const char *name, uint8_t bits) {
+  Z3_symbol sym = Z3_mk_string_symbol(g_context, name);
+  return Z3_mk_const(g_context, sym, Z3_mk_bv_sort(g_context, bits));
+}
+
+uint32_t sym_make_symbolic(const char *name, uint32_t value, uint8_t bits) {
   /* TODO find a way to make this more generic, not just for uint32_t */
 
   /* This function is the connection between the target program and our
@@ -136,8 +141,7 @@ uint32_t _sym_build_variable(const char *name, uint32_t value, uint8_t bits) {
      the instrumentation knows to treat this function specially and check the
      returned expression even though it's an external call. */
 
-  Z3_symbol sym = Z3_mk_string_symbol(g_context, name);
-  g_return_value = Z3_mk_const(g_context, sym, Z3_mk_bv_sort(g_context, bits));
+  g_return_value = _sym_build_variable(name, bits);
   return value;
 }
 

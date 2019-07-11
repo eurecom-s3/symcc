@@ -17,11 +17,16 @@ extern "C" {
 void _sym_initialize(void);
 
 /*
+ * Interface for programs
+ */
+uint32_t sym_make_symbolic(const char *name, uint32_t value, uint8_t bits);
+
+/*
  * Construction of simple values
  */
 Z3_ast _sym_build_integer(uint64_t value, uint8_t bits);
 Z3_ast _sym_build_float(double value, int is_double);
-uint32_t _sym_build_variable(const char *name, uint32_t value, uint8_t bits);
+Z3_ast _sym_build_variable(const char *name, uint8_t bits);
 Z3_ast _sym_build_null_pointer();
 Z3_ast _sym_build_true();
 Z3_ast _sym_build_false();

@@ -1,6 +1,8 @@
 #include <cassert>
 #include <cstdlib>
 #include <cstring>
+#include <string>
+#include <vector>
 
 #include <sys/mman.h>
 #include <unistd.h>
@@ -48,12 +50,27 @@ char *SYM(getenv)(const char *name) {
 }
 
 ssize_t SYM(read)(int fildes, void *buf, size_t nbyte) {
+  static std::vector<Z3_ast> stdinBytes;
+
   auto result = read(fildes, buf, nbyte);
   auto region = _sym_get_memory_region(buf);
   auto byteBuf = static_cast<uint8_t *>(buf);
   assert(region && (byteBuf + nbyte <= region->end) && "Unknown memory region");
-  _sym_initialize_memory(byteBuf, region->shadow + (byteBuf - region->start),
-                         nbyte);
+
+  auto shadowStart = region->shadow + (byteBuf - region->start);
+  if (fildes == 0) {
+    // Reading from standard input. We treat everything as unconstrained
+    // symbolic data.
+    for (int index = 0; index < result; index++) {
+      auto varName = "stdin" + std::to_string(stdinBytes.size());
+      auto var = _sym_build_variable(varName.c_str(), 8);
+      stdinBytes.push_back(var);
+      shadowStart[index] = var;
+    }
+  } else {
+    _sym_initialize_memory(byteBuf, shadowStart, nbyte);
+  }
+
   _sym_set_return_expression(_sym_build_integer(result, sizeof(result) * 8));
   return result;
 }

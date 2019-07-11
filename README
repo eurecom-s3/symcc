@@ -27,7 +27,7 @@ To try the compiler, take some simple C code like the following:
 #include <stdio.h>
 #include <stdint.h>
 
-int _sym_build_variable(const char*, int, uint8_t);
+int sym_make_symbolic(const char*, int, uint8_t);
 
 int foo(int a, int b) {
     if (2 * a < b)
@@ -39,7 +39,7 @@ int foo(int a, int b) {
 }
 
 int main(int argc, char* argv[]) {
-    int x = _sym_build_variable("x", 5, 32);
+    int x = sym_make_symbolic("x", 5, 32);
     printf("%d\n", foo(x, 7));
     return 0;
 }
@@ -55,4 +55,6 @@ $ ./test
 
 The program will execute the same computations as the uninstrumented version,
 but additionally the injected code will track computations symbolically and
-attempt to compute diverging inputs at each branch point.
+attempt to compute diverging inputs at each branch point. Note that, instead of
+calling "sym_make_symbolic", you can also read from standard input; the data
+will receive the same symbolic treatment.
