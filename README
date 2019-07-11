@@ -45,12 +45,10 @@ int main(int argc, char* argv[]) {
 }
 
 Save the code as "test.c". To compile it with symbolic execution built in, we
-need to load the compiler pass and link the object file against the symbolic
-runtime:
+call "symcc", a wrapper around clang that loads our compiler pass and links the
+program against the support library:
 
-$ clang -O3 -Xclang -load -Xclang ./libSymbolize.so -L. -lSymRuntime \
-    test.c -o test
-$ export LD_LIBRARY_PATH="$(pwd)"
+$ ./symcc test.c -o test
 $ ./test
 
 The program will execute the same computations as the uninstrumented version,
