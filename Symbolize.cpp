@@ -287,58 +287,71 @@ public:
   /// The resulting code is much longer but avoids solver calls for all
   /// operations without symbolic data.
   void shortCircuitExpressionUses() {
-    for (auto computation : expressionUses) {
-      auto symbolicComputation =
-          cast<CallInst>(symbolicExpressions[computation]);
-      auto newSymbolicComputation =
-          cast<CallInst>(symbolicComputation->clone());
+    for (const auto &[computation, inputs] : expressionUses) {
+      assert(!inputs.empty() && "Symbolic computation has no inputs");
 
       IRBuilder<> IRB(computation);
+      auto newSymbolicComputation = computation->clone();
+
+      // Build the check whether any input expression is non-null (i.e., there
+      // is a symbolic input).
       auto nullExpression = ConstantPointerNull::get(IRB.getInt8PtrTy());
       auto someSymbolic =
-          IRB.CreateOr(IRB.CreateICmpNE(nullExpression,
-                                        symbolicComputation->getArgOperand(0)),
-                       IRB.CreateICmpNE(nullExpression,
-                                        symbolicComputation->getArgOperand(1)));
+          IRB.CreateICmpNE(nullExpression, inputs[0].expression);
+      for (unsigned argIndex = 1; argIndex < inputs.size(); argIndex++) {
+        someSymbolic = IRB.CreateOr(
+            someSymbolic,
+            IRB.CreateICmpNE(nullExpression, inputs[argIndex].expression));
+      }
+
+      // The main branch: if we don't enter here, we can short-circuit the
+      // symbolic computation. Otherwise, we need to check all input expressions
+      // and create an output expression.
       auto head = computation->getParent();
       auto slowPath = SplitBlockAndInsertIfThen(someSymbolic, computation,
                                                 /* unreachable */ false);
 
-      for (unsigned arg = 0,
-                    argCount = symbolicComputation->getNumArgOperands();
-           arg < argCount; arg++) {
+      // In the slow case, we need to check each input expression for null
+      // (i.e., the input is concrete) and create an expression from the
+      // concrete value if necessary.
+      for (const auto &argument : inputs) {
         auto argCheckBlock = slowPath->getParent();
 
         IRB.SetInsertPoint(slowPath);
-        auto needArgExpression = IRB.CreateICmpEQ(
-            nullExpression, symbolicComputation->getArgOperand(arg));
+        auto needArgExpression =
+            IRB.CreateICmpEQ(nullExpression, argument.expression);
         auto argExpressionBlock =
             SplitBlockAndInsertIfThen(needArgExpression, slowPath,
                                       /* unreachable */ false);
 
         IRB.SetInsertPoint(argExpressionBlock);
         auto newArgExpression =
-            createValueExpression(computation->getOperand(arg), IRB);
+            createValueExpression(argument.concreteValue, IRB);
 
         IRB.SetInsertPoint(slowPath);
         auto argExpression = IRB.CreatePHI(IRB.getInt8PtrTy(), 2);
-        argExpression->addIncoming(symbolicComputation->getArgOperand(arg),
-                                   argCheckBlock);
+        argExpression->addIncoming(argument.expression, argCheckBlock);
         argExpression->addIncoming(newArgExpression,
                                    argExpressionBlock->getParent());
-        newSymbolicComputation->setArgOperand(arg, argExpression);
+        newSymbolicComputation->replaceUsesOfWith(argument.expression,
+                                                  argExpression);
       }
 
+      // Now that all input expressions are available, we can insert the
+      // construction of the result formula.
       newSymbolicComputation->insertBefore(slowPath);
 
+      // Finally, the overall result is null if we've taken the fast path and
+      // the symbolic expression computed above if short-circuiting wasn't
+      // possible.
       IRB.SetInsertPoint(computation);
       auto finalExpression = IRB.CreatePHI(IRB.getInt8PtrTy(), 2);
       finalExpression->addIncoming(ConstantPointerNull::get(IRB.getInt8PtrTy()),
                                    head);
       finalExpression->addIncoming(newSymbolicComputation,
                                    slowPath->getParent());
-      symbolicComputation->replaceAllUsesWith(finalExpression);
-      symbolicComputation->eraseFromParent();
+      computation->replaceAllUsesWith(finalExpression);
+      computation->eraseFromParent();
     }
   }
 
@@ -525,10 +538,14 @@ public:
     IRBuilder<> IRB(&I);
     Value *handler = SP.binaryOperatorHandlers.at(I.getOpcode());
     assert(handler && "Unable to handle binary operator");
-    symbolicExpressions[&I] = IRB.CreateCall(
-        handler, {getOrCreateSymbolicExpression(I.getOperand(0), IRB),
-                  getOrCreateSymbolicExpression(I.getOperand(1), IRB)});
-    expressionUses.push_back(&I);
+    Input first = {I.getOperand(0),
+                   getOrCreateSymbolicExpression(I.getOperand(0), IRB)},
+          second = {I.getOperand(1),
+                    getOrCreateSymbolicExpression(I.getOperand(1), IRB)};
+    auto symbolicComputation =
+        IRB.CreateCall(handler, {first.expression, second.expression});
+    expressionUses.push_back({symbolicComputation, {first, second}});
+    symbolicExpressions[&I] = symbolicComputation;
   }
 
   void visitSelectInst(SelectInst &I) {
@@ -918,6 +935,16 @@ public:
 
 private:
   static constexpr unsigned kExpectedMaxPHINodesPerFunction = 16;
+  static constexpr unsigned kExpectedSymbolicArgumentsPerComputation = 2;
+
+  struct Input {
+    Value *concreteValue, *expression;
+  };
+
+  struct SymbolicComputation {
+    Instruction *instruction;
+    SmallVector<Input, kExpectedSymbolicArgumentsPerComputation> inputs;
+  };
 
   const SymbolizePass &SP;
 
@@ -946,7 +973,7 @@ private:
   /// analysis phase (because InstVisitor gets out of step if we try).
   /// Therefore, we keep a record of all the places that construct expressions
   /// and insert the fast path later.
-  std::vector<Instruction *> expressionUses;
+  std::vector<SymbolicComputation> expressionUses;
 };
 
 void addSymbolizePass(const PassManagerBuilder & /* unused */,
