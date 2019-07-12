@@ -171,77 +171,78 @@ public:
   /// The resulting code is much longer but avoids solver calls for all
   /// operations without symbolic data.
   void shortCircuitExpressionUses() {
-    for (const auto &[computation, inputs] : expressionUses) {
-      assert(!inputs.empty() && "Symbolic computation has no inputs");
+    for (const auto &symbolicComputation : expressionUses) {
+      assert(!symbolicComputation.inputs.empty() &&
+             "Symbolic computation has no inputs");
 
-      IRBuilder<> IRB(computation);
-      auto newSymbolicComputation = computation->clone();
+      IRBuilder<> IRB(symbolicComputation.firstInstruction);
 
       // Build the check whether any input expression is non-null (i.e., there
       // is a symbolic input).
       auto nullExpression = ConstantPointerNull::get(IRB.getInt8PtrTy());
       auto someSymbolic = IRB.CreateICmpNE(
-          nullExpression, computation->getOperand(inputs[0].operandIndex));
-      for (unsigned argIndex = 1; argIndex < inputs.size(); argIndex++) {
+          nullExpression, symbolicComputation.inputs[0].getSymbolicOperand());
+      for (unsigned argIndex = 1; argIndex < symbolicComputation.inputs.size();
+           argIndex++) {
         someSymbolic = IRB.CreateOr(
-            someSymbolic, IRB.CreateICmpNE(nullExpression,
-                                           computation->getOperand(
-                                               inputs[argIndex].operandIndex)));
+            someSymbolic,
+            IRB.CreateICmpNE(
+                nullExpression,
+                symbolicComputation.inputs[argIndex].getSymbolicOperand()));
       }
 
       // The main branch: if we don't enter here, we can short-circuit the
       // symbolic computation. Otherwise, we need to check all input expressions
       // and create an output expression.
-      auto head = computation->getParent();
-      auto slowPath = SplitBlockAndInsertIfThen(someSymbolic, computation,
-                                                /* unreachable */ false);
+      auto head = symbolicComputation.firstInstruction->getParent();
+      auto slowPath = SplitBlock(head, symbolicComputation.firstInstruction);
+      auto tail = SplitBlock(
+          slowPath, symbolicComputation.lastInstruction->getNextNode());
+      // TODO invert condition
+      ReplaceInstWithInst(head->getTerminator(),
+                          BranchInst::Create(slowPath, tail, someSymbolic));
 
       // In the slow case, we need to check each input expression for null
       // (i.e., the input is concrete) and create an expression from the
       // concrete value if necessary.
-      for (const auto &argument : inputs) {
-        auto originalArgExpression =
-            computation->getOperand(argument.operandIndex);
-        auto argCheckBlock = slowPath->getParent();
+      for (const auto &argument : symbolicComputation.inputs) {
+        auto originalArgExpression = argument.getSymbolicOperand();
+        auto argCheckBlock = symbolicComputation.firstInstruction->getParent();
 
-        IRB.SetInsertPoint(slowPath);
+        IRB.SetInsertPoint(symbolicComputation.firstInstruction);
         auto needArgExpression =
             IRB.CreateICmpEQ(nullExpression, originalArgExpression);
-        auto argExpressionBlock =
-            SplitBlockAndInsertIfThen(needArgExpression, slowPath,
-                                      /* unreachable */ false);
+        auto argExpressionBlock = SplitBlockAndInsertIfThen(
+            needArgExpression, symbolicComputation.firstInstruction,
+            /* unreachable */ false);
 
         IRB.SetInsertPoint(argExpressionBlock);
         auto newArgExpression =
             createValueExpression(argument.concreteValue, IRB);
 
-        IRB.SetInsertPoint(slowPath);
+        IRB.SetInsertPoint(symbolicComputation.firstInstruction);
         auto argExpression = IRB.CreatePHI(IRB.getInt8PtrTy(), 2);
         argExpression->addIncoming(originalArgExpression, argCheckBlock);
         argExpression->addIncoming(newArgExpression,
                                    argExpressionBlock->getParent());
-        newSymbolicComputation->replaceUsesOfWith(originalArgExpression,
-                                                  argExpression);
+        argument.user->replaceUsesOfWith(originalArgExpression, argExpression);
       }
-
-      // Now that all input expressions are available, we can insert the
-      // construction of the result formula.
-      newSymbolicComputation->insertBefore(slowPath);
 
       // Finally, the overall result (if the computation produces one) is null
       // if we've taken the fast path and the symbolic expression computed above
       // if short-circuiting wasn't possible.
-      if (!computation->use_empty()) {
-        IRB.SetInsertPoint(computation);
+      if (!symbolicComputation.lastInstruction->use_empty()) {
+        IRB.SetInsertPoint(&tail->front());
         auto finalExpression = IRB.CreatePHI(IRB.getInt8PtrTy(), 2);
+        symbolicComputation.lastInstruction->replaceAllUsesWith(
+            finalExpression);
         finalExpression->addIncoming(
             ConstantPointerNull::get(IRB.getInt8PtrTy()), head);
-        finalExpression->addIncoming(newSymbolicComputation,
-                                     slowPath->getParent());
-        computation->replaceAllUsesWith(finalExpression);
+        finalExpression->addIncoming(
+            symbolicComputation.lastInstruction,
+            symbolicComputation.lastInstruction->getParent());
       }
 
-      computation->eraseFromParent();
     }
   }
 
@@ -431,7 +432,7 @@ public:
     auto runtimeCall =
         buildRuntimeCall(IRB, handler, {I.getOperand(0), I.getOperand(1)});
     expressionUses.push_back(runtimeCall);
-    symbolicExpressions[&I] = runtimeCall.instruction;
+    symbolicExpressions[&I] = runtimeCall.lastInstruction;
   }
 
   void visitSelectInst(SelectInst &I) {
@@ -457,7 +458,7 @@ public:
     assert(handler && "Unable to handle icmp/fcmp variant");
     auto runtimeCall =
         buildRuntimeCall(IRB, handler, {I.getOperand(0), I.getOperand(1)});
-    symbolicExpressions[&I] = runtimeCall.instruction;
+    symbolicExpressions[&I] = runtimeCall.lastInstruction;
     expressionUses.push_back(runtimeCall);
   }
 
@@ -828,15 +829,20 @@ private:
   struct Input {
     Value *concreteValue;
     unsigned operandIndex;
+    Instruction *user;
+
+    Value *getSymbolicOperand() const { return user->getOperand(operandIndex); }
   };
 
   /// A symbolic computation with its inputs.
   struct SymbolicComputation {
-    Instruction *instruction;
+    Instruction *firstInstruction, *lastInstruction;
     SmallVector<Input, kExpectedSymbolicArgumentsPerComputation> inputs;
 
-    SymbolicComputation(Instruction *inst, ArrayRef<Input> in)
-        : instruction(inst), inputs(in.begin(), in.end()) {}
+    SymbolicComputation(Instruction *first, Instruction *last,
+                        ArrayRef<Input> in)
+        : firstInstruction(first), lastInstruction(last),
+          inputs(in.begin(), in.end()) {}
   };
 
   /// Create an expression that represents the concrete value.
@@ -962,13 +968,14 @@ private:
     for (auto arg : args) {
       symbolicArgs.push_back(getOrCreateSymbolicExpression(arg, IRB));
     }
+    auto call = IRB.CreateCall(function, symbolicArgs);
 
     std::vector<Input> inputs;
     for (unsigned i = 0; i < args.size(); i++) {
-      inputs.push_back({args[i], i});
+      inputs.push_back({args[i], i, call});
     }
 
-    return {IRB.CreateCall(function, symbolicArgs), inputs};
+    return SymbolicComputation(call, call, inputs);
   }
 
   const SymbolizePass &SP;
@@ -1068,7 +1075,7 @@ bool SymbolizePass::doInitialization(Module &M) {
   buildFloatToUnsignedInt = M.getOrInsertFunction(
       "_sym_build_float_to_unsigned_integer", ptrT, ptrT, int8T);
   buildFloatAbs = M.getOrInsertFunction("_sym_build_fp_abs", ptrT, ptrT);
-  pushPathConstraint = M.getOrInsertFunction("_sym_push_path_constraint", ptrT,
+  pushPathConstraint = M.getOrInsertFunction("_sym_push_path_constraint", voidT,
                                              ptrT, IRB.getInt1Ty());
 
   setParameterExpression = M.getOrInsertFunction(
