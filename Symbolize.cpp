@@ -102,122 +102,6 @@ class Symbolizer : public InstVisitor<Symbolizer> {
 public:
   explicit Symbolizer(const SymbolizePass &symPass) : SP(symPass) {}
 
-  /// Create an expression that represents the concrete value.
-  Value *createValueExpression(Value *V, IRBuilder<> &IRB) {
-    auto valueType = V->getType();
-
-    if (valueType->isIntegerTy()) {
-      // Special case: LLVM uses the type i1 to represent Boolean values, but
-      // for Z3 we have to create expressions of a separate sort.
-      if (valueType->getPrimitiveSizeInBits() == 1) {
-        return IRB.CreateCall(SP.buildBool, {V});
-      }
-
-      return IRB.CreateCall(SP.buildInteger,
-                            {IRB.CreateZExtOrBitCast(V, IRB.getInt64Ty()),
-                             IRB.getInt8(valueType->getPrimitiveSizeInBits())});
-    }
-
-    if (valueType->isFloatingPointTy()) {
-      return IRB.CreateCall(SP.buildFloat,
-                            {IRB.CreateFPExt(V, IRB.getDoubleTy()),
-                             IRB.getInt1(valueType->isDoubleTy())});
-    }
-
-    if (valueType->isPointerTy()) {
-      return IRB.CreateCall(
-          SP.buildInteger,
-          {IRB.CreatePtrToInt(V, IRB.getInt64Ty()), IRB.getInt8(SP.ptrBits)});
-    }
-
-    if (valueType->isStructTy()) {
-      // In unoptimized code we may see structures in SSA registers. What we
-      // want is a single bit-vector expression describing their contents, but
-      // unfortunately we can't take the address of a register. We fix the
-      // problem with a hack: we write the register to memory and initialize the
-      // expression from there.
-      //
-      // An alternative would be to change the representation of structures in
-      // SSA registers to "shadow structures" that contain one expression per
-      // member. However, this would put an additional burden on the handling of
-      // cast instructions, because expressions would have to be converted
-      // between different representations according to the type.
-
-      auto memory = IRB.CreateAlloca(V->getType());
-      IRB.CreateStore(V, memory);
-      return IRB.CreateCall(
-          SP.readMemory,
-          {IRB.CreatePtrToInt(memory, SP.intPtrType),
-           ConstantInt::get(SP.intPtrType,
-                            SP.dataLayout->getTypeStoreSize(V->getType())),
-           IRB.getInt8(0)});
-    }
-
-    llvm_unreachable("Unhandled type for constant expression");
-  }
-
-  /// Load or create the symbolic expression for a value.
-  Value *getOrCreateSymbolicExpression(Value *V, IRBuilder<> &IRB) {
-    if (auto exprIt = symbolicExpressions.find(V);
-        exprIt != symbolicExpressions.end()) {
-      return exprIt->second;
-    }
-
-    // Constants and arguments may be used in multiple places throughout a
-    // function. Ideally, we'd make sure that in such cases the symbolic
-    // expression is generated as early as necessary but no earlier. This is
-    // complicated by the requirement to generate symbolic expressions in the
-    // right order whenever they depend on each other. For now, we just recreate
-    // such expressions every time, i.e., we don't cache them.
-
-    if (isa<ConstantPointerNull>(V)) {
-      return IRB.CreateCall(SP.buildNullPointer, {});
-    }
-
-    if (auto A = dyn_cast<Argument>(V)) {
-      if (A->getParent()->getName() == "main") {
-        // We don't have symbolic parameters in main.
-        // TODO fix when we have a symbolic libc
-        return createValueExpression(A, IRB);
-      }
-
-      return IRB.CreateCall(SP.getParameterExpression,
-                            ConstantInt::get(IRB.getInt8Ty(), A->getArgNo()));
-    }
-
-    if (auto gep = dyn_cast<GEPOperator>(V)) {
-      return handleGEPOperator(*gep, IRB);
-    }
-
-    if (auto bc = dyn_cast<BitCastOperator>(V)) {
-      return handleBitCastOperator(*bc, IRB);
-    }
-
-    if (auto gv = dyn_cast<GlobalValue>(V)) {
-      return IRB.CreateCall(SP.buildInteger,
-                            {IRB.CreatePtrToInt(gv, SP.intPtrType),
-                             ConstantInt::get(IRB.getInt8Ty(), SP.ptrBits)});
-    }
-
-    if (isa<Constant>(V)) {
-      // This is a constant, so we can just create a constant expression from
-      // the result of the computation. For now, just reuse the expression; it
-      // would be more efficient to transform it into an instruction and only
-      // reuse the value. However, in optimized builds the optimizer should take
-      // care of the transformation automatically.
-
-      return createValueExpression(V, IRB);
-    }
-
-    DEBUG(errs() << "Unable to obtain a symbolic expression for " << *V
-                 << '\n');
-    llvm_unreachable("No symbolic expression for value");
-  }
-
-  bool isLittleEndian(Type *type) {
-    return (!type->isAggregateType() && SP.dataLayout->isLittleEndian());
-  }
-
   /// Finish the processing of PHI nodes.
   ///
   /// This assumes that there is a dummy PHI node for each such instruction in
@@ -296,12 +180,13 @@ public:
       // Build the check whether any input expression is non-null (i.e., there
       // is a symbolic input).
       auto nullExpression = ConstantPointerNull::get(IRB.getInt8PtrTy());
-      auto someSymbolic =
-          IRB.CreateICmpNE(nullExpression, inputs[0].expression);
+      auto someSymbolic = IRB.CreateICmpNE(
+          nullExpression, computation->getOperand(inputs[0].operandIndex));
       for (unsigned argIndex = 1; argIndex < inputs.size(); argIndex++) {
         someSymbolic = IRB.CreateOr(
-            someSymbolic,
-            IRB.CreateICmpNE(nullExpression, inputs[argIndex].expression));
+            someSymbolic, IRB.CreateICmpNE(nullExpression,
+                                           computation->getOperand(
+                                               inputs[argIndex].operandIndex)));
       }
 
       // The main branch: if we don't enter here, we can short-circuit the
@@ -315,11 +200,13 @@ public:
       // (i.e., the input is concrete) and create an expression from the
       // concrete value if necessary.
       for (const auto &argument : inputs) {
+        auto originalArgExpression =
+            computation->getOperand(argument.operandIndex);
         auto argCheckBlock = slowPath->getParent();
 
         IRB.SetInsertPoint(slowPath);
         auto needArgExpression =
-            IRB.CreateICmpEQ(nullExpression, argument.expression);
+            IRB.CreateICmpEQ(nullExpression, originalArgExpression);
         auto argExpressionBlock =
             SplitBlockAndInsertIfThen(needArgExpression, slowPath,
                                       /* unreachable */ false);
@@ -330,10 +217,10 @@ public:
 
         IRB.SetInsertPoint(slowPath);
         auto argExpression = IRB.CreatePHI(IRB.getInt8PtrTy(), 2);
-        argExpression->addIncoming(argument.expression, argCheckBlock);
+        argExpression->addIncoming(originalArgExpression, argCheckBlock);
         argExpression->addIncoming(newArgExpression,
                                    argExpressionBlock->getParent());
-        newSymbolicComputation->replaceUsesOfWith(argument.expression,
+        newSymbolicComputation->replaceUsesOfWith(originalArgExpression,
                                                   argExpression);
       }
 
@@ -341,16 +228,19 @@ public:
       // construction of the result formula.
       newSymbolicComputation->insertBefore(slowPath);
 
-      // Finally, the overall result is null if we've taken the fast path and
-      // the symbolic expression computed above if short-circuiting wasn't
-      // possible.
-      IRB.SetInsertPoint(computation);
-      auto finalExpression = IRB.CreatePHI(IRB.getInt8PtrTy(), 2);
-      finalExpression->addIncoming(ConstantPointerNull::get(IRB.getInt8PtrTy()),
-                                   head);
-      finalExpression->addIncoming(newSymbolicComputation,
-                                   slowPath->getParent());
-      computation->replaceAllUsesWith(finalExpression);
+      // Finally, the overall result (if the computation produces one) is null
+      // if we've taken the fast path and the symbolic expression computed above
+      // if short-circuiting wasn't possible.
+      if (!computation->use_empty()) {
+        IRB.SetInsertPoint(computation);
+        auto finalExpression = IRB.CreatePHI(IRB.getInt8PtrTy(), 2);
+        finalExpression->addIncoming(
+            ConstantPointerNull::get(IRB.getInt8PtrTy()), head);
+        finalExpression->addIncoming(newSymbolicComputation,
+                                     slowPath->getParent());
+        computation->replaceAllUsesWith(finalExpression);
+      }
+
       computation->eraseFromParent();
     }
   }
@@ -538,14 +428,10 @@ public:
     IRBuilder<> IRB(&I);
     Value *handler = SP.binaryOperatorHandlers.at(I.getOpcode());
     assert(handler && "Unable to handle binary operator");
-    Input first = {I.getOperand(0),
-                   getOrCreateSymbolicExpression(I.getOperand(0), IRB)},
-          second = {I.getOperand(1),
-                    getOrCreateSymbolicExpression(I.getOperand(1), IRB)};
-    auto symbolicComputation =
-        IRB.CreateCall(handler, {first.expression, second.expression});
-    expressionUses.push_back({symbolicComputation, {first, second}});
-    symbolicExpressions[&I] = symbolicComputation;
+    auto runtimeCall =
+        buildRuntimeCall(IRB, handler, {I.getOperand(0), I.getOperand(1)});
+    expressionUses.push_back(runtimeCall);
+    symbolicExpressions[&I] = runtimeCall.instruction;
   }
 
   void visitSelectInst(SelectInst &I) {
@@ -569,14 +455,10 @@ public:
     IRBuilder<> IRB(&I);
     Value *handler = SP.comparisonHandlers.at(I.getPredicate());
     assert(handler && "Unable to handle icmp/fcmp variant");
-    Input first = {I.getOperand(0),
-                   getOrCreateSymbolicExpression(I.getOperand(0), IRB)};
-    Input second = {I.getOperand(1),
-                    getOrCreateSymbolicExpression(I.getOperand(1), IRB)};
-    auto symbolicComparison =
-        IRB.CreateCall(handler, {first.expression, second.expression});
-    symbolicExpressions[&I] = symbolicComparison;
-    expressionUses.push_back({symbolicComparison, {first, second}});
+    auto runtimeCall =
+        buildRuntimeCall(IRB, handler, {I.getOperand(0), I.getOperand(1)});
+    symbolicExpressions[&I] = runtimeCall.instruction;
+    expressionUses.push_back(runtimeCall);
   }
 
   void visitReturnInst(ReturnInst &I) {
@@ -942,14 +824,152 @@ private:
   static constexpr unsigned kExpectedMaxPHINodesPerFunction = 16;
   static constexpr unsigned kExpectedSymbolicArgumentsPerComputation = 2;
 
+  /// A symbolic input.
   struct Input {
-    Value *concreteValue, *expression;
+    Value *concreteValue;
+    unsigned operandIndex;
   };
 
+  /// A symbolic computation with its inputs.
   struct SymbolicComputation {
     Instruction *instruction;
     SmallVector<Input, kExpectedSymbolicArgumentsPerComputation> inputs;
+
+    SymbolicComputation(Instruction *inst, ArrayRef<Input> in)
+        : instruction(inst), inputs(in.begin(), in.end()) {}
   };
+
+  /// Create an expression that represents the concrete value.
+  Value *createValueExpression(Value *V, IRBuilder<> &IRB) {
+    auto valueType = V->getType();
+
+    if (valueType->isIntegerTy()) {
+      // Special case: LLVM uses the type i1 to represent Boolean values, but
+      // for Z3 we have to create expressions of a separate sort.
+      if (valueType->getPrimitiveSizeInBits() == 1) {
+        return IRB.CreateCall(SP.buildBool, {V});
+      }
+
+      return IRB.CreateCall(SP.buildInteger,
+                            {IRB.CreateZExtOrBitCast(V, IRB.getInt64Ty()),
+                             IRB.getInt8(valueType->getPrimitiveSizeInBits())});
+    }
+
+    if (valueType->isFloatingPointTy()) {
+      return IRB.CreateCall(SP.buildFloat,
+                            {IRB.CreateFPExt(V, IRB.getDoubleTy()),
+                             IRB.getInt1(valueType->isDoubleTy())});
+    }
+
+    if (valueType->isPointerTy()) {
+      return IRB.CreateCall(
+          SP.buildInteger,
+          {IRB.CreatePtrToInt(V, IRB.getInt64Ty()), IRB.getInt8(SP.ptrBits)});
+    }
+
+    if (valueType->isStructTy()) {
+      // In unoptimized code we may see structures in SSA registers. What we
+      // want is a single bit-vector expression describing their contents, but
+      // unfortunately we can't take the address of a register. We fix the
+      // problem with a hack: we write the register to memory and initialize the
+      // expression from there.
+      //
+      // An alternative would be to change the representation of structures in
+      // SSA registers to "shadow structures" that contain one expression per
+      // member. However, this would put an additional burden on the handling of
+      // cast instructions, because expressions would have to be converted
+      // between different representations according to the type.
+
+      auto memory = IRB.CreateAlloca(V->getType());
+      IRB.CreateStore(V, memory);
+      return IRB.CreateCall(
+          SP.readMemory,
+          {IRB.CreatePtrToInt(memory, SP.intPtrType),
+           ConstantInt::get(SP.intPtrType,
+                            SP.dataLayout->getTypeStoreSize(V->getType())),
+           IRB.getInt8(0)});
+    }
+
+    llvm_unreachable("Unhandled type for constant expression");
+  }
+
+  /// Load or create the symbolic expression for a value.
+  Value *getOrCreateSymbolicExpression(Value *V, IRBuilder<> &IRB) {
+    if (auto exprIt = symbolicExpressions.find(V);
+        exprIt != symbolicExpressions.end()) {
+      return exprIt->second;
+    }
+
+    // Constants and arguments may be used in multiple places throughout a
+    // function. Ideally, we'd make sure that in such cases the symbolic
+    // expression is generated as early as necessary but no earlier. This is
+    // complicated by the requirement to generate symbolic expressions in the
+    // right order whenever they depend on each other. For now, we just recreate
+    // such expressions every time, i.e., we don't cache them.
+
+    if (isa<ConstantPointerNull>(V)) {
+      return IRB.CreateCall(SP.buildNullPointer, {});
+    }
+
+    if (auto A = dyn_cast<Argument>(V)) {
+      if (A->getParent()->getName() == "main") {
+        // We don't have symbolic parameters in main.
+        // TODO fix when we have a symbolic libc
+        return createValueExpression(A, IRB);
+      }
+
+      return IRB.CreateCall(SP.getParameterExpression,
+                            ConstantInt::get(IRB.getInt8Ty(), A->getArgNo()));
+    }
+
+    if (auto gep = dyn_cast<GEPOperator>(V)) {
+      return handleGEPOperator(*gep, IRB);
+    }
+
+    if (auto bc = dyn_cast<BitCastOperator>(V)) {
+      return handleBitCastOperator(*bc, IRB);
+    }
+
+    if (auto gv = dyn_cast<GlobalValue>(V)) {
+      return IRB.CreateCall(SP.buildInteger,
+                            {IRB.CreatePtrToInt(gv, SP.intPtrType),
+                             ConstantInt::get(IRB.getInt8Ty(), SP.ptrBits)});
+    }
+
+    if (isa<Constant>(V)) {
+      // This is a constant, so we can just create a constant expression from
+      // the result of the computation. For now, just reuse the expression; it
+      // would be more efficient to transform it into an instruction and only
+      // reuse the value. However, in optimized builds the optimizer should take
+      // care of the transformation automatically.
+
+      // return ConstantPointerNull::get(IRB.getInt8PtrTy());
+      return createValueExpression(V, IRB);
+    }
+
+    DEBUG(errs() << "Unable to obtain a symbolic expression for " << *V
+                 << '\n');
+    llvm_unreachable("No symbolic expression for value");
+  }
+
+  bool isLittleEndian(Type *type) {
+    return (!type->isAggregateType() && SP.dataLayout->isLittleEndian());
+  }
+
+  SymbolicComputation buildRuntimeCall(IRBuilder<> &IRB, Value *function,
+                                       ArrayRef<Value *> args) {
+    std::vector<Value *> symbolicArgs;
+    for (auto arg : args) {
+      symbolicArgs.push_back(getOrCreateSymbolicExpression(arg, IRB));
+    }
+
+    std::vector<Input> inputs;
+    for (unsigned i = 0; i < args.size(); i++) {
+      inputs.push_back({args[i], i});
+    }
+
+    return {IRB.CreateCall(function, symbolicArgs), inputs};
+  }
 
   const SymbolizePass &SP;
 
