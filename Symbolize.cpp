@@ -569,9 +569,14 @@ public:
     IRBuilder<> IRB(&I);
     Value *handler = SP.comparisonHandlers.at(I.getPredicate());
     assert(handler && "Unable to handle icmp/fcmp variant");
-    symbolicExpressions[&I] = IRB.CreateCall(
-        handler, {getOrCreateSymbolicExpression(I.getOperand(0), IRB),
-                  getOrCreateSymbolicExpression(I.getOperand(1), IRB)});
+    Input first = {I.getOperand(0),
+                   getOrCreateSymbolicExpression(I.getOperand(0), IRB)};
+    Input second = {I.getOperand(1),
+                    getOrCreateSymbolicExpression(I.getOperand(1), IRB)};
+    auto symbolicComparison =
+        IRB.CreateCall(handler, {first.expression, second.expression});
+    symbolicExpressions[&I] = symbolicComparison;
+    expressionUses.push_back({symbolicComparison, {first, second}});
   }
 
   void visitReturnInst(ReturnInst &I) {
