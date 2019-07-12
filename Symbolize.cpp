@@ -180,15 +180,14 @@ public:
       // Build the check whether any input expression is non-null (i.e., there
       // is a symbolic input).
       auto nullExpression = ConstantPointerNull::get(IRB.getInt8PtrTy());
-      auto someSymbolic = IRB.CreateICmpNE(
-          nullExpression, symbolicComputation.inputs[0].getSymbolicOperand());
-      for (unsigned argIndex = 1; argIndex < symbolicComputation.inputs.size();
-           argIndex++) {
-        someSymbolic = IRB.CreateOr(
-            someSymbolic,
-            IRB.CreateICmpNE(
-                nullExpression,
-                symbolicComputation.inputs[argIndex].getSymbolicOperand()));
+      std::vector<Value *> nullChecks;
+      for (const auto &input : symbolicComputation.inputs) {
+        nullChecks.push_back(
+            IRB.CreateICmpEQ(nullExpression, input.getSymbolicOperand()));
+      }
+      auto allConcrete = nullChecks[0];
+      for (unsigned argIndex = 1; argIndex < nullChecks.size(); argIndex++) {
+        allConcrete = IRB.CreateAnd(allConcrete, nullChecks[argIndex]);
       }
 
       // The main branch: if we don't enter here, we can short-circuit the
@@ -198,22 +197,21 @@ public:
       auto slowPath = SplitBlock(head, symbolicComputation.firstInstruction);
       auto tail = SplitBlock(
           slowPath, symbolicComputation.lastInstruction->getNextNode());
-      // TODO invert condition
       ReplaceInstWithInst(head->getTerminator(),
-                          BranchInst::Create(slowPath, tail, someSymbolic));
+                          BranchInst::Create(tail, slowPath, allConcrete));
 
       // In the slow case, we need to check each input expression for null
       // (i.e., the input is concrete) and create an expression from the
       // concrete value if necessary.
-      for (const auto &argument : symbolicComputation.inputs) {
+      for (unsigned argIndex = 0; argIndex < symbolicComputation.inputs.size();
+           argIndex++) {
+        auto &argument = symbolicComputation.inputs[argIndex];
         auto originalArgExpression = argument.getSymbolicOperand();
         auto argCheckBlock = symbolicComputation.firstInstruction->getParent();
 
         IRB.SetInsertPoint(symbolicComputation.firstInstruction);
-        auto needArgExpression =
-            IRB.CreateICmpEQ(nullExpression, originalArgExpression);
         auto argExpressionBlock = SplitBlockAndInsertIfThen(
-            needArgExpression, symbolicComputation.firstInstruction,
+            nullChecks[argIndex], symbolicComputation.firstInstruction,
             /* unreachable */ false);
 
         IRB.SetInsertPoint(argExpressionBlock);
