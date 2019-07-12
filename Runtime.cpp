@@ -501,13 +501,21 @@ Z3_ast _sym_read_memory(uint8_t *addr, size_t length, bool little_endian) {
   assert(region && (region->start <= addr) && (addr + length <= region->end) &&
          "Unknown memory region");
 
+  // If the entire memory region is concrete, don't create a symbolic expression
+  // at all.
   Z3_ast *shadow = &region->shadow[addr - region->start];
-  Z3_ast expr = shadow[0];
+  if (std::all_of(shadow, shadow + length,
+                  [](Z3_ast expr) { return (expr == nullptr); })) {
+    return nullptr;
+  }
+
+  Z3_ast expr = shadow[0] ? shadow[0] : _sym_build_integer(addr[0], 8);
   for (size_t i = 1; i < length; i++) {
-    // TODO For uninitialized memory, create a constant expression holding the
-    // actual memory contents.
-    expr = little_endian ? Z3_mk_concat(g_context, shadow[i], expr)
-                         : Z3_mk_concat(g_context, expr, shadow[i]);
+    // For concrete memory, create a constant expression holding the actual
+    // memory contents.
+    Z3_ast byteExpr = shadow[i] ? shadow[i] : _sym_build_integer(addr[i], 8);
+    expr = little_endian ? Z3_mk_concat(g_context, byteExpr, expr)
+                         : Z3_mk_concat(g_context, expr, byteExpr);
   }
 
   return expr;
@@ -535,11 +543,15 @@ void _sym_write_memory(uint8_t *addr, size_t length, Z3_ast expr,
          "Unknown memory region");
 
   Z3_ast *shadow = &region->shadow[addr - region->start];
-  for (size_t i = 0; i < length; i++) {
-    shadow[i] = little_endian
-                    ? Z3_mk_extract(g_context, 8 * (i + 1) - 1, 8 * i, expr)
-                    : Z3_mk_extract(g_context, (length - i) * 8 - 1,
-                                    (length - i - 1) * 8, expr);
+  if (!expr) {
+    std::fill(shadow, shadow + length, nullptr);
+  } else {
+    for (size_t i = 0; i < length; i++) {
+      shadow[i] = little_endian
+                      ? Z3_mk_extract(g_context, 8 * (i + 1) - 1, 8 * i, expr)
+                      : Z3_mk_extract(g_context, (length - i) * 8 - 1,
+                                      (length - i - 1) * 8, expr);
+    }
   }
 }
 
