@@ -109,7 +109,7 @@ Z3_ast _sym_get_return_expression(void);
 /*
  * Constraint handling
  */
-Z3_ast _sym_push_path_constraint(Z3_ast constraint, int taken);
+void _sym_push_path_constraint(Z3_ast constraint, int taken);
 
 /*
  * Memory management

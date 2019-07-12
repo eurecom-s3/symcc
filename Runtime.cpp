@@ -402,7 +402,10 @@ Z3_ast _sym_get_return_expression(void) {
   return result;
 }
 
-Z3_ast _sym_push_path_constraint(Z3_ast constraint, int taken) {
+void _sym_push_path_constraint(Z3_ast constraint, int taken) {
+  if (!constraint)
+    return;
+
   constraint = Z3_simplify(g_context, constraint);
 
   /* Check the easy cases first: if simplification reduced the constraint to
@@ -411,12 +414,12 @@ Z3_ast _sym_push_path_constraint(Z3_ast constraint, int taken) {
 
   if (Z3_is_eq_ast(g_context, constraint, Z3_mk_true(g_context))) {
     assert(taken && "We have taken an impossible branch");
-    return constraint;
+    return;
   }
 
   if (Z3_is_eq_ast(g_context, constraint, Z3_mk_false(g_context))) {
     assert(!taken && "We have taken an impossible branch");
-    return Z3_mk_not(g_context, constraint);
+    return;
   }
 
   /* Generate a solution for the alternative */
@@ -445,7 +448,6 @@ Z3_ast _sym_push_path_constraint(Z3_ast constraint, int taken) {
   Z3_solver_assert(g_context, g_solver, newConstraint);
   assert((Z3_solver_check(g_context, g_solver) == Z3_L_TRUE) &&
          "Asserting infeasible path constraint");
-  return newConstraint;
 }
 
 void _sym_register_memory(uint8_t *addr, Z3_ast *shadow, size_t length) {
