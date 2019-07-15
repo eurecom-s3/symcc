@@ -1268,6 +1268,7 @@ bool SymbolizePass::runOnFunction(Function &F) {
 
   Symbolizer symbolizer(*this);
   // DEBUG(errs() << F << '\n');
+  symbolizer.symbolizeFunctionArguments(F);
   symbolizer.visit(F);
   symbolizer.finalizePHINodes();
   symbolizer.shortCircuitExpressionUses();
