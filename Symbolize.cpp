@@ -971,8 +971,7 @@ private:
       // reuse the value. However, in optimized builds the optimizer should take
       // care of the transformation automatically.
 
-      // return ConstantPointerNull::get(IRB.getInt8PtrTy());
-      return createValueExpression(V, IRB);
+      return ConstantPointerNull::get(IRB.getInt8PtrTy());
     }
 
     DEBUG(errs() << "Unable to obtain a symbolic expression for " << *V
