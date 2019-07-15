@@ -368,10 +368,14 @@ Z3_ast _sym_build_float_to_float(Z3_ast expr, int to_double) {
 }
 
 Z3_ast _sym_build_bits_to_float(Z3_ast expr, int to_double) {
+  if (expr == nullptr)
+    return nullptr;
   return Z3_mk_fpa_to_fp_bv(g_context, expr, FSORT(to_double));
 }
 
 Z3_ast _sym_build_float_to_bits(Z3_ast expr) {
+  if (expr == nullptr)
+    return nullptr;
   return Z3_mk_fpa_to_ieee_bv(g_context, expr);
 }
 

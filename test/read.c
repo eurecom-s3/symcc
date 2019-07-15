@@ -3,8 +3,6 @@
 //
 // Check the symbolic handling of "read"
 
-// TODO make sure that input is treated as symbolic
-
 #include <stdio.h>
 #include <unistd.h>
 

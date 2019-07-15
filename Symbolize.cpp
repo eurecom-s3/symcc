@@ -132,11 +132,9 @@ public:
         // Any code we may have to generate for the symbolic expressions will
         // have to live in the basic block that the respective value comes from:
         // PHI nodes can't be preceded by regular code in a basic block.
-        IRBuilder<> blockIRB(block->getTerminator());
         auto symbolicPHI = cast<PHINode>(symbolicExpressions[phi]);
-        symbolicPHI->addIncoming(getOrCreateSymbolicExpression(
-                                     phi->getIncomingValue(incoming), blockIRB),
-                                 block);
+        symbolicPHI->addIncoming(
+            getSymbolicExpression(phi->getIncomingValue(incoming)), block);
       }
     }
   }
@@ -254,7 +252,6 @@ public:
             symbolicComputation.lastInstruction,
             symbolicComputation.lastInstruction->getParent());
       }
-
     }
   }
 
@@ -283,8 +280,7 @@ public:
 
       IRBuilder<> IRB(&I);
       IRB.CreateCall(SP.memset,
-                     {I.getOperand(0),
-                      getOrCreateSymbolicExpression(I.getOperand(1), IRB),
+                     {I.getOperand(0), getSymbolicExpression(I.getOperand(1)),
                       IRB.CreateZExt(I.getOperand(2), IRB.getInt64Ty())});
       break;
     }
@@ -298,21 +294,17 @@ public:
     case Intrinsic::stackrestore:
       // Ignored; see comment on stacksave above.
       break;
-    case Intrinsic::expect: {
+    case Intrinsic::expect:
       // Just a hint for the optimizer; the value is the first parameter.
-      IRBuilder<> IRB(&I);
-      symbolicExpressions[&I] =
-          getOrCreateSymbolicExpression(I.getArgOperand(0), IRB);
+      symbolicExpressions[&I] = getSymbolicExpression(I.getArgOperand(0));
       break;
-    }
     case Intrinsic::fabs: {
       // Floating-point absolute value; use the runtime to build the
       // corresponding symbolic expression.
 
       IRBuilder<> IRB(&I);
-      symbolicExpressions[&I] =
-          IRB.CreateCall(SP.buildFloatAbs,
-                         {getOrCreateSymbolicExpression(I.getOperand(0), IRB)});
+      auto abs = buildRuntimeCall(IRB, SP.buildFloatAbs, I.getOperand(0));
+      registerSymbolicComputation(abs, &I);
       break;
     }
     case Intrinsic::cttz:
@@ -407,9 +399,13 @@ public:
     if (I.getReturnValue() == nullptr)
       return;
 
+    // We can't short-circuit this call because the return expression needs to
+    // be set even if it's null; otherwise we break the caller. Therefore,
+    // create the call directly without registering it for short-circuit
+    // processing.
     IRBuilder<> IRB(&I);
     IRB.CreateCall(SP.setReturnExpression,
-                   getOrCreateSymbolicExpression(I.getReturnValue(), IRB));
+                   getSymbolicExpression(I.getReturnValue()));
   }
 
   void visitBranchInst(BranchInst &I) {
@@ -420,20 +416,14 @@ public:
     if (I.isUnconditional())
       return;
 
-    // It seems that Clang can't optimize the sequence "call buildNeg; select;
-    // call pushPathConstraint; br", failing to move the first call to the
-    // negative branch. Therefore, we insert calls directly into the two target
-    // blocks.
-
     IRBuilder<> IRB(&I);
-    IRB.CreateCall(SP.pushPathConstraint,
-                   {getOrCreateSymbolicExpression(I.getCondition(), IRB),
-                    I.getCondition()});
+    auto runtimeCall =
+        buildRuntimeCall(IRB, SP.pushPathConstraint,
+                         {{I.getCondition(), true}, {I.getCondition(), false}});
+    registerSymbolicComputation(runtimeCall);
   }
 
   void visitCallInst(CallInst &I) {
-    // TODO prevent instrumentation of our own functions with attributes
-
     if (I.isInlineAsm()) {
       handleInlineAssembly(I);
       return;
@@ -456,15 +446,12 @@ public:
 
     if (!isMakeSymbolic) {
       for (Use &arg : I.args())
-        IRB.CreateCall(
-            SP.setParameterExpression,
-            {ConstantInt::get(IRB.getInt8Ty(), arg.getOperandNo()),
-             IRB.CreateBitCast(getOrCreateSymbolicExpression(arg, IRB),
-                               IRB.getInt8PtrTy())});
+        IRB.CreateCall(SP.setParameterExpression,
+                       {ConstantInt::get(IRB.getInt8Ty(), arg.getOperandNo()),
+                        getSymbolicExpression(arg)});
     }
 
     IRB.SetInsertPoint(I.getNextNonDebugInstruction());
-    // TODO get the expression only if the function set one
     symbolicExpressions[&I] = IRB.CreateCall(SP.getReturnExpression);
   }
 
@@ -478,9 +465,6 @@ public:
                    {IRB.CreatePtrToInt(&I, SP.intPtrType),
                     IRB.CreateBitCast(shadow, IRB.getInt8PtrTy()),
                     ConstantInt::get(SP.intPtrType, allocationLength)});
-    symbolicExpressions[&I] = IRB.CreateCall(
-        SP.buildInteger, {IRB.CreatePtrToInt(&I, IRB.getInt64Ty()),
-                          ConstantInt::get(IRB.getInt8Ty(), SP.ptrBits)});
   }
 
   void visitLoadInst(LoadInst &I) {
@@ -513,7 +497,7 @@ public:
     // IRB);
     // TODO generate diverging input for the target address
 
-    auto data = getOrCreateSymbolicExpression(I.getValueOperand(), IRB);
+    auto data = getSymbolicExpression(I.getValueOperand());
     auto dataType = I.getValueOperand()->getType();
     if (dataType->isFloatingPointTy()) {
       data = IRB.CreateCall(SP.buildFloatToBits, data);
@@ -606,82 +590,84 @@ public:
   }
 
   void visitBitCastInst(BitCastInst &I) {
-    IRBuilder<> IRB(&I);
     assert(I.getSrcTy()->isPointerTy() && I.getDestTy()->isPointerTy() &&
            "Unhandled non-pointer bit cast");
-    symbolicExpressions[&I] =
-        getOrCreateSymbolicExpression(I.getOperand(0), IRB);
+    symbolicExpressions[&I] = getSymbolicExpression(I.getOperand(0));
   }
 
   void visitTruncInst(TruncInst &I) {
     IRBuilder<> IRB(&I);
-    symbolicExpressions[&I] = IRB.CreateCall(
-        SP.buildTrunc, {getOrCreateSymbolicExpression(I.getOperand(0), IRB),
-                        IRB.getInt8(I.getDestTy()->getIntegerBitWidth())});
+    auto trunc = buildRuntimeCall(
+        IRB, SP.buildTrunc,
+        {{I.getOperand(0), true},
+         {IRB.getInt8(I.getDestTy()->getIntegerBitWidth()), false}});
+    registerSymbolicComputation(trunc, &I);
   }
 
   void visitIntToPtrInst(IntToPtrInst &I) {
-    IRBuilder<> IRB(&I);
-    symbolicExpressions[&I] =
-        getOrCreateSymbolicExpression(I.getOperand(0), IRB);
+    symbolicExpressions[&I] = getSymbolicExpression(I.getOperand(0));
     // TODO handle truncation and zero extension
   }
 
   void visitPtrToIntInst(PtrToIntInst &I) {
-    IRBuilder<> IRB(&I);
-    symbolicExpressions[&I] =
-        getOrCreateSymbolicExpression(I.getOperand(0), IRB);
+    symbolicExpressions[&I] = getSymbolicExpression(I.getOperand(0));
     // TODO handle truncation and zero extension
   }
 
   void visitSIToFPInst(SIToFPInst &I) {
     IRBuilder<> IRB(&I);
-    symbolicExpressions[&I] =
-        IRB.CreateCall(SP.buildIntToFloat,
-                       {getOrCreateSymbolicExpression(I.getOperand(0), IRB),
-                        IRB.getInt1(I.getDestTy()->isDoubleTy()),
-                        /* is_signed */ IRB.getInt1(true)});
+    auto conversion =
+        buildRuntimeCall(IRB, SP.buildIntToFloat,
+                         {{I.getOperand(0), true},
+                          {IRB.getInt1(I.getDestTy()->isDoubleTy()), false},
+                          {/* is_signed */ IRB.getInt1(true), false}});
+    registerSymbolicComputation(conversion, &I);
   }
 
   void visitUIToFPInst(UIToFPInst &I) {
     IRBuilder<> IRB(&I);
-    symbolicExpressions[&I] =
-        IRB.CreateCall(SP.buildIntToFloat,
-                       {getOrCreateSymbolicExpression(I.getOperand(0), IRB),
-                        IRB.getInt1(I.getDestTy()->isDoubleTy()),
-                        /* is_signed */ IRB.getInt1(false)});
+    auto conversion =
+        buildRuntimeCall(IRB, SP.buildIntToFloat,
+                         {{I.getOperand(0), true},
+                          {IRB.getInt1(I.getDestTy()->isDoubleTy()), false},
+                          {/* is_signed */ IRB.getInt1(false), false}});
+    registerSymbolicComputation(conversion, &I);
   }
 
   void visitFPExtInst(FPExtInst &I) {
     IRBuilder<> IRB(&I);
-    symbolicExpressions[&I] =
-        IRB.CreateCall(SP.buildFloatToFloat,
-                       {getOrCreateSymbolicExpression(I.getOperand(0), IRB),
-                        IRB.getInt1(I.getDestTy()->isDoubleTy())});
+    auto conversion =
+        buildRuntimeCall(IRB, SP.buildFloatToFloat,
+                         {{I.getOperand(0), true},
+                          {IRB.getInt1(I.getDestTy()->isDoubleTy()), false}});
+    registerSymbolicComputation(conversion, &I);
   }
 
   void visitFPTruncInst(FPTruncInst &I) {
     IRBuilder<> IRB(&I);
-    symbolicExpressions[&I] =
-        IRB.CreateCall(SP.buildFloatToFloat,
-                       {getOrCreateSymbolicExpression(I.getOperand(0), IRB),
-                        IRB.getInt1(I.getDestTy()->isDoubleTy())});
+    auto conversion =
+        buildRuntimeCall(IRB, SP.buildFloatToFloat,
+                         {{I.getOperand(0), true},
+                          {IRB.getInt1(I.getDestTy()->isDoubleTy()), false}});
+    registerSymbolicComputation(conversion, &I);
   }
 
   void visitFPToSI(FPToSIInst &I) {
     IRBuilder<> IRB(&I);
-    symbolicExpressions[&I] =
-        IRB.CreateCall(SP.buildFloatToSignedInt,
-                       {getOrCreateSymbolicExpression(I.getOperand(0), IRB),
-                        IRB.getInt8(I.getType()->getIntegerBitWidth())});
+    auto conversion = buildRuntimeCall(
+        IRB, SP.buildFloatToSignedInt,
+        {{I.getOperand(0), true},
+         {IRB.getInt8(I.getType()->getIntegerBitWidth()), false}});
+    registerSymbolicComputation(conversion, &I);
   }
 
   void visitFPToUI(FPToUIInst &I) {
     IRBuilder<> IRB(&I);
-    symbolicExpressions[&I] =
-        IRB.CreateCall(SP.buildFloatToUnsignedInt,
-                       {getOrCreateSymbolicExpression(I.getOperand(0), IRB),
-                        IRB.getInt8(I.getType()->getIntegerBitWidth())});
+    auto conversion = buildRuntimeCall(
+        IRB, SP.buildFloatToUnsignedInt,
+        {{I.getOperand(0), true},
+         {IRB.getInt8(I.getType()->getIntegerBitWidth()), false}});
+    registerSymbolicComputation(conversion, &I);
   }
 
   void visitCastInst(CastInst &I) {
@@ -698,8 +684,7 @@ public:
     // raises an error. For now, we follow the heuristic that i1 is always a
     // Boolean and thus does not need extension on the Z3 side.
     if (I.getSrcTy()->getIntegerBitWidth() == 1) {
-      symbolicExpressions[&I] =
-          getOrCreateSymbolicExpression(I.getOperand(0), IRB);
+      symbolicExpressions[&I] = getSymbolicExpression(I.getOperand(0));
     } else {
       Value *target;
 
@@ -758,13 +743,13 @@ public:
     }
 
     IRBuilder<> IRB(&I);
-    auto aggregateExpr =
-        getOrCreateSymbolicExpression(I.getAggregateOperand(), IRB);
-    symbolicExpressions[&I] = IRB.CreateCall(
-        SP.buildExtract,
-        {aggregateExpr, IRB.getInt64(offset),
-         IRB.getInt64(SP.dataLayout->getTypeStoreSize(I.getType())),
-         IRB.getInt8(isLittleEndian(I.getType()) ? 1 : 0)});
+    auto extract = buildRuntimeCall(
+        IRB, SP.buildExtract,
+        {{I.getAggregateOperand(), true},
+         {IRB.getInt64(offset), false},
+         {IRB.getInt64(SP.dataLayout->getTypeStoreSize(I.getType())), false},
+         {IRB.getInt8(isLittleEndian(I.getType()) ? 1 : 0), false}});
+    registerSymbolicComputation(extract, &I);
   }
 
   void visitSwitchInst(SwitchInst &I) {
@@ -779,7 +764,7 @@ public:
     // TODO should we try to generate inputs for *all* other paths?
 
     IRBuilder<> IRB(&I);
-    auto conditionExpr = getOrCreateSymbolicExpression(I.getCondition(), IRB);
+    auto conditionExpr = getSymbolicExpression(I.getCondition());
 
     // The default case needs to assert that the condition doesn't equal any of
     // the cases.
@@ -787,7 +772,7 @@ public:
       auto finalDest = I.getDefaultDest();
       auto constraintBlock = BasicBlock::Create(
           I.getContext(), /* name */ "", finalDest->getParent(), finalDest);
-      I.setDefaultDest(constraintBlock);
+
       IRB.SetInsertPoint(constraintBlock);
 
       auto currentCase = I.case_begin();
@@ -809,6 +794,17 @@ public:
 
       IRB.CreateCall(SP.pushPathConstraint, {constraint, IRB.getInt1(true)});
       IRB.CreateBr(finalDest);
+
+      auto constraintCheckBlock =
+          BasicBlock::Create(I.getContext(), /* name */ "",
+                             finalDest->getParent(), constraintBlock);
+      IRB.SetInsertPoint(constraintCheckBlock);
+      auto haveSymbolicCondition = IRB.CreateICmpNE(
+          conditionExpr, ConstantPointerNull::get(IRB.getInt8PtrTy()));
+      IRB.CreateCondBr(haveSymbolicCondition, /* then */ constraintBlock,
+                       /* else */ finalDest);
+
+      I.setDefaultDest(constraintCheckBlock);
     }
 
     // The individual cases just assert that the condition equals their
@@ -817,15 +813,25 @@ public:
       auto finalDest = caseHandle.getCaseSuccessor();
       auto constraintBlock = BasicBlock::Create(
           I.getContext(), /* name */ "", finalDest->getParent(), finalDest);
-      caseHandle.setSuccessor(constraintBlock);
-      IRB.SetInsertPoint(constraintBlock);
 
+      IRB.SetInsertPoint(constraintBlock);
       auto constraint = IRB.CreateCall(
           SP.comparisonHandlers[CmpInst::ICMP_EQ],
           {conditionExpr,
            createValueExpression(caseHandle.getCaseValue(), IRB)});
       IRB.CreateCall(SP.pushPathConstraint, {constraint, IRB.getInt1(true)});
       IRB.CreateBr(finalDest);
+
+      auto constraintCheckBlock =
+          BasicBlock::Create(I.getContext(), /* name */ "",
+                             finalDest->getParent(), constraintBlock);
+      IRB.SetInsertPoint(constraintCheckBlock);
+      auto haveSymbolicCondition = IRB.CreateICmpNE(
+          conditionExpr, ConstantPointerNull::get(IRB.getInt8PtrTy()));
+      IRB.CreateCondBr(haveSymbolicCondition, /* then */ constraintBlock,
+                       /* else */ finalDest);
+
+      caseHandle.setSuccessor(constraintCheckBlock);
     }
   }
 
@@ -956,23 +962,6 @@ private:
                ? exprIt->second
                : ConstantPointerNull::get(PointerType::get(
                      IntegerType::getInt8Ty(V->getContext()), 0));
-  }
-
-  /// Load or create the symbolic expression for a value.
-  Value *getOrCreateSymbolicExpression(Value *V, IRBuilder<> &IRB) {
-    if (auto expr = getSymbolicExpression(V); expr != nullptr)
-      return expr;
-
-    if (isa<Constant>(V) || isa<Argument>(V)) {
-      // Don't create expressions for constants; the short-circuit logic will
-      // create them if necessary (i.e., if the constants are used in
-      // computations with non-constants).
-      return ConstantPointerNull::get(IRB.getInt8PtrTy());
-    }
-
-    DEBUG(errs() << "Unable to obtain a symbolic expression for " << *V
-                 << '\n');
-    llvm_unreachable("No symbolic expression for value");
   }
 
   bool isLittleEndian(Type *type) {
