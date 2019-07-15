@@ -102,6 +102,20 @@ class Symbolizer : public InstVisitor<Symbolizer> {
 public:
   explicit Symbolizer(const SymbolizePass &symPass) : SP(symPass) {}
 
+  /// Insert code to obtain the symbolic expressions for the function arguments.
+  void symbolizeFunctionArguments(Function &F) {
+    // The main function doesn't receive symbolic arguments.
+    if (F.getName() == "main")
+      return;
+
+    IRBuilder<> IRB(F.getEntryBlock().getFirstNonPHI());
+
+    for (auto &arg : F.args()) {
+      symbolicExpressions[&arg] = IRB.CreateCall(SP.getParameterExpression,
+                                                 IRB.getInt8(arg.getArgNo()));
+    }
+  }
+
   /// Finish the processing of PHI nodes.
   ///
   /// This assumes that there is a dummy PHI node for each such instruction in
@@ -257,8 +271,7 @@ public:
     // computations at the symbolic level.
 
     auto pointerSizeValue = ConstantInt::get(IRB.getInt8Ty(), SP.ptrBits);
-    auto pointerExpr =
-        getOrCreateSymbolicExpression(I.getPointerOperand(), IRB);
+    auto pointerExpr = getSymbolicExpression(I.getPointerOperand());
     Instruction *firstInstruction = nullptr;
     std::vector<Input> inputs;
 
@@ -303,7 +316,7 @@ public:
                               pointerSizeValue});
         if (!firstInstruction)
           firstInstruction = cast<Instruction>(elementSizeExpr);
-        auto indexExpr = getOrCreateSymbolicExpression(index, IRB);
+        auto indexExpr = getSymbolicExpression(index);
         bool haveZExt = false;
         if (auto indexWidth = index->getType()->getIntegerBitWidth();
             indexWidth != 64) {
@@ -873,6 +886,10 @@ private:
   Value *createValueExpression(Value *V, IRBuilder<> &IRB) {
     auto valueType = V->getType();
 
+    if (isa<ConstantPointerNull>(V)) {
+      return IRB.CreateCall(SP.buildNullPointer, {});
+    }
+
     if (valueType->isIntegerTy()) {
       // Special case: LLVM uses the type i1 to represent Boolean values, but
       // for Z3 we have to create expressions of a separate sort.
@@ -923,12 +940,19 @@ private:
     llvm_unreachable("Unhandled type for constant expression");
   }
 
+  /// Get the (already created) symbolic expression for a value.
+  Value *getSymbolicExpression(Value *V) {
+    auto exprIt = symbolicExpressions.find(V);
+    return (exprIt != symbolicExpressions.end())
+               ? exprIt->second
+               : ConstantPointerNull::get(PointerType::get(
+                     IntegerType::getInt8Ty(V->getContext()), 0));
+  }
+
   /// Load or create the symbolic expression for a value.
   Value *getOrCreateSymbolicExpression(Value *V, IRBuilder<> &IRB) {
-    if (auto exprIt = symbolicExpressions.find(V);
-        exprIt != symbolicExpressions.end()) {
-      return exprIt->second;
-    }
+    if (auto expr = getSymbolicExpression(V); expr != nullptr)
+      return expr;
 
     // Constants and arguments may be used in multiple places throughout a
     // function. Ideally, we'd make sure that in such cases the symbolic
@@ -937,36 +961,7 @@ private:
     // right order whenever they depend on each other. For now, we just recreate
     // such expressions every time, i.e., we don't cache them.
 
-    if (isa<ConstantPointerNull>(V)) {
-      return IRB.CreateCall(SP.buildNullPointer, {});
-    }
-
-    if (auto A = dyn_cast<Argument>(V)) {
-      if (A->getParent()->getName() == "main") {
-        // We don't have symbolic parameters in main.
-        // TODO fix when we have a symbolic libc
-        return createValueExpression(A, IRB);
-      }
-
-      return IRB.CreateCall(SP.getParameterExpression,
-                            ConstantInt::get(IRB.getInt8Ty(), A->getArgNo()));
-    }
-
-    if (auto gep = dyn_cast<GEPOperator>(V)) {
-      return handleGEPOperator(*gep, IRB);
-    }
-
-    if (auto bc = dyn_cast<BitCastOperator>(V)) {
-      return handleBitCastOperator(*bc, IRB);
-    }
-
-    if (auto gv = dyn_cast<GlobalValue>(V)) {
-      return IRB.CreateCall(SP.buildInteger,
-                            {IRB.CreatePtrToInt(gv, SP.intPtrType),
-                             ConstantInt::get(IRB.getInt8Ty(), SP.ptrBits)});
-    }
-
-    if (isa<Constant>(V)) {
+    if (isa<Constant>(V) || isa<Argument>(V)) {
       // This is a constant, so we can just create a constant expression from
       // the result of the computation. For now, just reuse the expression; it
       // would be more efficient to transform it into an instruction and only
@@ -990,7 +985,7 @@ private:
                                        ArrayRef<Value *> args) {
     std::vector<Value *> symbolicArgs;
     for (auto arg : args) {
-      symbolicArgs.push_back(getOrCreateSymbolicExpression(arg, IRB));
+      symbolicArgs.push_back(getSymbolicExpression(arg));
     }
     auto call = IRB.CreateCall(function, symbolicArgs);
 
