@@ -256,9 +256,13 @@ public:
     // symbolic expression of the original pointer and duplicate its
     // computations at the symbolic level.
 
-    auto expr = getOrCreateSymbolicExpression(I.getPointerOperand(), IRB);
     auto pointerSizeValue = ConstantInt::get(IRB.getInt8Ty(), SP.ptrBits);
+    auto pointerExpr =
+        getOrCreateSymbolicExpression(I.getPointerOperand(), IRB);
+    Instruction *firstInstruction = nullptr;
+    std::vector<Input> inputs;
 
+    Value *result = nullptr;
     for (auto type_it = gep_type_begin(I), type_end = gep_type_end(I);
          type_it != type_end; ++type_it) {
       auto index = type_it.getOperand();
@@ -279,6 +283,8 @@ public:
         offset = IRB.CreateCall(
             SP.buildInteger, {ConstantInt::get(IRB.getInt64Ty(), memberOffset),
                               pointerSizeValue});
+        if (!firstInstruction)
+          firstInstruction = cast<Instruction>(offset);
       } else {
         if (auto ci = dyn_cast<ConstantInt>(index); ci && ci->isZero()) {
           // Fast path: an index of zero means that no calculations are
@@ -295,22 +301,42 @@ public:
         auto elementSizeExpr = IRB.CreateCall(
             SP.buildInteger, {ConstantInt::get(IRB.getInt64Ty(), elementSize),
                               pointerSizeValue});
+        if (!firstInstruction)
+          firstInstruction = cast<Instruction>(elementSizeExpr);
         auto indexExpr = getOrCreateSymbolicExpression(index, IRB);
+        bool haveZExt = false;
         if (auto indexWidth = index->getType()->getIntegerBitWidth();
             indexWidth != 64) {
           indexExpr = IRB.CreateCall(
               SP.buildZExt,
               {indexExpr, ConstantInt::get(IRB.getInt8Ty(), 64 - indexWidth)});
+          inputs.push_back({index, 0, cast<Instruction>(indexExpr)});
+          haveZExt = true;
         }
+
         offset = IRB.CreateCall(SP.binaryOperatorHandlers[Instruction::Mul],
                                 {indexExpr, elementSizeExpr});
+        if (!haveZExt)
+          inputs.push_back({index, 0, cast<Instruction>(offset)});
       }
 
-      expr = IRB.CreateCall(SP.binaryOperatorHandlers[Instruction::Add],
-                            {expr, offset});
+      result = (result == nullptr)
+                   ? offset
+                   : IRB.CreateCall(SP.binaryOperatorHandlers[Instruction::Add],
+                                    {result, offset});
     }
 
-    return expr;
+    if (result) {
+      result = IRB.CreateCall(SP.binaryOperatorHandlers[Instruction::Add],
+                              {result, pointerExpr});
+      inputs.push_back({I.getPointerOperand(), 1, cast<Instruction>(result)});
+      expressionUses.push_back(SymbolicComputation(
+          firstInstruction, cast<Instruction>(result), inputs));
+    } else {
+      result = pointerExpr;
+    }
+
+    return result;
   }
 
   void handleIntrinsicCall(CallInst &I) {
