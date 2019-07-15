@@ -48,33 +48,39 @@ int main(int argc, char* argv[]) {
     // CHECK: Trying to solve
     // CHECK: (bvadd #x{{0*}}11 x)
     // CHECK: Found diverging input
+    // CHECK: 22
 
     g_increment = 18;
     printf("%d\n", increment(x));
     // CHECK: Trying to solve
     // CHECK: (bvadd #x{{0*}}12 x)
     // CHECK: Found diverging input
+    // CHECK: 23
 
     g_uninitialized = 101;
     printf("%s\n", (x < g_uninitialized) ? "smaller" : "greater or equal");
     // CHECK: Trying to solve
     // CHECK: (bvsle #x{{0*}}65 x)
     // CHECK: Found diverging input
+    // CHECK: smaller
 
     sum(x);
     // CHECK: Trying to solve
     // CHECK-NOT: Can't find
     // CHECK: Found diverging input
+    // CHECK: 0
 
     printf("%s\n", (x < g_more_than_one_byte_int) ? "true" : "false");
     // CHECK: Trying to solve
     // CHECK: #x{{0*}}200
     // CHECK: Can't find
+    // CHECK: true
 
     sum_ints(x);
     // CHECK: Trying to solve
     // CHECK: #x{{0*}}4b0
     // CHECK: Can't find
+    // CHECK: 0
 
     return 0;
 }
