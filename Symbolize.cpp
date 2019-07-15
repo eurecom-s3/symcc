@@ -116,6 +116,92 @@ public:
     }
   }
 
+  /// Finish the processing of switch instructions.
+  ///
+  /// Handling switch instructions requires the insertion of new basic blocks.
+  /// We can't create new blocks during the main pass (due to a limitation of
+  /// InstVisitor), so switch instructions are recorded in the member variable
+  /// switchInstructions and processed in this function.
+  void finalizeSwitchInstructions() {
+    for (auto switchInst : switchInstructions) {
+      // TODO should we try to generate inputs for *all* other paths?
+
+      IRBuilder<> IRB(switchInst);
+      auto conditionExpr = getSymbolicExpression(switchInst->getCondition());
+
+      // The default case needs to assert that the condition doesn't equal any
+      // of the cases.
+      if (switchInst->getNumCases() > 0) {
+        auto finalDest = switchInst->getDefaultDest();
+        auto constraintBlock =
+            BasicBlock::Create(switchInst->getContext(), /* name */ "",
+                               finalDest->getParent(), finalDest);
+
+        IRB.SetInsertPoint(constraintBlock);
+
+        auto currentCase = switchInst->case_begin();
+        auto constraint = IRB.CreateCall(
+            SP.comparisonHandlers[CmpInst::ICMP_NE],
+            {conditionExpr,
+             createValueExpression(currentCase->getCaseValue(), IRB)});
+        ++currentCase;
+
+        for (auto endCase = switchInst->case_end(); currentCase != endCase;
+             ++currentCase) {
+          constraint = IRB.CreateCall(
+              SP.binaryOperatorHandlers[Instruction::And],
+              {constraint,
+               IRB.CreateCall(
+                   SP.comparisonHandlers[CmpInst::ICMP_NE],
+                   {conditionExpr,
+                    createValueExpression(currentCase->getCaseValue(), IRB)})});
+        }
+
+        IRB.CreateCall(SP.pushPathConstraint, {constraint, IRB.getInt1(true)});
+        IRB.CreateBr(finalDest);
+
+        auto constraintCheckBlock =
+            BasicBlock::Create(switchInst->getContext(), /* name */ "",
+                               finalDest->getParent(), constraintBlock);
+        IRB.SetInsertPoint(constraintCheckBlock);
+        auto haveSymbolicCondition = IRB.CreateICmpNE(
+            conditionExpr, ConstantPointerNull::get(IRB.getInt8PtrTy()));
+        IRB.CreateCondBr(haveSymbolicCondition, /* then */ constraintBlock,
+                         /* else */ finalDest);
+
+        switchInst->setDefaultDest(constraintCheckBlock);
+      }
+
+      // The individual cases just assert that the condition equals their
+      // respective value.
+      for (auto &caseHandle : switchInst->cases()) {
+        auto finalDest = caseHandle.getCaseSuccessor();
+        auto constraintBlock =
+            BasicBlock::Create(switchInst->getContext(), /* name */ "",
+                               finalDest->getParent(), finalDest);
+
+        IRB.SetInsertPoint(constraintBlock);
+        auto constraint = IRB.CreateCall(
+            SP.comparisonHandlers[CmpInst::ICMP_EQ],
+            {conditionExpr,
+             createValueExpression(caseHandle.getCaseValue(), IRB)});
+        IRB.CreateCall(SP.pushPathConstraint, {constraint, IRB.getInt1(true)});
+        IRB.CreateBr(finalDest);
+
+        auto constraintCheckBlock =
+            BasicBlock::Create(switchInst->getContext(), /* name */ "",
+                               finalDest->getParent(), constraintBlock);
+        IRB.SetInsertPoint(constraintCheckBlock);
+        auto haveSymbolicCondition = IRB.CreateICmpNE(
+            conditionExpr, ConstantPointerNull::get(IRB.getInt8PtrTy()));
+        IRB.CreateCondBr(haveSymbolicCondition, /* then */ constraintBlock,
+                         /* else */ finalDest);
+
+        caseHandle.setSuccessor(constraintCheckBlock);
+      }
+    }
+  }
+
   /// Finish the processing of PHI nodes.
   ///
   /// This assumes that there is a dummy PHI node for each such instruction in
@@ -762,80 +848,11 @@ public:
     // push the new path constraint at the jump destinations, because the
     // destination blocks may be the targets of other jumps as well. Therefore,
     // we insert a series of new blocks that construct and push the respective
-    // path constraint before jumping to the original target.
+    // path constraint before jumping to the original target. Since inserting
+    // new basic blocks confuses InstVisitor, we have to defer processing of the
+    // instruction.
 
-    // TODO should we try to generate inputs for *all* other paths?
-
-    IRBuilder<> IRB(&I);
-    auto conditionExpr = getSymbolicExpression(I.getCondition());
-
-    // The default case needs to assert that the condition doesn't equal any of
-    // the cases.
-    if (I.getNumCases() > 0) {
-      auto finalDest = I.getDefaultDest();
-      auto constraintBlock = BasicBlock::Create(
-          I.getContext(), /* name */ "", finalDest->getParent(), finalDest);
-
-      IRB.SetInsertPoint(constraintBlock);
-
-      auto currentCase = I.case_begin();
-      auto constraint = IRB.CreateCall(
-          SP.comparisonHandlers[CmpInst::ICMP_NE],
-          {conditionExpr,
-           createValueExpression(currentCase->getCaseValue(), IRB)});
-      ++currentCase;
-
-      for (auto endCase = I.case_end(); currentCase != endCase; ++currentCase) {
-        constraint = IRB.CreateCall(
-            SP.binaryOperatorHandlers[Instruction::And],
-            {constraint,
-             IRB.CreateCall(
-                 SP.comparisonHandlers[CmpInst::ICMP_NE],
-                 {conditionExpr,
-                  createValueExpression(currentCase->getCaseValue(), IRB)})});
-      }
-
-      IRB.CreateCall(SP.pushPathConstraint, {constraint, IRB.getInt1(true)});
-      IRB.CreateBr(finalDest);
-
-      auto constraintCheckBlock =
-          BasicBlock::Create(I.getContext(), /* name */ "",
-                             finalDest->getParent(), constraintBlock);
-      IRB.SetInsertPoint(constraintCheckBlock);
-      auto haveSymbolicCondition = IRB.CreateICmpNE(
-          conditionExpr, ConstantPointerNull::get(IRB.getInt8PtrTy()));
-      IRB.CreateCondBr(haveSymbolicCondition, /* then */ constraintBlock,
-                       /* else */ finalDest);
-
-      I.setDefaultDest(constraintCheckBlock);
-    }
-
-    // The individual cases just assert that the condition equals their
-    // respective value.
-    for (auto &caseHandle : I.cases()) {
-      auto finalDest = caseHandle.getCaseSuccessor();
-      auto constraintBlock = BasicBlock::Create(
-          I.getContext(), /* name */ "", finalDest->getParent(), finalDest);
-
-      IRB.SetInsertPoint(constraintBlock);
-      auto constraint = IRB.CreateCall(
-          SP.comparisonHandlers[CmpInst::ICMP_EQ],
-          {conditionExpr,
-           createValueExpression(caseHandle.getCaseValue(), IRB)});
-      IRB.CreateCall(SP.pushPathConstraint, {constraint, IRB.getInt1(true)});
-      IRB.CreateBr(finalDest);
-
-      auto constraintCheckBlock =
-          BasicBlock::Create(I.getContext(), /* name */ "",
-                             finalDest->getParent(), constraintBlock);
-      IRB.SetInsertPoint(constraintCheckBlock);
-      auto haveSymbolicCondition = IRB.CreateICmpNE(
-          conditionExpr, ConstantPointerNull::get(IRB.getInt8PtrTy()));
-      IRB.CreateCondBr(haveSymbolicCondition, /* then */ constraintBlock,
-                       /* else */ finalDest);
-
-      caseHandle.setSuccessor(constraintCheckBlock);
-    }
+    switchInstructions.push_back(&I);
   }
 
   void visitUnreachableInst(UnreachableInst &) {
@@ -890,8 +907,8 @@ private:
     friend raw_ostream &
     operator<<(raw_ostream &out,
                const Symbolizer::SymbolicComputation &computation) {
-      out << "\nComputation starting at " << computation.firstInstruction
-          << "\n...ending at " << computation.lastInstruction
+      out << "\nComputation starting at " << *computation.firstInstruction
+          << "\n...ending at " << *computation.lastInstruction
           << "\n...with inputs:\n";
       for (const auto &input : computation.inputs) {
         out << '\t' << *input.concreteValue << '\n';
@@ -1028,6 +1045,14 @@ private:
   /// of the pointer itself (i.e., the address, not the referenced value). For
   /// structure values, the expression is a single large bit vector.
   ValueMap<Value *, Value *> symbolicExpressions;
+
+  /// A record of switch instructions in this function.
+  ///
+  /// The way we currently handle switch statements requires inserting new basic
+  /// blocks, which would confuse InstVisitor if we did it while iterating over
+  /// the function for the first time. Therefore, we just collect all switch
+  /// instructions and finish them later in finalizeSwitchInstructions.
+  SmallVector<SwitchInst *, 8> switchInstructions;
 
   /// A record of all PHI nodes in this function.
   ///
@@ -1263,6 +1288,7 @@ bool SymbolizePass::runOnFunction(Function &F) {
   // DEBUG(errs() << F << '\n');
   symbolizer.symbolizeFunctionArguments(F);
   symbolizer.visit(F);
+  symbolizer.finalizeSwitchInstructions();
   symbolizer.finalizePHINodes();
   symbolizer.shortCircuitExpressionUses();
   assert(!verifyFunction(F, &errs()) &&
