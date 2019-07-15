@@ -739,10 +739,13 @@ public:
         llvm_unreachable("Unknown cast opcode");
       }
 
-      symbolicExpressions[&I] = IRB.CreateCall(
-          target, {getOrCreateSymbolicExpression(I.getOperand(0), IRB),
+      auto castInstruction = IRB.CreateCall(
+          target, {getSymbolicExpression(I.getOperand(0)),
                    IRB.getInt8(I.getDestTy()->getIntegerBitWidth() -
                                I.getSrcTy()->getIntegerBitWidth())});
+      Input pointer = {I.getOperand(0), 0, castInstruction};
+      symbolicExpressions[&I] = castInstruction;
+      expressionUses.push_back({castInstruction, castInstruction, pointer});
     }
   }
 
