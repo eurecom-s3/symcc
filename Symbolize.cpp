@@ -258,100 +258,6 @@ public:
     }
   }
 
-  Value *handleBitCastOperator(BitCastOperator &I, IRBuilder<> &IRB) {
-    assert(I.getSrcTy()->isPointerTy() && I.getDestTy()->isPointerTy() &&
-           "Unhandled non-pointer bit cast");
-    return getOrCreateSymbolicExpression(I.getOperand(0), IRB);
-  }
-
-  Value *handleGEPOperator(GEPOperator &I, IRBuilder<> &IRB) {
-    // GEP performs address calculations but never actually accesses memory. In
-    // order to represent the result of a GEP symbolically, we start from the
-    // symbolic expression of the original pointer and duplicate its
-    // computations at the symbolic level.
-
-    auto pointerSizeValue = ConstantInt::get(IRB.getInt8Ty(), SP.ptrBits);
-    auto pointerExpr = getSymbolicExpression(I.getPointerOperand());
-    Instruction *firstInstruction = nullptr;
-    std::vector<Input> inputs;
-
-    Value *result = nullptr;
-    for (auto type_it = gep_type_begin(I), type_end = gep_type_end(I);
-         type_it != type_end; ++type_it) {
-      auto index = type_it.getOperand();
-
-      // There are two cases for the calculation:
-      // 1. If the indexed type is a struct, we need to add the offset of the
-      //    desired member.
-      // 2. If it is an array or a pointer, compute the offset of the desired
-      //    element.
-      Value *offset;
-      if (auto structType = type_it.getStructTypeOrNull()) {
-        // Structs can only be indexed with constants
-        // (https://llvm.org/docs/LangRef.html#getelementptr-instruction).
-
-        unsigned memberIndex = cast<ConstantInt>(index)->getZExtValue();
-        unsigned memberOffset = SP.dataLayout->getStructLayout(structType)
-                                    ->getElementOffset(memberIndex);
-        offset = IRB.CreateCall(
-            SP.buildInteger, {ConstantInt::get(IRB.getInt64Ty(), memberOffset),
-                              pointerSizeValue});
-        if (!firstInstruction)
-          firstInstruction = cast<Instruction>(offset);
-      } else {
-        if (auto ci = dyn_cast<ConstantInt>(index); ci && ci->isZero()) {
-          // Fast path: an index of zero means that no calculations are
-          // performed.
-          continue;
-        }
-
-        // TODO optimize? If the index is constant, we can perform the
-        // multiplication ourselves instead of having the solver do it. Also, if
-        // the element size is 1, we can omit the multiplication.
-
-        unsigned elementSize =
-            SP.dataLayout->getTypeAllocSize(type_it.getIndexedType());
-        auto elementSizeExpr = IRB.CreateCall(
-            SP.buildInteger, {ConstantInt::get(IRB.getInt64Ty(), elementSize),
-                              pointerSizeValue});
-        if (!firstInstruction)
-          firstInstruction = cast<Instruction>(elementSizeExpr);
-        auto indexExpr = getSymbolicExpression(index);
-        bool haveZExt = false;
-        if (auto indexWidth = index->getType()->getIntegerBitWidth();
-            indexWidth != 64) {
-          indexExpr = IRB.CreateCall(
-              SP.buildZExt,
-              {indexExpr, ConstantInt::get(IRB.getInt8Ty(), 64 - indexWidth)});
-          inputs.push_back({index, 0, cast<Instruction>(indexExpr)});
-          haveZExt = true;
-        }
-
-        offset = IRB.CreateCall(SP.binaryOperatorHandlers[Instruction::Mul],
-                                {indexExpr, elementSizeExpr});
-        if (!haveZExt)
-          inputs.push_back({index, 0, cast<Instruction>(offset)});
-      }
-
-      result = (result == nullptr)
-                   ? offset
-                   : IRB.CreateCall(SP.binaryOperatorHandlers[Instruction::Add],
-                                    {result, offset});
-    }
-
-    if (result) {
-      result = IRB.CreateCall(SP.binaryOperatorHandlers[Instruction::Add],
-                              {result, pointerExpr});
-      inputs.push_back({I.getPointerOperand(), 1, cast<Instruction>(result)});
-      expressionUses.push_back(SymbolicComputation(
-          firstInstruction, cast<Instruction>(result), inputs));
-    } else {
-      result = pointerExpr;
-    }
-
-    return result;
-  }
-
   void handleIntrinsicCall(CallInst &I) {
     auto callee = I.getCalledFunction();
 
@@ -468,8 +374,7 @@ public:
     assert(handler && "Unable to handle binary operator");
     auto runtimeCall =
         buildRuntimeCall(IRB, handler, {I.getOperand(0), I.getOperand(1)});
-    expressionUses.push_back(runtimeCall);
-    symbolicExpressions[&I] = runtimeCall.lastInstruction;
+    registerSymbolicComputation(runtimeCall, &I);
   }
 
   void visitSelectInst(SelectInst &I) {
@@ -495,8 +400,7 @@ public:
     assert(handler && "Unable to handle icmp/fcmp variant");
     auto runtimeCall =
         buildRuntimeCall(IRB, handler, {I.getOperand(0), I.getOperand(1)});
-    symbolicExpressions[&I] = runtimeCall.lastInstruction;
-    expressionUses.push_back(runtimeCall);
+    registerSymbolicComputation(runtimeCall, &I);
   }
 
   void visitReturnInst(ReturnInst &I) {
@@ -627,14 +531,88 @@ public:
   }
 
   void visitGetElementPtrInst(GetElementPtrInst &I) {
+    // GEP performs address calculations but never actually accesses memory. In
+    // order to represent the result of a GEP symbolically, we start from the
+    // symbolic expression of the original pointer and duplicate its
+    // computations at the symbolic level.
+
+    // If there are no indices we can return early (does this ever happen?).
+    if (I.getNumIndices() == 0) {
+      symbolicExpressions[&I] = getSymbolicExpression(I.getPointerOperand());
+      return;
+    }
+
     IRBuilder<> IRB(&I);
-    symbolicExpressions[&I] = handleGEPOperator(cast<GEPOperator>(I), IRB);
+    SymbolicComputation symbolicComputation;
+    Value *currentAddress = I.getPointerOperand();
+
+    for (auto type_it = gep_type_begin(I), type_end = gep_type_end(I);
+         type_it != type_end; ++type_it) {
+      auto index = type_it.getOperand();
+      std::pair<Value *, bool> addressContribution;
+
+      // There are two cases for the calculation:
+      // 1. If the indexed type is a struct, we need to add the offset of the
+      //    desired member.
+      // 2. If it is an array or a pointer, compute the offset of the desired
+      //    element.
+      if (auto structType = type_it.getStructTypeOrNull()) {
+        // Structs can only be indexed with constants
+        // (https://llvm.org/docs/LangRef.html#getelementptr-instruction).
+
+        unsigned memberIndex = cast<ConstantInt>(index)->getZExtValue();
+        unsigned memberOffset = SP.dataLayout->getStructLayout(structType)
+                                    ->getElementOffset(memberIndex);
+        addressContribution = {ConstantInt::get(IRB.getInt64Ty(), memberOffset),
+                               true};
+      } else {
+        if (auto ci = dyn_cast<ConstantInt>(index); ci && ci->isZero()) {
+          // Fast path: an index of zero means that no calculations are
+          // performed.
+          continue;
+        }
+
+        // TODO optimize? If the index is constant, we can perform the
+        // multiplication ourselves instead of having the solver do it. Also, if
+        // the element size is 1, we can omit the multiplication.
+
+        unsigned elementSize =
+            SP.dataLayout->getTypeAllocSize(type_it.getIndexedType());
+        if (auto indexWidth = index->getType()->getIntegerBitWidth();
+            indexWidth != 64) {
+          symbolicComputation.merge(buildRuntimeCall(
+              IRB, SP.buildZExt,
+              {{index, true},
+               {ConstantInt::get(IRB.getInt8Ty(), 64 - indexWidth), false}}));
+          symbolicComputation.merge(buildRuntimeCall(
+              IRB, SP.binaryOperatorHandlers[Instruction::Mul],
+              {{symbolicComputation.lastInstruction, false},
+               {ConstantInt::get(IRB.getInt64Ty(), elementSize), true}}));
+        } else {
+          symbolicComputation.merge(buildRuntimeCall(
+              IRB, SP.binaryOperatorHandlers[Instruction::Mul],
+              {index, ConstantInt::get(IRB.getInt64Ty(), elementSize)}));
+        }
+
+        addressContribution = {symbolicComputation.lastInstruction, false};
+      }
+
+      symbolicComputation.merge(buildRuntimeCall(
+          IRB, SP.binaryOperatorHandlers[Instruction::Add],
+          {addressContribution,
+           {currentAddress, (currentAddress == I.getPointerOperand())}}));
+      currentAddress = symbolicComputation.lastInstruction;
+    }
+
+    registerSymbolicComputation(symbolicComputation, &I);
   }
 
   void visitBitCastInst(BitCastInst &I) {
     IRBuilder<> IRB(&I);
+    assert(I.getSrcTy()->isPointerTy() && I.getDestTy()->isPointerTy() &&
+           "Unhandled non-pointer bit cast");
     symbolicExpressions[&I] =
-        handleBitCastOperator(cast<BitCastOperator>(I), IRB);
+        getOrCreateSymbolicExpression(I.getOperand(0), IRB);
   }
 
   void visitTruncInst(TruncInst &I) {
@@ -739,13 +717,13 @@ public:
         llvm_unreachable("Unknown cast opcode");
       }
 
-      auto castInstruction = IRB.CreateCall(
-          target, {getSymbolicExpression(I.getOperand(0)),
-                   IRB.getInt8(I.getDestTy()->getIntegerBitWidth() -
-                               I.getSrcTy()->getIntegerBitWidth())});
-      Input pointer = {I.getOperand(0), 0, castInstruction};
-      symbolicExpressions[&I] = castInstruction;
-      expressionUses.push_back({castInstruction, castInstruction, pointer});
+      auto symbolicCast =
+          buildRuntimeCall(IRB, target,
+                           {{I.getOperand(0), true},
+                            {IRB.getInt8(I.getDestTy()->getIntegerBitWidth() -
+                                         I.getSrcTy()->getIntegerBitWidth()),
+                             false}});
+      registerSymbolicComputation(symbolicCast, &I);
     }
   }
 
@@ -876,13 +854,43 @@ private:
 
   /// A symbolic computation with its inputs.
   struct SymbolicComputation {
-    Instruction *firstInstruction, *lastInstruction;
+    Instruction *firstInstruction = nullptr, *lastInstruction = nullptr;
     SmallVector<Input, kExpectedSymbolicArgumentsPerComputation> inputs;
+
+    SymbolicComputation() = default;
 
     SymbolicComputation(Instruction *first, Instruction *last,
                         ArrayRef<Input> in)
         : firstInstruction(first), lastInstruction(last),
           inputs(in.begin(), in.end()) {}
+
+    /// Append another symbolic computation to this one.
+    ///
+    /// The computation that is to be appended must occur after the one that
+    /// this method is called on.
+    void merge(const SymbolicComputation &other) {
+      if (&other == this)
+        return;
+
+      if (firstInstruction == nullptr)
+        firstInstruction = other.firstInstruction;
+      lastInstruction = other.lastInstruction;
+
+      for (const auto &input : other.inputs)
+        inputs.push_back(input);
+    }
+
+    friend raw_ostream &
+    operator<<(raw_ostream &out,
+               const Symbolizer::SymbolicComputation &computation) {
+      out << "\nComputation starting at " << computation.firstInstruction
+          << "\n...ending at " << computation.lastInstruction
+          << "\n...with inputs:\n";
+      for (const auto &input : computation.inputs) {
+        out << '\t' << *input.concreteValue << '\n';
+      }
+      return out;
+    }
   };
 
   /// Create an expression that represents the concrete value.
@@ -957,20 +965,10 @@ private:
     if (auto expr = getSymbolicExpression(V); expr != nullptr)
       return expr;
 
-    // Constants and arguments may be used in multiple places throughout a
-    // function. Ideally, we'd make sure that in such cases the symbolic
-    // expression is generated as early as necessary but no earlier. This is
-    // complicated by the requirement to generate symbolic expressions in the
-    // right order whenever they depend on each other. For now, we just recreate
-    // such expressions every time, i.e., we don't cache them.
-
     if (isa<Constant>(V) || isa<Argument>(V)) {
-      // This is a constant, so we can just create a constant expression from
-      // the result of the computation. For now, just reuse the expression; it
-      // would be more efficient to transform it into an instruction and only
-      // reuse the value. However, in optimized builds the optimizer should take
-      // care of the transformation automatically.
-
+      // Don't create expressions for constants; the short-circuit logic will
+      // create them if necessary (i.e., if the constants are used in
+      // computations with non-constants).
       return ConstantPointerNull::get(IRB.getInt8PtrTy());
     }
 
@@ -983,20 +981,50 @@ private:
     return (!type->isAggregateType() && SP.dataLayout->isLittleEndian());
   }
 
-  SymbolicComputation buildRuntimeCall(IRBuilder<> &IRB, Value *function,
-                                       ArrayRef<Value *> args) {
-    std::vector<Value *> symbolicArgs;
-    for (auto arg : args) {
-      symbolicArgs.push_back(getSymbolicExpression(arg));
+  /// Create a call to the specified function in the run-time library.
+  ///
+  /// Each argument is specified as a pair of Value and Boolean. The Boolean
+  /// specifies whether the Value is a symbolic argument, in which case the
+  /// corresponding symbolic expression will be passed to the run-time function.
+  /// Moreover, the use of symbolic expressions will be recorded in the
+  /// resulting SymbolicComputation.
+  SymbolicComputation
+  buildRuntimeCall(IRBuilder<> &IRB, Value *function,
+                   ArrayRef<std::pair<Value *, bool>> args) {
+    std::vector<Value *> functionArgs;
+    for (auto &[arg, symbolic] : args) {
+      functionArgs.push_back(symbolic ? getSymbolicExpression(arg) : arg);
     }
-    auto call = IRB.CreateCall(function, symbolicArgs);
+    auto call = IRB.CreateCall(function, functionArgs);
 
     std::vector<Input> inputs;
     for (unsigned i = 0; i < args.size(); i++) {
-      inputs.push_back({args[i], i, call});
+      auto &[arg, symbolic] = args[i];
+      if (symbolic)
+        inputs.push_back({arg, i, call});
     }
 
     return SymbolicComputation(call, call, inputs);
+  }
+
+  /// Convenience overload that treats all arguments as symbolic.
+  SymbolicComputation buildRuntimeCall(IRBuilder<> &IRB, Value *function,
+                                       ArrayRef<Value *> symbolicArgs) {
+    std::vector<std::pair<Value *, bool>> args;
+    for (const auto &arg : symbolicArgs) {
+      args.push_back({arg, true});
+    }
+
+    return buildRuntimeCall(IRB, function, args);
+  }
+
+  /// Register the result of the computation as the symbolic expression
+  /// corresponding to the concrete value and record the computation for
+  /// short-circuiting.
+  void registerSymbolicComputation(const SymbolicComputation &computation,
+                                   Value *concrete) {
+    symbolicExpressions[concrete] = computation.lastInstruction;
+    expressionUses.push_back(computation);
   }
 
   const SymbolizePass &SP;
