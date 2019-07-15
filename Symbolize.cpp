@@ -383,12 +383,10 @@ public:
     // expression over from the chosen argument.
 
     IRBuilder<> IRB(&I);
-    IRB.CreateCall(SP.pushPathConstraint,
-                   {getOrCreateSymbolicExpression(I.getCondition(), IRB),
-                    I.getCondition()});
-    symbolicExpressions[&I] = IRB.CreateSelect(
-        I.getCondition(), getOrCreateSymbolicExpression(I.getTrueValue(), IRB),
-        getOrCreateSymbolicExpression(I.getFalseValue(), IRB));
+    auto runtimeCall =
+        buildRuntimeCall(IRB, SP.pushPathConstraint,
+                         {{I.getCondition(), true}, {I.getCondition(), false}});
+    registerSymbolicComputation(runtimeCall);
   }
 
   void visitCmpInst(CmpInst &I) {
@@ -1022,8 +1020,11 @@ private:
   /// corresponding to the concrete value and record the computation for
   /// short-circuiting.
   void registerSymbolicComputation(const SymbolicComputation &computation,
-                                   Value *concrete) {
-    symbolicExpressions[concrete] = computation.lastInstruction;
+                                   Value *concrete = nullptr) {
+    if (concrete) {
+      symbolicExpressions[concrete] = computation.lastInstruction;
+    }
+
     expressionUses.push_back(computation);
   }
 
