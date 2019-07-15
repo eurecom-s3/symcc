@@ -518,8 +518,11 @@ public:
     // symbolic expression of the original pointer and duplicate its
     // computations at the symbolic level.
 
-    // If there are no indices we can return early (does this ever happen?).
-    if (I.getNumIndices() == 0) {
+    // If there are no indices or if they are all zero we can return early.
+    if (std::all_of(I.idx_begin(), I.idx_end(), [](Value *index) {
+          auto ci = dyn_cast<ConstantInt>(index);
+          return (ci && ci->isZero());
+        })) {
       symbolicExpressions[&I] = getSymbolicExpression(I.getPointerOperand());
       return;
     }
