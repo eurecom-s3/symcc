@@ -316,27 +316,52 @@ public:
       // In the slow case, we need to check each input expression for null
       // (i.e., the input is concrete) and create an expression from the
       // concrete value if necessary.
+      auto numUnknownConcreteness = std::count_if(
+          symbolicComputation.inputs.begin(), symbolicComputation.inputs.end(),
+          [&](const Input &input) {
+            return (input.getSymbolicOperand() != nullExpression);
+          });
       for (unsigned argIndex = 0; argIndex < symbolicComputation.inputs.size();
            argIndex++) {
         auto &argument = symbolicComputation.inputs[argIndex];
         auto originalArgExpression = argument.getSymbolicOperand();
         auto argCheckBlock = symbolicComputation.firstInstruction->getParent();
 
-        IRB.SetInsertPoint(symbolicComputation.firstInstruction);
-        auto argExpressionBlock = SplitBlockAndInsertIfThen(
-            nullChecks[argIndex], symbolicComputation.firstInstruction,
-            /* unreachable */ false);
+        // We only need a run-time check for concreteness if the argument isn't
+        // known to be concrete at compile time already. However, there is one
+        // exception: if the computation only has a single argument of unknown
+        // concreteness, then we know that it must be symbolic since we ended up
+        // in the slow path. Therefore, we can skip expression generation in
+        // that case.
+        bool needRuntimeCheck = originalArgExpression != nullExpression;
+        if (needRuntimeCheck && (numUnknownConcreteness == 1))
+          continue;
 
-        IRB.SetInsertPoint(argExpressionBlock);
+        if (needRuntimeCheck) {
+          auto argExpressionBlock = SplitBlockAndInsertIfThen(
+              nullChecks[argIndex], symbolicComputation.firstInstruction,
+              /* unreachable */ false);
+          IRB.SetInsertPoint(argExpressionBlock);
+        } else {
+          IRB.SetInsertPoint(symbolicComputation.firstInstruction);
+        }
+
         auto newArgExpression =
             createValueExpression(argument.concreteValue, IRB);
 
-        IRB.SetInsertPoint(symbolicComputation.firstInstruction);
-        auto argExpression = IRB.CreatePHI(IRB.getInt8PtrTy(), 2);
-        argExpression->addIncoming(originalArgExpression, argCheckBlock);
-        argExpression->addIncoming(newArgExpression,
-                                   argExpressionBlock->getParent());
-        argument.user->replaceUsesOfWith(originalArgExpression, argExpression);
+        Value *finalArgExpression;
+        if (needRuntimeCheck) {
+          IRB.SetInsertPoint(symbolicComputation.firstInstruction);
+          auto argPHI = IRB.CreatePHI(IRB.getInt8PtrTy(), 2);
+          argPHI->addIncoming(originalArgExpression, argCheckBlock);
+          argPHI->addIncoming(newArgExpression, newArgExpression->getParent());
+          finalArgExpression = argPHI;
+        } else {
+          finalArgExpression = newArgExpression;
+        }
+
+        argument.user->replaceUsesOfWith(originalArgExpression,
+                                         finalArgExpression);
       }
 
       // Finally, the overall result (if the computation produces one) is null
