@@ -36,3 +36,6 @@ TAGS
 
 # CLion project
 .idea
+
+# Clang tooling
+compile_commands.json
