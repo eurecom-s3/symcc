@@ -393,7 +393,7 @@ void _sym_set_parameter_expression(uint8_t index, Z3_ast expr) {
   g_function_arguments[index] = expr;
 }
 
-void *_sym_get_parameter_expression(uint8_t index) {
+Z3_ast _sym_get_parameter_expression(uint8_t index) {
   return g_function_arguments[index];
 }
 
@@ -480,10 +480,7 @@ void _sym_initialize_memory(uint8_t *addr, Z3_ast *shadow, size_t length) {
             << std::endl;
 #endif
 
-  for (size_t i = 0; i < length; i++) {
-    shadow[i] = _sym_build_integer(addr[i], 8);
-  }
-
+  memset(shadow, 0, length * sizeof(Z3_ast));
   _sym_register_memory(addr, shadow, length);
 }
 

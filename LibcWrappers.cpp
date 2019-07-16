@@ -20,8 +20,7 @@ extern "C" {
 
 void *SYM(malloc)(size_t size) {
   auto result = malloc(size);
-  _sym_set_return_expression(_sym_build_integer(
-      reinterpret_cast<uintptr_t>(result), sizeof(result) * 8));
+  _sym_set_return_expression(nullptr);
   auto shadow = static_cast<Z3_ast *>(malloc(size * sizeof(Z3_ast)));
   _sym_register_memory(static_cast<uint8_t *>(result), shadow, size);
   return result;
@@ -30,8 +29,7 @@ void *SYM(malloc)(size_t size) {
 void *SYM(mmap)(void *addr, size_t len, int prot, int flags, int fildes,
                 off_t off) {
   auto result = mmap(addr, len, prot, flags, fildes, off);
-  _sym_set_return_expression(_sym_build_integer(
-      reinterpret_cast<uintptr_t>(result), sizeof(result) * 8));
+  _sym_set_return_expression(nullptr);
   auto shadow = static_cast<Z3_ast *>(malloc(len * sizeof(Z3_ast)));
   _sym_register_memory(static_cast<uint8_t *>(result), shadow, len);
   return result;
@@ -44,8 +42,7 @@ char *SYM(getenv)(const char *name) {
 #endif
   auto result = getenv(name);
   // TODO register string memory?
-  _sym_set_return_expression(_sym_build_integer(
-      reinterpret_cast<uintptr_t>(result), sizeof(result) * 8));
+  _sym_set_return_expression(nullptr);
   return result;
 }
 
@@ -71,7 +68,7 @@ ssize_t SYM(read)(int fildes, void *buf, size_t nbyte) {
     _sym_initialize_memory(byteBuf, shadowStart, nbyte);
   }
 
-  _sym_set_return_expression(_sym_build_integer(result, sizeof(result) * 8));
+  _sym_set_return_expression(nullptr);
   return result;
 }
 
@@ -79,30 +76,27 @@ void *SYM(memcpy)(void *dest, const void *src, size_t n) {
   auto result = memcpy(dest, src, n);
   _sym_memcpy(static_cast<uint8_t *>(dest), static_cast<const uint8_t *>(src),
               n);
-  _sym_set_return_expression(_sym_build_integer(
-      reinterpret_cast<uintptr_t>(result), sizeof(result) * 8));
+  _sym_set_return_expression(nullptr);
   return result;
 }
 
 void *SYM(memset)(void *s, int c, size_t n) {
   auto result = memset(s, c, n);
-  _sym_memset(static_cast<uint8_t *>(s), _sym_build_integer(c, sizeof(c) * 8),
-              n);
-  _sym_set_return_expression(_sym_build_integer(
-      reinterpret_cast<uintptr_t>(result), sizeof(result) * 8));
+  _sym_memset(static_cast<uint8_t *>(s), _sym_get_parameter_expression(1), n);
+  _sym_set_return_expression(nullptr);
   return result;
 }
 
 int SYM(select)(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
                 struct timeval *timeout) {
   auto result = select(nfds, readfds, writefds, exceptfds, timeout);
-  _sym_set_return_expression(_sym_build_integer(result, sizeof(result) * 8));
+  _sym_set_return_expression(nullptr);
   return result;
 }
 
 ssize_t SYM(write)(int fildes, const void *buf, size_t nbyte) {
   auto result = write(fildes, buf, nbyte);
-  _sym_set_return_expression(_sym_build_integer(result, sizeof(result) * 8));
+  _sym_set_return_expression(nullptr);
   return result;
 }
 }

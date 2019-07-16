@@ -975,7 +975,7 @@ private:
   };
 
   /// Create an expression that represents the concrete value.
-  Value *createValueExpression(Value *V, IRBuilder<> &IRB) {
+  CallInst *createValueExpression(Value *V, IRBuilder<> &IRB) {
     auto valueType = V->getType();
 
     if (isa<ConstantPointerNull>(V)) {

@@ -102,7 +102,7 @@ Z3_ast _sym_build_float_to_unsigned_integer(Z3_ast expr, uint8_t bits);
  * Function-call helpers
  */
 void _sym_set_parameter_expression(uint8_t index, Z3_ast expr);
-void *_sym_get_parameter_expression(uint8_t index);
+Z3_ast _sym_get_parameter_expression(uint8_t index);
 void _sym_set_return_expression(Z3_ast expr);
 Z3_ast _sym_get_return_expression(void);
 
