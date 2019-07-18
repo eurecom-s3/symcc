@@ -1,0 +1,36 @@
+
+
+                             Libc Call Interception
+
+
+While we can, in principle, compile all code with instrumentation, it is unclear
+how difficult this is for the C standard library. The LLVM sanitizers don't try,
+even if MSan otherwise requires all code to be instrumented, and we take this as
+a sign that there may be unforeseen challenges. For now, we take the same route
+as the sanitizers and intercept calls to libc functions, wrapping them with
+symbolic handling. For example, the wrapper for "memset" obtains the symbolic
+expression for the value to be written in memory and pushes it to the shadow
+region of the destination memory. In the future, we may experiment with
+compiling (parts of) libc to avoid the effort of manually defining wrappers.
+
+Initially, we tried the interception mechanism that the LLVM sanitizers use,
+implemented in the compiler-rt library. The Linux version basically just defines
+a function with the name of the libc function. The dynamic loader resolves
+symbols to the first function with the right name that it finds; given an
+appropriate link order, the wrapper (or "interceptor" in compiler-rt parlance)
+will be called instead of the libc function. Calling the real function is just a
+matter of asking the loader for alternative resolutions (i.e., calling "dlsym"
+with flag "RTLD_NEXT"). The problem for us is that this approach *globally*
+replaces a given libc function, in the executable and in all libraries that it
+loads. However, our run-time support library is loaded into the same process and
+makes heavy use of libc, so we need the ability to use wrappers in one part of
+the program and concrete functions in another. This turned out to complicate the
+compiler-rt based implementation so much that we eventually abandoned the
+approach.
+
+Function renaming provided a convenient alternative: we control all code that is
+supposed to call wrappers rather the libc functions proper, so we just rename
+the targets of their calls. For example, a call to "memset" in the program under
+test turns into a call to "__symbolized_memset", which we can easily define as a
+regular function wrapping "memset". Calls from our run-time library, on the
+other hand, use the regular function names and thus end up in libc as usual.

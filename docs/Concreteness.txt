@@ -1,0 +1,46 @@
+
+
+                              Concreteness Checks
+
+
+If we do not distinguish between symbolic and concrete values in the program
+under test, then we end up passing every computation to the solver, including
+concrete ones. Since all parameters are known in the purely concrete case, the
+solver will just repeat the computation (most likely in a less efficient way)
+and conclude that there is no way to change its outcome. We can avoid such
+wasted effort by only passing symbolic computations to the solver.
+
+There are two stages at which data can be identified as concrete:
+1. At compile time, if a value is known to be a constant we can conclude that it
+   will always be concrete at run time.
+2. At run time, a value that is not a constant may still turn out to be
+   concrete. For example, data read from memory can be symbolic or concrete.
+
+If we detect in the compiler pass that a value is a compile-time constant (case
+1 above), we do not emit code for symbolic handling at all. However, for any
+other type of data we need to generate code that handles the case of it being
+symbolic at run time. Concretely (no pun intended), we mark concrete values at
+run time by setting its corresponding symbolic expression in shadow memory to
+null. This makes it very cheap to check concreteness during execution: just run
+a null check on the symbolic expression.
+
+The code that we inject into the program under test performs concreteness checks
+on the arguments of each instruction. For example, when the program adds two
+values, the generated code performs the addition and additionally represents it
+symbolically according to the concreteness of the two addends. There are
+multiple cases to distinguish:
+1. If all arguments of a computation are concrete, we can skip symbolic
+   processing altogether and just set the result expression to null, indicating
+   that the result is a concrete value.
+2. If at least one argument is symbolic, we need to generate an expression
+   representing the result. Therefore, we generate expressions for all arguments
+   (since the concrete arguments will have null expressions) and call into the
+   run-time support library to produce an expression according to the performed
+   computation. There are several opportunities for optimization, e.g., when
+   the computation only has a single argument that is not a compile-time
+   constant we do not need to check it for concreteness again.
+
+It is important to note that these checks cannot be performed by the compiler
+because the concreteness of non-constant data is not known at compile time.
+Instead, the compiler emits code that performs the required checks at run time
+and acts accordingly.
