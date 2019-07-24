@@ -21,7 +21,7 @@
     X;                                                                         \
   } while (false)
 #else
-#define DEBUG(X) ((void) 0)
+#define DEBUG(X) ((void)0)
 #endif
 
 using namespace llvm;
@@ -226,18 +226,21 @@ public:
         symbolicPHI->replaceAllUsesWith(ConstantPointerNull::get(
             cast<PointerType>(symbolicPHI->getType())));
         symbolicPHI->eraseFromParent();
+        // Replacing all uses will fix uses of the symbolic PHI node in existing
+        // code, but the node may still be referenced via symbolicExpressions in
+        // the generation of new code (e.g., if the current PHI is the input to
+        // another PHI that we process later). Therefore, we need to delete it
+        // from symbolicExpressions, indicating that the current PHI does not
+        // have a symbolic expression.
+        symbolicExpressions.erase(phi);
         continue;
       }
 
       for (unsigned incoming = 0, totalIncoming = phi->getNumIncomingValues();
            incoming < totalIncoming; incoming++) {
-        auto block = phi->getIncomingBlock(incoming);
-        // Any code we may have to generate for the symbolic expressions will
-        // have to live in the basic block that the respective value comes
-        // from: PHI nodes can't be preceded by regular code in a basic block.
         symbolicPHI->addIncoming(
             getSymbolicExpressionOrNull(phi->getIncomingValue(incoming)),
-            block);
+            phi->getIncomingBlock(incoming));
       }
     }
   }
