@@ -1003,7 +1003,7 @@ private:
 
     if (valueType->isFloatingPointTy()) {
       return IRB.CreateCall(SP.buildFloat,
-                            {IRB.CreateFPExt(V, IRB.getDoubleTy()),
+                            {IRB.CreateFPCast(V, IRB.getDoubleTy()),
                              IRB.getInt1(valueType->isDoubleTy())});
     }
 
@@ -1187,16 +1187,21 @@ static struct RegisterStandardPasses Y(PassManagerBuilder::EP_EarlyAsPossible,
 bool SymbolizePass::isSymbolizedFunction(const Function &f) const {
   static const StringSet<> kConcretizedFunctions = {
       // Some libc functions whose results we can concretize
-      "printf", "err", "exit", "munmap", "perror", "getenv", "select", "write",
+      "printf", "err", "exit", "munmap", "free", "perror", "getenv", "select",
+      "write", "rand", "setjmp", "longjmp",
       // Returns the address of errno, so always concrete
       "__errno_location",
-      // CGC runtime
-      "cgc_rint", "cgc_pow", "cgc_log10",
+      // CGC run-time functions that Z3 can't really represent in the logic of
+      // bit vectors
+      "cgc_rint", "cgc_pow", "cgc_log10", "cgc_sin", "cgc_cos", "cgc_sqrt",
+      "cgc_log", "cgc_log2", "cgc_atan2", "cgc_tan", "cgc_log2f", "cgc_logf",
+      "cgc_exp2f", "cgc_sqrtf",
       // TODO CGC uses sscanf only on concrete data, so for now we can
       // concretize
       "__isoc99_sscanf",
       // TODO
-      "strlen"};
+      "strlen", "cgc_remainder", "cgc_fabs", "cgc_setjmp", "cgc_longjmp",
+      "__stack_chk_fail"};
 
   if (kConcretizedFunctions.count(f.getName()))
     return false;
