@@ -36,10 +36,8 @@ public:
 private:
   static constexpr char kSymCtorName[] = "__sym_ctor";
 
-  /// Generate code to initialize the expression corresponding to a global
-  /// variable.
-  void buildGlobalInitialization(Value *expression, Value *value,
-                                 IRBuilder<> &IRB);
+  /// Decide whether a function is called symbolically.
+  bool isSymbolizedFunction(const Function &f) const;
 
   //
   // Runtime functions
@@ -579,8 +577,10 @@ public:
                         getSymbolicExpressionOrNull(arg)});
     }
 
-    IRB.SetInsertPoint(I.getNextNonDebugInstruction());
-    symbolicExpressions[&I] = IRB.CreateCall(SP.getReturnExpression);
+    if (!callee || SP.isSymbolizedFunction(*callee)) {
+      IRB.SetInsertPoint(I.getNextNode());
+      symbolicExpressions[&I] = IRB.CreateCall(SP.getReturnExpression);
+    }
   }
 
   void visitAllocaInst(AllocaInst &I) {
@@ -1177,6 +1177,19 @@ static RegisterPass<SymbolizePass> X("symbolize", "Symbolization Pass");
 static struct RegisterStandardPasses Y(PassManagerBuilder::EP_EarlyAsPossible,
                                        addSymbolizePass);
 
+bool SymbolizePass::isSymbolizedFunction(const Function &f) const {
+  static const StringSet<> kConcretizedFunctions = {
+      "printf", "err", "exit", "munmap", "perror", "getenv", "select", "write",
+      // TODO
+      "cgc_rint", "cgc_pow", "cgc_log10", "__isoc99_sscanf", "strlen",
+      "__errno_location"};
+
+  if (kConcretizedFunctions.count(f.getName()))
+    return false;
+
+  return true;
+}
+
 bool SymbolizePass::doInitialization(Module &M) {
   DEBUG(errs() << "Symbolizer module init\n");
   dataLayout = &M.getDataLayout();
@@ -1185,14 +1198,9 @@ bool SymbolizePass::doInitialization(Module &M) {
 
   // Redirect calls to external functions to the corresponding wrappers and
   // rename internal functions.
-  static const StringSet<> kFunctionsNoHook = {
-      "printf", "err", "exit", "munmap",
-      // TODO
-      "cgc_rint", "cgc_pow", "cgc_log10", "__isoc99_sscanf", "strlen",
-      "__errno_location"};
   for (auto &function : M.functions()) {
     auto name = function.getName();
-    if (kFunctionsNoHook.count(name) || name == "main" ||
+    if (!isSymbolizedFunction(function) || name == "main" ||
         name.startswith("llvm.") || name == "sym_make_symbolic")
       continue;
 

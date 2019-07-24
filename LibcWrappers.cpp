@@ -35,17 +35,6 @@ void *SYM(mmap)(void *addr, size_t len, int prot, int flags, int fildes,
   return result;
 }
 
-char *SYM(getenv)(const char *name) {
-#ifdef DEBUG_RUNTIME
-  std::cout << "Intercepting call to getenv with argument " << name
-            << std::endl;
-#endif
-  auto result = getenv(name);
-  // TODO register string memory?
-  _sym_set_return_expression(nullptr);
-  return result;
-}
-
 ssize_t SYM(read)(int fildes, void *buf, size_t nbyte) {
   static std::vector<Z3_ast> stdinBytes;
 
@@ -83,19 +72,6 @@ void *SYM(memcpy)(void *dest, const void *src, size_t n) {
 void *SYM(memset)(void *s, int c, size_t n) {
   auto result = memset(s, c, n);
   _sym_memset(static_cast<uint8_t *>(s), _sym_get_parameter_expression(1), n);
-  _sym_set_return_expression(nullptr);
-  return result;
-}
-
-int SYM(select)(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
-                struct timeval *timeout) {
-  auto result = select(nfds, readfds, writefds, exceptfds, timeout);
-  _sym_set_return_expression(nullptr);
-  return result;
-}
-
-ssize_t SYM(write)(int fildes, const void *buf, size_t nbyte) {
-  auto result = write(fildes, buf, nbyte);
   _sym_set_return_expression(nullptr);
   return result;
 }
