@@ -15,10 +15,14 @@
 #include <llvm/Transforms/Utils/ModuleUtils.h>
 #include <llvm/Transforms/Utils/ValueMapper.h>
 
+#ifndef NDEBUG
 #define DEBUG(X)                                                               \
   do {                                                                         \
     X;                                                                         \
   } while (false)
+#else
+#define DEBUG(X) ((void) 0)
+#endif
 
 using namespace llvm;
 
@@ -1179,10 +1183,17 @@ static struct RegisterStandardPasses Y(PassManagerBuilder::EP_EarlyAsPossible,
 
 bool SymbolizePass::isSymbolizedFunction(const Function &f) const {
   static const StringSet<> kConcretizedFunctions = {
+      // Some libc functions whose results we can concretize
       "printf", "err", "exit", "munmap", "perror", "getenv", "select", "write",
+      // Returns the address of errno, so always concrete
+      "__errno_location",
+      // CGC runtime
+      "cgc_rint", "cgc_pow", "cgc_log10",
+      // TODO CGC uses sscanf only on concrete data, so for now we can
+      // concretize
+      "__isoc99_sscanf",
       // TODO
-      "cgc_rint", "cgc_pow", "cgc_log10", "__isoc99_sscanf", "strlen",
-      "__errno_location"};
+      "strlen"};
 
   if (kConcretizedFunctions.count(f.getName()))
     return false;
