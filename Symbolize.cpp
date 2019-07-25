@@ -558,6 +558,11 @@ public:
     registerSymbolicComputation(runtimeCall);
   }
 
+  void visitIndirectBrInst(IndirectBrInst &I) {
+    IRBuilder<> IRB(&I);
+    tryAlternative(IRB, I.getAddress());
+  }
+
   void visitCallInst(CallInst &I) {
     if (I.isInlineAsm()) {
       handleInlineAssembly(I);
