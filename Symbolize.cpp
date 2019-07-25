@@ -396,20 +396,23 @@ public:
       // These are safe to ignore.
       break;
     case Intrinsic::memcpy: {
-      // auto destExpr = getOrCreateSymbolicExpression(I.getOperand(0), IRB);
-      // auto srcExpr = getOrCreateSymbolicExpression(I.getOperand(1), IRB);
-      // TODO generate diverging inputs for the source, destination and length
-      // of the copy operation
-
       IRBuilder<> IRB(&I);
+
+      tryAlternative(IRB, I.getOperand(0));
+      tryAlternative(IRB, I.getOperand(1));
+      tryAlternative(IRB, I.getOperand(2));
+
       IRB.CreateCall(SP.memcpy,
                      {I.getOperand(0), I.getOperand(1), I.getOperand(2)});
       break;
     }
     case Intrinsic::memset: {
-      // TODO generate diverging inputs for the memory and length operands
-
       IRBuilder<> IRB(&I);
+
+      tryAlternative(IRB, I.getOperand(0));
+      tryAlternative(IRB, I.getOperand(1));
+      tryAlternative(IRB, I.getOperand(2));
+
       IRB.CreateCall(SP.memset,
                      {I.getOperand(0),
                       getSymbolicExpressionOrNull(I.getOperand(1)),
@@ -479,9 +482,9 @@ public:
       return;
     }
 
-    errs() << "Warning: losing track of symbolic expressions at indirect "
-              "call or inline assembly "
-           << I << '\n';
+    errs()
+        << "Warning: losing track of symbolic expressions at inline assembly "
+        << I << '\n';
 
     IRBuilder<> IRB(I.getNextNode());
     symbolicExpressions[&I] = createValueExpression(&I, IRB);
@@ -568,9 +571,11 @@ public:
       return;
     }
 
-    // TODO if this is an indirect call, create a diverging input
-
     IRBuilder<> IRB(&I);
+
+    if (!callee)
+      tryAlternative(IRB, I.getCalledValue());
+
     auto targetName = callee ? callee->getName() : StringRef{};
     bool isMakeSymbolic = (targetName == "sym_make_symbolic");
 
@@ -606,8 +611,7 @@ public:
     IRBuilder<> IRB(&I);
 
     auto addr = I.getPointerOperand();
-    // auto addrExpr = getOrCreateSymbolicExpression(addr, IRB);
-    // TODO generate diverging inputs for addrExpr
+    tryAlternative(IRB, addr);
 
     auto dataType = I.getType();
     auto data = IRB.CreateCall(
@@ -628,9 +632,7 @@ public:
   void visitStoreInst(StoreInst &I) {
     IRBuilder<> IRB(&I);
 
-    // auto addrExpr = getOrCreateSymbolicExpression(I.getPointerOperand(),
-    // IRB);
-    // TODO generate diverging input for the target address
+    tryAlternative(IRB, I.getPointerOperand());
 
     auto data = getSymbolicExpressionOrNull(I.getValueOperand());
     auto dataType = I.getValueOperand()->getType();
@@ -841,7 +843,6 @@ public:
     } else {
       Value *target;
 
-      // TODO use array indexed with cast opcodes
       switch (I.getOpcode()) {
       case Instruction::SExt:
         target = SP.buildSExt;
@@ -1131,6 +1132,21 @@ private:
       registerSymbolicComputation(*computation, concrete);
   }
 
+  /// Generate code that makes the solver try an alternative value for V.
+  void tryAlternative(IRBuilder<> &IRB, Value *V) {
+    auto destExpr = getSymbolicExpression(V);
+    if (destExpr) {
+      auto concreteDestExpr = createValueExpression(V, IRB);
+      auto destAssertion =
+          IRB.CreateCall(SP.comparisonHandlers[CmpInst::ICMP_EQ],
+                         {destExpr, concreteDestExpr});
+      auto pushAssertion = IRB.CreateCall(SP.pushPathConstraint,
+                                          {destAssertion, IRB.getInt1(true)});
+      registerSymbolicComputation(SymbolicComputation(
+          concreteDestExpr, pushAssertion, {{V, 0, destAssertion}}));
+    }
+  }
+
   const SymbolizePass &SP;
 
   /// Mapping from SSA values to symbolic expressions.
@@ -1272,7 +1288,6 @@ bool SymbolizePass::doInitialization(Module &M) {
   binaryOperatorHandlers[Instruction::constant] =                              \
       M.getOrInsertFunction("_sym_build_" #name, ptrT, ptrT, ptrT);
 
-  // TODO make sure that we use the correct variant (signed or unsigned)
   LOAD_BINARY_OPERATOR_HANDLER(Add, add)
   LOAD_BINARY_OPERATOR_HANDLER(Sub, sub)
   LOAD_BINARY_OPERATOR_HANDLER(Mul, mul)
