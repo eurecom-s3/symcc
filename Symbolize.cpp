@@ -410,7 +410,6 @@ public:
       IRBuilder<> IRB(&I);
 
       tryAlternative(IRB, I.getOperand(0));
-      tryAlternative(IRB, I.getOperand(1));
       tryAlternative(IRB, I.getOperand(2));
 
       IRB.CreateCall(SP.memset,
