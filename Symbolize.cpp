@@ -28,25 +28,8 @@ using namespace llvm;
 
 namespace {
 
-class SymbolizePass : public FunctionPass {
-public:
-  static char ID;
-
-  SymbolizePass() : FunctionPass(ID) {}
-
-  bool doInitialization(Module &M) override;
-  bool runOnFunction(Function &F) override;
-
-private:
-  static constexpr char kSymCtorName[] = "__sym_ctor";
-
-  /// Decide whether a function is called symbolically.
-  bool isSymbolizedFunction(const Function &f) const;
-
-  //
-  // Runtime functions
-  //
-
+/// Runtime functions
+struct Runtime {
   Value *buildInteger{};
   Value *buildFloat{};
   Value *buildNullPointer{};
@@ -87,24 +70,181 @@ private:
   /// corresponding symbolic expressions.
   std::array<Value *, Instruction::BinaryOpsEnd> binaryOperatorHandlers{};
 
+  Runtime(Module &M) {
+    IRBuilder<> IRB(M.getContext());
+    auto intPtrType = M.getDataLayout().getIntPtrType(M.getContext());
+    auto ptrT = IRB.getInt8PtrTy();
+    auto int8T = IRB.getInt8Ty();
+    auto voidT = IRB.getVoidTy();
+
+    buildInteger = M.getOrInsertFunction("_sym_build_integer", ptrT,
+                                         IRB.getInt64Ty(), int8T);
+    buildFloat = M.getOrInsertFunction("_sym_build_float", ptrT,
+                                       IRB.getDoubleTy(), IRB.getInt1Ty());
+    buildNullPointer = M.getOrInsertFunction("_sym_build_null_pointer", ptrT);
+    buildTrue = M.getOrInsertFunction("_sym_build_true", ptrT);
+    buildFalse = M.getOrInsertFunction("_sym_build_false", ptrT);
+    buildBool = M.getOrInsertFunction("_sym_build_bool", ptrT, IRB.getInt1Ty());
+    buildNeg = M.getOrInsertFunction("_sym_build_neg", ptrT, ptrT);
+    buildSExt = M.getOrInsertFunction("_sym_build_sext", ptrT, ptrT, int8T);
+    buildZExt = M.getOrInsertFunction("_sym_build_zext", ptrT, ptrT, int8T);
+    buildTrunc = M.getOrInsertFunction("_sym_build_trunc", ptrT, ptrT, int8T);
+    buildIntToFloat =
+        M.getOrInsertFunction("_sym_build_int_to_float", ptrT, ptrT,
+                              IRB.getInt1Ty(), IRB.getInt1Ty());
+    buildFloatToFloat = M.getOrInsertFunction("_sym_build_float_to_float", ptrT,
+                                              ptrT, IRB.getInt1Ty());
+    buildBitsToFloat = M.getOrInsertFunction("_sym_build_bits_to_float", ptrT,
+                                             ptrT, IRB.getInt1Ty());
+    buildFloatToBits =
+        M.getOrInsertFunction("_sym_build_float_to_bits", ptrT, ptrT);
+    buildFloatToSignedInt = M.getOrInsertFunction(
+        "_sym_build_float_to_signed_integer", ptrT, ptrT, int8T);
+    buildFloatToUnsignedInt = M.getOrInsertFunction(
+        "_sym_build_float_to_unsigned_integer", ptrT, ptrT, int8T);
+    buildFloatAbs = M.getOrInsertFunction("_sym_build_fp_abs", ptrT, ptrT);
+    buildBoolAnd =
+        M.getOrInsertFunction("_sym_build_bool_and", ptrT, ptrT, ptrT);
+    buildBoolOr = M.getOrInsertFunction("_sym_build_bool_or", ptrT, ptrT, ptrT);
+    pushPathConstraint = M.getOrInsertFunction("_sym_push_path_constraint",
+                                               voidT, ptrT, IRB.getInt1Ty());
+
+    setParameterExpression = M.getOrInsertFunction(
+        "_sym_set_parameter_expression", voidT, int8T, ptrT);
+    getParameterExpression =
+        M.getOrInsertFunction("_sym_get_parameter_expression", ptrT, int8T);
+    setReturnExpression =
+        M.getOrInsertFunction("_sym_set_return_expression", voidT, ptrT);
+    getReturnExpression =
+        M.getOrInsertFunction("_sym_get_return_expression", ptrT);
+
+#define LOAD_BINARY_OPERATOR_HANDLER(constant, name)                           \
+  binaryOperatorHandlers[Instruction::constant] =                              \
+      M.getOrInsertFunction("_sym_build_" #name, ptrT, ptrT, ptrT);
+
+    LOAD_BINARY_OPERATOR_HANDLER(Add, add)
+    LOAD_BINARY_OPERATOR_HANDLER(Sub, sub)
+    LOAD_BINARY_OPERATOR_HANDLER(Mul, mul)
+    LOAD_BINARY_OPERATOR_HANDLER(UDiv, unsigned_div)
+    LOAD_BINARY_OPERATOR_HANDLER(SDiv, signed_div)
+    LOAD_BINARY_OPERATOR_HANDLER(URem, unsigned_rem)
+    LOAD_BINARY_OPERATOR_HANDLER(SRem, signed_rem)
+    LOAD_BINARY_OPERATOR_HANDLER(Shl, shift_left)
+    LOAD_BINARY_OPERATOR_HANDLER(LShr, logical_shift_right)
+    LOAD_BINARY_OPERATOR_HANDLER(AShr, arithmetic_shift_right)
+    LOAD_BINARY_OPERATOR_HANDLER(And, and)
+    LOAD_BINARY_OPERATOR_HANDLER(Or, or)
+    LOAD_BINARY_OPERATOR_HANDLER(Xor, xor)
+
+    // Floating-point arithmetic
+    LOAD_BINARY_OPERATOR_HANDLER(FAdd, fp_add)
+    LOAD_BINARY_OPERATOR_HANDLER(FSub, fp_sub)
+    LOAD_BINARY_OPERATOR_HANDLER(FMul, fp_mul)
+    LOAD_BINARY_OPERATOR_HANDLER(FDiv, fp_div)
+    LOAD_BINARY_OPERATOR_HANDLER(FRem, fp_rem)
+
+#undef LOAD_BINARY_OPERATOR_HANDLER
+
+#define LOAD_COMPARISON_HANDLER(constant, name)                                \
+  comparisonHandlers[CmpInst::constant] =                                      \
+      M.getOrInsertFunction("_sym_build_" #name, ptrT, ptrT, ptrT);
+
+    LOAD_COMPARISON_HANDLER(ICMP_EQ, equal)
+    LOAD_COMPARISON_HANDLER(ICMP_NE, not_equal)
+    LOAD_COMPARISON_HANDLER(ICMP_UGT, unsigned_greater_than)
+    LOAD_COMPARISON_HANDLER(ICMP_UGE, unsigned_greater_equal)
+    LOAD_COMPARISON_HANDLER(ICMP_ULT, unsigned_less_than)
+    LOAD_COMPARISON_HANDLER(ICMP_ULE, unsigned_less_equal)
+    LOAD_COMPARISON_HANDLER(ICMP_SGT, signed_greater_than)
+    LOAD_COMPARISON_HANDLER(ICMP_SGE, signed_greater_equal)
+    LOAD_COMPARISON_HANDLER(ICMP_SLT, signed_less_than)
+    LOAD_COMPARISON_HANDLER(ICMP_SLE, signed_less_equal)
+
+    // Floating-point comparisons
+    LOAD_COMPARISON_HANDLER(FCMP_OGT, float_ordered_greater_than)
+    LOAD_COMPARISON_HANDLER(FCMP_OGE, float_ordered_greater_equal)
+    LOAD_COMPARISON_HANDLER(FCMP_OLT, float_ordered_less_than)
+    LOAD_COMPARISON_HANDLER(FCMP_OLE, float_ordered_less_equal)
+    LOAD_COMPARISON_HANDLER(FCMP_OEQ, float_ordered_equal)
+    LOAD_COMPARISON_HANDLER(FCMP_ONE, float_ordered_not_equal)
+    LOAD_COMPARISON_HANDLER(FCMP_UNO, float_unordered)
+    LOAD_COMPARISON_HANDLER(FCMP_UGT, float_unordered_greater_than)
+    LOAD_COMPARISON_HANDLER(FCMP_UGE, float_unordered_greater_equal)
+    LOAD_COMPARISON_HANDLER(FCMP_ULT, float_unordered_less_than)
+    LOAD_COMPARISON_HANDLER(FCMP_ULE, float_unordered_less_equal)
+    LOAD_COMPARISON_HANDLER(FCMP_UEQ, float_unordered_equal)
+    LOAD_COMPARISON_HANDLER(FCMP_UNE, float_unordered_not_equal)
+
+#undef LOAD_COMPARISON_HANDLER
+
+    memcpy =
+        M.getOrInsertFunction("_sym_memcpy", voidT, ptrT, ptrT, intPtrType);
+    memset = M.getOrInsertFunction("_sym_memset", voidT, ptrT, ptrT,
+                                   IRB.getInt64Ty());
+    registerMemory = M.getOrInsertFunction("_sym_register_memory", voidT,
+                                           intPtrType, ptrT, intPtrType);
+    readMemory = M.getOrInsertFunction("_sym_read_memory", ptrT, intPtrType,
+                                       intPtrType, int8T);
+    writeMemory = M.getOrInsertFunction("_sym_write_memory", voidT, intPtrType,
+                                        intPtrType, ptrT, int8T);
+    initializeMemory = M.getOrInsertFunction("_sym_initialize_memory", voidT,
+                                             intPtrType, ptrT, intPtrType);
+    buildExtract =
+        M.getOrInsertFunction("_sym_build_extract", ptrT, ptrT,
+                              IRB.getInt64Ty(), IRB.getInt64Ty(), int8T);
+  }
+};
+
+/// Decide whether a function is called symbolically.
+bool isSymbolizedFunction(const Function &f) {
+  static const StringSet<> kConcretizedFunctions = {
+      // Some libc functions whose results we can concretize
+      "printf", "err", "exit", "munmap", "free", "perror", "getenv", "select",
+      "write", "rand", "setjmp", "longjmp",
+      // Returns the address of errno, so always concrete
+      "__errno_location",
+      // CGC run-time functions that Z3 can't really represent in the logic of
+      // bit vectors
+      "cgc_rint", "cgc_pow", "cgc_log10", "cgc_sin", "cgc_cos", "cgc_sqrt",
+      "cgc_log", "cgc_log2", "cgc_atan2", "cgc_tan", "cgc_log2f", "cgc_logf",
+      "cgc_exp2f", "cgc_sqrtf",
+      // TODO CGC uses sscanf only on concrete data, so for now we can
+      // concretize
+      "__isoc99_sscanf",
+      // TODO
+      "strlen", "cgc_remainder", "cgc_fabs", "cgc_setjmp", "cgc_longjmp",
+      "__stack_chk_fail"};
+
+  if (kConcretizedFunctions.count(f.getName()))
+    return false;
+
+  return true;
+}
+
+class SymbolizePass : public FunctionPass {
+public:
+  static char ID;
+
+  SymbolizePass() : FunctionPass(ID) {}
+
+  bool doInitialization(Module &M) override;
+  bool runOnFunction(Function &F) override;
+
+private:
+  static constexpr char kSymCtorName[] = "__sym_ctor";
+
   /// Mapping from global variables to their corresponding symbolic expressions.
   ValueMap<GlobalVariable *, GlobalVariable *> globalExpressions;
-
-  /// The data layout of the currently processed module.
-  const DataLayout *dataLayout;
-
-  /// An integer type at least as wide as a pointer.
-  IntegerType *intPtrType{};
-
-  /// The width in bits of pointers in the module.
-  unsigned ptrBits{};
 
   friend class Symbolizer;
 };
 
 class Symbolizer : public InstVisitor<Symbolizer> {
 public:
-  explicit Symbolizer(const SymbolizePass &symPass) : SP(symPass) {}
+  explicit Symbolizer(Module &M)
+      : runtime(M), dataLayout(M.getDataLayout()),
+        ptrBits(M.getDataLayout().getPointerSizeInBits()),
+        intPtrType(M.getDataLayout().getIntPtrType(M.getContext())) {}
 
   /// Insert code to obtain the symbolic expressions for the function arguments.
   void symbolizeFunctionArguments(Function &F) {
@@ -115,7 +255,7 @@ public:
     IRBuilder<> IRB(F.getEntryBlock().getFirstNonPHI());
 
     for (auto &arg : F.args()) {
-      symbolicExpressions[&arg] = IRB.CreateCall(SP.getParameterExpression,
+      symbolicExpressions[&arg] = IRB.CreateCall(runtime.getParameterExpression,
                                                  IRB.getInt8(arg.getArgNo()));
     }
   }
@@ -147,7 +287,7 @@ public:
 
         auto currentCase = switchInst->case_begin();
         auto constraint = IRB.CreateCall(
-            SP.comparisonHandlers[CmpInst::ICMP_NE],
+            runtime.comparisonHandlers[CmpInst::ICMP_NE],
             {conditionExpr,
              createValueExpression(currentCase->getCaseValue(), IRB)});
         ++currentCase;
@@ -155,15 +295,16 @@ public:
         for (auto endCase = switchInst->case_end(); currentCase != endCase;
              ++currentCase) {
           constraint = IRB.CreateCall(
-              SP.binaryOperatorHandlers[Instruction::And],
+              runtime.binaryOperatorHandlers[Instruction::And],
               {constraint,
                IRB.CreateCall(
-                   SP.comparisonHandlers[CmpInst::ICMP_NE],
+                   runtime.comparisonHandlers[CmpInst::ICMP_NE],
                    {conditionExpr,
                     createValueExpression(currentCase->getCaseValue(), IRB)})});
         }
 
-        IRB.CreateCall(SP.pushPathConstraint, {constraint, IRB.getInt1(true)});
+        IRB.CreateCall(runtime.pushPathConstraint,
+                       {constraint, IRB.getInt1(true)});
         IRB.CreateBr(finalDest);
 
         auto constraintCheckBlock =
@@ -188,10 +329,11 @@ public:
 
         IRB.SetInsertPoint(constraintBlock);
         auto constraint = IRB.CreateCall(
-            SP.comparisonHandlers[CmpInst::ICMP_EQ],
+            runtime.comparisonHandlers[CmpInst::ICMP_EQ],
             {conditionExpr,
              createValueExpression(caseHandle.getCaseValue(), IRB)});
-        IRB.CreateCall(SP.pushPathConstraint, {constraint, IRB.getInt1(true)});
+        IRB.CreateCall(runtime.pushPathConstraint,
+                       {constraint, IRB.getInt1(true)});
         IRB.CreateBr(finalDest);
 
         auto constraintCheckBlock =
@@ -404,7 +546,7 @@ public:
       tryAlternative(IRB, I.getOperand(1));
       tryAlternative(IRB, I.getOperand(2));
 
-      IRB.CreateCall(SP.memcpy,
+      IRB.CreateCall(runtime.memcpy,
                      {I.getOperand(0), I.getOperand(1), I.getOperand(2)});
       break;
     }
@@ -414,7 +556,7 @@ public:
       tryAlternative(IRB, I.getOperand(0));
       tryAlternative(IRB, I.getOperand(2));
 
-      IRB.CreateCall(SP.memset,
+      IRB.CreateCall(runtime.memset,
                      {I.getOperand(0),
                       getSymbolicExpressionOrNull(I.getOperand(1)),
                       IRB.CreateZExt(I.getOperand(2), IRB.getInt64Ty())});
@@ -440,7 +582,7 @@ public:
       // corresponding symbolic expression.
 
       IRBuilder<> IRB(&I);
-      auto abs = buildRuntimeCall(IRB, SP.buildFloatAbs, I.getOperand(0));
+      auto abs = buildRuntimeCall(IRB, runtime.buildFloatAbs, I.getOperand(0));
       registerSymbolicComputation(abs, &I);
       break;
     }
@@ -454,9 +596,10 @@ public:
                 "operation "
              << I << "\n";
       IRBuilder<> IRB(I.getNextNode());
-      symbolicExpressions[&I] = IRB.CreateCall(
-          SP.buildInteger, {IRB.CreateZExt(&I, IRB.getInt64Ty()),
-                            IRB.getInt8(I.getType()->getIntegerBitWidth())});
+      symbolicExpressions[&I] =
+          IRB.CreateCall(runtime.buildInteger,
+                         {IRB.CreateZExt(&I, IRB.getInt64Ty()),
+                          IRB.getInt8(I.getType()->getIntegerBitWidth())});
       break;
     }
     case Intrinsic::returnaddress: {
@@ -466,8 +609,8 @@ public:
       errs() << "Warning: using concrete value for return address\n";
       IRBuilder<> IRB(I.getNextNode());
       symbolicExpressions[&I] = IRB.CreateCall(
-          SP.buildInteger,
-          {IRB.CreatePtrToInt(&I, SP.intPtrType), IRB.getInt8(SP.ptrBits)});
+          runtime.buildInteger,
+          {IRB.CreatePtrToInt(&I, intPtrType), IRB.getInt8(ptrBits)});
       break;
     }
     default:
@@ -499,17 +642,17 @@ public:
     // Binary operators propagate into the symbolic expression.
 
     IRBuilder<> IRB(&I);
-    Value *handler = SP.binaryOperatorHandlers.at(I.getOpcode());
+    Value *handler = runtime.binaryOperatorHandlers.at(I.getOpcode());
 
     // Special case: the run-time library distinguishes between "and" and "or"
     // on Boolean values and bit vectors.
     if (I.getOperand(0)->getType() == IRB.getInt1Ty()) {
       switch (I.getOpcode()) {
       case Instruction::And:
-        handler = SP.buildBoolAnd;
+        handler = runtime.buildBoolAnd;
         break;
       case Instruction::Or:
-        handler = SP.buildBoolOr;
+        handler = runtime.buildBoolOr;
         break;
       default:
         llvm_unreachable("Unknown Boolean operator");
@@ -529,7 +672,7 @@ public:
 
     IRBuilder<> IRB(&I);
     auto runtimeCall =
-        buildRuntimeCall(IRB, SP.pushPathConstraint,
+        buildRuntimeCall(IRB, runtime.pushPathConstraint,
                          {{I.getCondition(), true}, {I.getCondition(), false}});
     registerSymbolicComputation(runtimeCall);
   }
@@ -539,7 +682,7 @@ public:
     // simply include either in the resulting expression.
 
     IRBuilder<> IRB(&I);
-    Value *handler = SP.comparisonHandlers.at(I.getPredicate());
+    Value *handler = runtime.comparisonHandlers.at(I.getPredicate());
     assert(handler && "Unable to handle icmp/fcmp variant");
     auto runtimeCall =
         buildRuntimeCall(IRB, handler, {I.getOperand(0), I.getOperand(1)});
@@ -557,7 +700,7 @@ public:
     // create the call directly without registering it for short-circuit
     // processing.
     IRBuilder<> IRB(&I);
-    IRB.CreateCall(SP.setReturnExpression,
+    IRB.CreateCall(runtime.setReturnExpression,
                    getSymbolicExpressionOrNull(I.getReturnValue()));
   }
 
@@ -571,7 +714,7 @@ public:
 
     IRBuilder<> IRB(&I);
     auto runtimeCall =
-        buildRuntimeCall(IRB, SP.pushPathConstraint,
+        buildRuntimeCall(IRB, runtime.pushPathConstraint,
                          {{I.getCondition(), true}, {I.getCondition(), false}});
     registerSymbolicComputation(runtimeCall);
   }
@@ -606,27 +749,26 @@ public:
 
     if (!isMakeSymbolic) {
       for (Use &arg : I.args())
-        IRB.CreateCall(SP.setParameterExpression,
+        IRB.CreateCall(runtime.setParameterExpression,
                        {ConstantInt::get(IRB.getInt8Ty(), arg.getOperandNo()),
                         getSymbolicExpressionOrNull(arg)});
     }
 
-    if (!callee || SP.isSymbolizedFunction(*callee)) {
+    if (!callee || isSymbolizedFunction(*callee)) {
       IRB.SetInsertPoint(I.getNextNode());
-      symbolicExpressions[&I] = IRB.CreateCall(SP.getReturnExpression);
+      symbolicExpressions[&I] = IRB.CreateCall(runtime.getReturnExpression);
     }
   }
 
   void visitAllocaInst(AllocaInst &I) {
     IRBuilder<> IRB(I.getNextNode());
-    auto allocationLength =
-        SP.dataLayout->getTypeAllocSize(I.getAllocatedType());
+    auto allocationLength = dataLayout.getTypeAllocSize(I.getAllocatedType());
     auto shadow =
         IRB.CreateAlloca(ArrayType::get(IRB.getInt8PtrTy(), allocationLength));
-    IRB.CreateCall(SP.registerMemory,
-                   {IRB.CreatePtrToInt(&I, SP.intPtrType),
+    IRB.CreateCall(runtime.registerMemory,
+                   {IRB.CreatePtrToInt(&I, intPtrType),
                     IRB.CreateBitCast(shadow, IRB.getInt8PtrTy()),
-                    ConstantInt::get(SP.intPtrType, allocationLength)});
+                    ConstantInt::get(intPtrType, allocationLength)});
   }
 
   void visitLoadInst(LoadInst &I) {
@@ -637,14 +779,13 @@ public:
 
     auto dataType = I.getType();
     auto data = IRB.CreateCall(
-        SP.readMemory,
-        {IRB.CreatePtrToInt(addr, SP.intPtrType),
-         ConstantInt::get(SP.intPtrType,
-                          SP.dataLayout->getTypeStoreSize(dataType)),
+        runtime.readMemory,
+        {IRB.CreatePtrToInt(addr, intPtrType),
+         ConstantInt::get(intPtrType, dataLayout.getTypeStoreSize(dataType)),
          ConstantInt::get(IRB.getInt8Ty(), isLittleEndian(dataType) ? 1 : 0)});
 
     if (dataType->isFloatingPointTy()) {
-      data = IRB.CreateCall(SP.buildBitsToFloat,
+      data = IRB.CreateCall(runtime.buildBitsToFloat,
                             {data, IRB.getInt1(dataType->isDoubleTy())});
     }
 
@@ -659,16 +800,16 @@ public:
     auto data = getSymbolicExpressionOrNull(I.getValueOperand());
     auto dataType = I.getValueOperand()->getType();
     if (dataType->isFloatingPointTy()) {
-      data = IRB.CreateCall(SP.buildFloatToBits, data);
+      data = IRB.CreateCall(runtime.buildFloatToBits, data);
     }
 
-    IRB.CreateCall(SP.writeMemory,
-                   {IRB.CreatePtrToInt(I.getPointerOperand(), SP.intPtrType),
-                    ConstantInt::get(SP.intPtrType,
-                                     SP.dataLayout->getTypeStoreSize(dataType)),
-                    data,
-                    ConstantInt::get(IRB.getInt8Ty(),
-                                     SP.dataLayout->isLittleEndian() ? 1 : 0)});
+    IRB.CreateCall(
+        runtime.writeMemory,
+        {IRB.CreatePtrToInt(I.getPointerOperand(), intPtrType),
+         ConstantInt::get(intPtrType, dataLayout.getTypeStoreSize(dataType)),
+         data,
+         ConstantInt::get(IRB.getInt8Ty(),
+                          dataLayout.isLittleEndian() ? 1 : 0)});
   }
 
   void visitGetElementPtrInst(GetElementPtrInst &I) {
@@ -714,7 +855,7 @@ public:
         // (https://llvm.org/docs/LangRef.html#getelementptr-instruction).
 
         unsigned memberIndex = cast<ConstantInt>(index)->getZExtValue();
-        unsigned memberOffset = SP.dataLayout->getStructLayout(structType)
+        unsigned memberOffset = dataLayout.getStructLayout(structType)
                                     ->getElementOffset(memberIndex);
         addressContribution = {ConstantInt::get(IRB.getInt64Ty(), memberOffset),
                                true};
@@ -730,20 +871,20 @@ public:
         // the element size is 1, we can omit the multiplication.
 
         unsigned elementSize =
-            SP.dataLayout->getTypeAllocSize(type_it.getIndexedType());
+            dataLayout.getTypeAllocSize(type_it.getIndexedType());
         if (auto indexWidth = index->getType()->getIntegerBitWidth();
             indexWidth != 64) {
           symbolicComputation.merge(forceBuildRuntimeCall(
-              IRB, SP.buildZExt,
+              IRB, runtime.buildZExt,
               {{index, true},
                {ConstantInt::get(IRB.getInt8Ty(), 64 - indexWidth), false}}));
           symbolicComputation.merge(forceBuildRuntimeCall(
-              IRB, SP.binaryOperatorHandlers[Instruction::Mul],
+              IRB, runtime.binaryOperatorHandlers[Instruction::Mul],
               {{symbolicComputation.lastInstruction, false},
                {ConstantInt::get(IRB.getInt64Ty(), elementSize), true}}));
         } else {
           symbolicComputation.merge(forceBuildRuntimeCall(
-              IRB, SP.binaryOperatorHandlers[Instruction::Mul],
+              IRB, runtime.binaryOperatorHandlers[Instruction::Mul],
               {{index, true},
                {ConstantInt::get(IRB.getInt64Ty(), elementSize), true}}));
         }
@@ -752,7 +893,7 @@ public:
       }
 
       symbolicComputation.merge(forceBuildRuntimeCall(
-          IRB, SP.binaryOperatorHandlers[Instruction::Add],
+          IRB, runtime.binaryOperatorHandlers[Instruction::Add],
           {addressContribution,
            {currentAddress, (currentAddress == I.getPointerOperand())}}));
       currentAddress = symbolicComputation.lastInstruction;
@@ -771,7 +912,7 @@ public:
   void visitTruncInst(TruncInst &I) {
     IRBuilder<> IRB(&I);
     auto trunc = buildRuntimeCall(
-        IRB, SP.buildTrunc,
+        IRB, runtime.buildTrunc,
         {{I.getOperand(0), true},
          {IRB.getInt8(I.getDestTy()->getIntegerBitWidth()), false}});
     registerSymbolicComputation(trunc, &I);
@@ -792,7 +933,7 @@ public:
   void visitSIToFPInst(SIToFPInst &I) {
     IRBuilder<> IRB(&I);
     auto conversion =
-        buildRuntimeCall(IRB, SP.buildIntToFloat,
+        buildRuntimeCall(IRB, runtime.buildIntToFloat,
                          {{I.getOperand(0), true},
                           {IRB.getInt1(I.getDestTy()->isDoubleTy()), false},
                           {/* is_signed */ IRB.getInt1(true), false}});
@@ -802,7 +943,7 @@ public:
   void visitUIToFPInst(UIToFPInst &I) {
     IRBuilder<> IRB(&I);
     auto conversion =
-        buildRuntimeCall(IRB, SP.buildIntToFloat,
+        buildRuntimeCall(IRB, runtime.buildIntToFloat,
                          {{I.getOperand(0), true},
                           {IRB.getInt1(I.getDestTy()->isDoubleTy()), false},
                           {/* is_signed */ IRB.getInt1(false), false}});
@@ -812,7 +953,7 @@ public:
   void visitFPExtInst(FPExtInst &I) {
     IRBuilder<> IRB(&I);
     auto conversion =
-        buildRuntimeCall(IRB, SP.buildFloatToFloat,
+        buildRuntimeCall(IRB, runtime.buildFloatToFloat,
                          {{I.getOperand(0), true},
                           {IRB.getInt1(I.getDestTy()->isDoubleTy()), false}});
     registerSymbolicComputation(conversion, &I);
@@ -821,7 +962,7 @@ public:
   void visitFPTruncInst(FPTruncInst &I) {
     IRBuilder<> IRB(&I);
     auto conversion =
-        buildRuntimeCall(IRB, SP.buildFloatToFloat,
+        buildRuntimeCall(IRB, runtime.buildFloatToFloat,
                          {{I.getOperand(0), true},
                           {IRB.getInt1(I.getDestTy()->isDoubleTy()), false}});
     registerSymbolicComputation(conversion, &I);
@@ -830,7 +971,7 @@ public:
   void visitFPToSI(FPToSIInst &I) {
     IRBuilder<> IRB(&I);
     auto conversion = buildRuntimeCall(
-        IRB, SP.buildFloatToSignedInt,
+        IRB, runtime.buildFloatToSignedInt,
         {{I.getOperand(0), true},
          {IRB.getInt8(I.getType()->getIntegerBitWidth()), false}});
     registerSymbolicComputation(conversion, &I);
@@ -839,7 +980,7 @@ public:
   void visitFPToUI(FPToUIInst &I) {
     IRBuilder<> IRB(&I);
     auto conversion = buildRuntimeCall(
-        IRB, SP.buildFloatToUnsignedInt,
+        IRB, runtime.buildFloatToUnsignedInt,
         {{I.getOperand(0), true},
          {IRB.getInt8(I.getType()->getIntegerBitWidth()), false}});
     registerSymbolicComputation(conversion, &I);
@@ -867,10 +1008,10 @@ public:
 
       switch (I.getOpcode()) {
       case Instruction::SExt:
-        target = SP.buildSExt;
+        target = runtime.buildSExt;
         break;
       case Instruction::ZExt:
-        target = SP.buildZExt;
+        target = runtime.buildZExt;
         break;
       default:
         llvm_unreachable("Unknown cast opcode");
@@ -907,12 +1048,12 @@ public:
 
       if (auto structType = dyn_cast<StructType>(indexedType)) {
         offset +=
-            SP.dataLayout->getStructLayout(structType)->getElementOffset(index);
+            dataLayout.getStructLayout(structType)->getElementOffset(index);
         indexedType = structType->getElementType(index);
       } else {
         auto arrayType = cast<ArrayType>(indexedType);
         unsigned elementSize =
-            SP.dataLayout->getTypeAllocSize(arrayType->getArrayElementType());
+            dataLayout.getTypeAllocSize(arrayType->getArrayElementType());
         offset += elementSize * index;
         indexedType = arrayType->getArrayElementType();
       }
@@ -920,10 +1061,10 @@ public:
 
     IRBuilder<> IRB(&I);
     auto extract = buildRuntimeCall(
-        IRB, SP.buildExtract,
+        IRB, runtime.buildExtract,
         {{I.getAggregateOperand(), true},
          {IRB.getInt64(offset), false},
-         {IRB.getInt64(SP.dataLayout->getTypeStoreSize(I.getType())), false},
+         {IRB.getInt64(dataLayout.getTypeStoreSize(I.getType())), false},
          {IRB.getInt8(isLittleEndian(I.getType()) ? 1 : 0), false}});
     registerSymbolicComputation(extract, &I);
   }
@@ -1009,31 +1150,31 @@ private:
     auto valueType = V->getType();
 
     if (isa<ConstantPointerNull>(V)) {
-      return IRB.CreateCall(SP.buildNullPointer, {});
+      return IRB.CreateCall(runtime.buildNullPointer, {});
     }
 
     if (valueType->isIntegerTy()) {
       // Special case: LLVM uses the type i1 to represent Boolean values, but
       // for Z3 we have to create expressions of a separate sort.
       if (valueType->getPrimitiveSizeInBits() == 1) {
-        return IRB.CreateCall(SP.buildBool, {V});
+        return IRB.CreateCall(runtime.buildBool, {V});
       }
 
-      return IRB.CreateCall(SP.buildInteger,
+      return IRB.CreateCall(runtime.buildInteger,
                             {IRB.CreateZExtOrBitCast(V, IRB.getInt64Ty()),
                              IRB.getInt8(valueType->getPrimitiveSizeInBits())});
     }
 
     if (valueType->isFloatingPointTy()) {
-      return IRB.CreateCall(SP.buildFloat,
+      return IRB.CreateCall(runtime.buildFloat,
                             {IRB.CreateFPCast(V, IRB.getDoubleTy()),
                              IRB.getInt1(valueType->isDoubleTy())});
     }
 
     if (valueType->isPointerTy()) {
       return IRB.CreateCall(
-          SP.buildInteger,
-          {IRB.CreatePtrToInt(V, IRB.getInt64Ty()), IRB.getInt8(SP.ptrBits)});
+          runtime.buildInteger,
+          {IRB.CreatePtrToInt(V, IRB.getInt64Ty()), IRB.getInt8(ptrBits)});
     }
 
     if (valueType->isStructTy()) {
@@ -1052,10 +1193,10 @@ private:
       auto memory = IRB.CreateAlloca(V->getType());
       IRB.CreateStore(V, memory);
       return IRB.CreateCall(
-          SP.readMemory,
-          {IRB.CreatePtrToInt(memory, SP.intPtrType),
-           ConstantInt::get(SP.intPtrType,
-                            SP.dataLayout->getTypeStoreSize(V->getType())),
+          runtime.readMemory,
+          {IRB.CreatePtrToInt(memory, intPtrType),
+           ConstantInt::get(intPtrType,
+                            dataLayout.getTypeStoreSize(V->getType())),
            IRB.getInt8(0)});
     }
 
@@ -1077,7 +1218,7 @@ private:
   }
 
   bool isLittleEndian(Type *type) {
-    return (!type->isAggregateType() && SP.dataLayout->isLittleEndian());
+    return (!type->isAggregateType() && dataLayout.isLittleEndian());
   }
 
   /// Like buildRuntimeCall, but the call is always generated.
@@ -1160,16 +1301,25 @@ private:
     if (destExpr) {
       auto concreteDestExpr = createValueExpression(V, IRB);
       auto destAssertion =
-          IRB.CreateCall(SP.comparisonHandlers[CmpInst::ICMP_EQ],
+          IRB.CreateCall(runtime.comparisonHandlers[CmpInst::ICMP_EQ],
                          {destExpr, concreteDestExpr});
-      auto pushAssertion = IRB.CreateCall(SP.pushPathConstraint,
+      auto pushAssertion = IRB.CreateCall(runtime.pushPathConstraint,
                                           {destAssertion, IRB.getInt1(true)});
       registerSymbolicComputation(SymbolicComputation(
           concreteDestExpr, pushAssertion, {{V, 0, destAssertion}}));
     }
   }
 
-  const SymbolizePass &SP;
+  const Runtime runtime;
+
+  /// The data layout of the currently processed module.
+  const DataLayout &dataLayout;
+
+  /// The width in bits of pointers in the module.
+  unsigned ptrBits;
+
+  /// An integer type at least as wide as a pointer.
+  IntegerType *intPtrType;
 
   /// Mapping from SSA values to symbolic expressions.
   ///
@@ -1219,39 +1369,13 @@ char SymbolizePass::ID = 0;
 // Make the pass known to opt.
 static RegisterPass<SymbolizePass> X("symbolize", "Symbolization Pass");
 // Tell frontends to run the pass automatically.
-static struct RegisterStandardPasses Y(PassManagerBuilder::EP_EarlyAsPossible,
+static struct RegisterStandardPasses Y(PassManagerBuilder::EP_VectorizerStart,
                                        addSymbolizePass);
-
-bool SymbolizePass::isSymbolizedFunction(const Function &f) const {
-  static const StringSet<> kConcretizedFunctions = {
-      // Some libc functions whose results we can concretize
-      "printf", "err", "exit", "munmap", "free", "perror", "getenv", "select",
-      "write", "rand", "setjmp", "longjmp",
-      // Returns the address of errno, so always concrete
-      "__errno_location",
-      // CGC run-time functions that Z3 can't really represent in the logic of
-      // bit vectors
-      "cgc_rint", "cgc_pow", "cgc_log10", "cgc_sin", "cgc_cos", "cgc_sqrt",
-      "cgc_log", "cgc_log2", "cgc_atan2", "cgc_tan", "cgc_log2f", "cgc_logf",
-      "cgc_exp2f", "cgc_sqrtf",
-      // TODO CGC uses sscanf only on concrete data, so for now we can
-      // concretize
-      "__isoc99_sscanf",
-      // TODO
-      "strlen", "cgc_remainder", "cgc_fabs", "cgc_setjmp", "cgc_longjmp",
-      "__stack_chk_fail"};
-
-  if (kConcretizedFunctions.count(f.getName()))
-    return false;
-
-  return true;
-}
+static struct RegisterStandardPasses
+    Z(PassManagerBuilder::EP_EnabledOnOptLevel0, addSymbolizePass);
 
 bool SymbolizePass::doInitialization(Module &M) {
   DEBUG(errs() << "Symbolizer module init\n");
-  dataLayout = &M.getDataLayout();
-  intPtrType = M.getDataLayout().getIntPtrType(M.getContext());
-  ptrBits = M.getDataLayout().getPointerSizeInBits();
 
   // Redirect calls to external functions to the corresponding wrappers and
   // rename internal functions.
@@ -1264,123 +1388,9 @@ bool SymbolizePass::doInitialization(Module &M) {
     function.setName("__symbolized_" + name);
   }
 
+  Runtime runtime(M);
   IRBuilder<> IRB(M.getContext());
-  auto ptrT = IRB.getInt8PtrTy();
-  auto int8T = IRB.getInt8Ty();
-  auto voidT = IRB.getVoidTy();
-
-  buildInteger = M.getOrInsertFunction("_sym_build_integer", ptrT,
-                                       IRB.getInt64Ty(), int8T);
-  buildFloat = M.getOrInsertFunction("_sym_build_float", ptrT,
-                                     IRB.getDoubleTy(), IRB.getInt1Ty());
-  buildNullPointer = M.getOrInsertFunction("_sym_build_null_pointer", ptrT);
-  buildTrue = M.getOrInsertFunction("_sym_build_true", ptrT);
-  buildFalse = M.getOrInsertFunction("_sym_build_false", ptrT);
-  buildBool = M.getOrInsertFunction("_sym_build_bool", ptrT, IRB.getInt1Ty());
-  buildNeg = M.getOrInsertFunction("_sym_build_neg", ptrT, ptrT);
-  buildSExt = M.getOrInsertFunction("_sym_build_sext", ptrT, ptrT, int8T);
-  buildZExt = M.getOrInsertFunction("_sym_build_zext", ptrT, ptrT, int8T);
-  buildTrunc = M.getOrInsertFunction("_sym_build_trunc", ptrT, ptrT, int8T);
-  buildIntToFloat = M.getOrInsertFunction("_sym_build_int_to_float", ptrT, ptrT,
-                                          IRB.getInt1Ty(), IRB.getInt1Ty());
-  buildFloatToFloat = M.getOrInsertFunction("_sym_build_float_to_float", ptrT,
-                                            ptrT, IRB.getInt1Ty());
-  buildBitsToFloat = M.getOrInsertFunction("_sym_build_bits_to_float", ptrT,
-                                           ptrT, IRB.getInt1Ty());
-  buildFloatToBits =
-      M.getOrInsertFunction("_sym_build_float_to_bits", ptrT, ptrT);
-  buildFloatToSignedInt = M.getOrInsertFunction(
-      "_sym_build_float_to_signed_integer", ptrT, ptrT, int8T);
-  buildFloatToUnsignedInt = M.getOrInsertFunction(
-      "_sym_build_float_to_unsigned_integer", ptrT, ptrT, int8T);
-  buildFloatAbs = M.getOrInsertFunction("_sym_build_fp_abs", ptrT, ptrT);
-  buildBoolAnd = M.getOrInsertFunction("_sym_build_bool_and", ptrT, ptrT, ptrT);
-  buildBoolOr = M.getOrInsertFunction("_sym_build_bool_or", ptrT, ptrT, ptrT);
-  pushPathConstraint = M.getOrInsertFunction("_sym_push_path_constraint", voidT,
-                                             ptrT, IRB.getInt1Ty());
-
-  setParameterExpression = M.getOrInsertFunction(
-      "_sym_set_parameter_expression", voidT, int8T, ptrT);
-  getParameterExpression =
-      M.getOrInsertFunction("_sym_get_parameter_expression", ptrT, int8T);
-  setReturnExpression =
-      M.getOrInsertFunction("_sym_set_return_expression", voidT, ptrT);
-  getReturnExpression =
-      M.getOrInsertFunction("_sym_get_return_expression", ptrT);
-
-#define LOAD_BINARY_OPERATOR_HANDLER(constant, name)                           \
-  binaryOperatorHandlers[Instruction::constant] =                              \
-      M.getOrInsertFunction("_sym_build_" #name, ptrT, ptrT, ptrT);
-
-  LOAD_BINARY_OPERATOR_HANDLER(Add, add)
-  LOAD_BINARY_OPERATOR_HANDLER(Sub, sub)
-  LOAD_BINARY_OPERATOR_HANDLER(Mul, mul)
-  LOAD_BINARY_OPERATOR_HANDLER(UDiv, unsigned_div)
-  LOAD_BINARY_OPERATOR_HANDLER(SDiv, signed_div)
-  LOAD_BINARY_OPERATOR_HANDLER(URem, unsigned_rem)
-  LOAD_BINARY_OPERATOR_HANDLER(SRem, signed_rem)
-  LOAD_BINARY_OPERATOR_HANDLER(Shl, shift_left)
-  LOAD_BINARY_OPERATOR_HANDLER(LShr, logical_shift_right)
-  LOAD_BINARY_OPERATOR_HANDLER(AShr, arithmetic_shift_right)
-  LOAD_BINARY_OPERATOR_HANDLER(And, and)
-  LOAD_BINARY_OPERATOR_HANDLER(Or, or)
-  LOAD_BINARY_OPERATOR_HANDLER(Xor, xor)
-
-  // Floating-point arithmetic
-  LOAD_BINARY_OPERATOR_HANDLER(FAdd, fp_add)
-  LOAD_BINARY_OPERATOR_HANDLER(FSub, fp_sub)
-  LOAD_BINARY_OPERATOR_HANDLER(FMul, fp_mul)
-  LOAD_BINARY_OPERATOR_HANDLER(FDiv, fp_div)
-  LOAD_BINARY_OPERATOR_HANDLER(FRem, fp_rem)
-
-#undef LOAD_BINARY_OPERATOR_HANDLER
-
-#define LOAD_COMPARISON_HANDLER(constant, name)                                \
-  comparisonHandlers[CmpInst::constant] =                                      \
-      M.getOrInsertFunction("_sym_build_" #name, ptrT, ptrT, ptrT);
-
-  LOAD_COMPARISON_HANDLER(ICMP_EQ, equal)
-  LOAD_COMPARISON_HANDLER(ICMP_NE, not_equal)
-  LOAD_COMPARISON_HANDLER(ICMP_UGT, unsigned_greater_than)
-  LOAD_COMPARISON_HANDLER(ICMP_UGE, unsigned_greater_equal)
-  LOAD_COMPARISON_HANDLER(ICMP_ULT, unsigned_less_than)
-  LOAD_COMPARISON_HANDLER(ICMP_ULE, unsigned_less_equal)
-  LOAD_COMPARISON_HANDLER(ICMP_SGT, signed_greater_than)
-  LOAD_COMPARISON_HANDLER(ICMP_SGE, signed_greater_equal)
-  LOAD_COMPARISON_HANDLER(ICMP_SLT, signed_less_than)
-  LOAD_COMPARISON_HANDLER(ICMP_SLE, signed_less_equal)
-
-  // Floating-point comparisons
-  LOAD_COMPARISON_HANDLER(FCMP_OGT, float_ordered_greater_than)
-  LOAD_COMPARISON_HANDLER(FCMP_OGE, float_ordered_greater_equal)
-  LOAD_COMPARISON_HANDLER(FCMP_OLT, float_ordered_less_than)
-  LOAD_COMPARISON_HANDLER(FCMP_OLE, float_ordered_less_equal)
-  LOAD_COMPARISON_HANDLER(FCMP_OEQ, float_ordered_equal)
-  LOAD_COMPARISON_HANDLER(FCMP_ONE, float_ordered_not_equal)
-  LOAD_COMPARISON_HANDLER(FCMP_UNO, float_unordered)
-  LOAD_COMPARISON_HANDLER(FCMP_UGT, float_unordered_greater_than)
-  LOAD_COMPARISON_HANDLER(FCMP_UGE, float_unordered_greater_equal)
-  LOAD_COMPARISON_HANDLER(FCMP_ULT, float_unordered_less_than)
-  LOAD_COMPARISON_HANDLER(FCMP_ULE, float_unordered_less_equal)
-  LOAD_COMPARISON_HANDLER(FCMP_UEQ, float_unordered_equal)
-  LOAD_COMPARISON_HANDLER(FCMP_UNE, float_unordered_not_equal)
-
-#undef LOAD_COMPARISON_HANDLER
-
-  memcpy = M.getOrInsertFunction("_sym_memcpy", voidT, ptrT, ptrT, intPtrType);
-  memset =
-      M.getOrInsertFunction("_sym_memset", voidT, ptrT, ptrT, IRB.getInt64Ty());
-  registerMemory = M.getOrInsertFunction("_sym_register_memory", voidT,
-                                         intPtrType, ptrT, intPtrType);
-  readMemory = M.getOrInsertFunction("_sym_read_memory", ptrT, intPtrType,
-                                     intPtrType, int8T);
-  writeMemory = M.getOrInsertFunction("_sym_write_memory", voidT, intPtrType,
-                                      intPtrType, ptrT, int8T);
-  initializeMemory = M.getOrInsertFunction("_sym_initialize_memory", voidT,
-                                           intPtrType, ptrT, intPtrType);
-  buildExtract =
-      M.getOrInsertFunction("_sym_build_extract", ptrT, ptrT, IRB.getInt64Ty(),
-                            IRB.getInt64Ty(), int8T);
+  const DataLayout &dataLayout = M.getDataLayout();
 
   // For each global variable, we need another global variable that holds the
   // corresponding symbolic expression.
@@ -1393,7 +1403,7 @@ bool SymbolizePass::doInitialization(Module &M) {
     if (global.isDeclaration()) {
       shadowType = IRB.getInt8PtrTy();
     } else {
-      auto valueLength = dataLayout->getTypeAllocSize(global.getValueType());
+      auto valueLength = dataLayout.getTypeAllocSize(global.getValueType());
       shadowType = ArrayType::get(IRB.getInt8PtrTy(), valueLength);
     }
 
@@ -1412,15 +1422,16 @@ bool SymbolizePass::doInitialization(Module &M) {
   std::tie(ctor, std::ignore) = createSanitizerCtorAndInitFunctions(
       M, kSymCtorName, "_sym_initialize", {}, {});
   IRB.SetInsertPoint(ctor->getEntryBlock().getTerminator());
+  auto intPtrType = dataLayout.getIntPtrType(M.getContext());
   for (auto &&[value, expression] : globalExpressions) {
     // External globals are initialized in their respective module.
     if (value->isDeclaration())
       continue;
 
     IRB.CreateCall(
-        initializeMemory,
+        runtime.initializeMemory,
         {IRB.CreatePtrToInt(value, intPtrType),
-         IRB.CreateBitCast(expression, ptrT),
+         IRB.CreateBitCast(expression, IRB.getInt8PtrTy()),
          ConstantInt::get(intPtrType,
                           expression->getValueType()->getArrayNumElements())});
   }
@@ -1437,7 +1448,7 @@ bool SymbolizePass::runOnFunction(Function &F) {
   DEBUG(errs() << "Symbolizing function ");
   DEBUG(errs().write_escaped(functionName) << '\n');
 
-  Symbolizer symbolizer(*this);
+  Symbolizer symbolizer(*F.getParent());
   // DEBUG(errs() << F << '\n');
   symbolizer.symbolizeFunctionArguments(F);
   symbolizer.visit(F);

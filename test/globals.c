@@ -30,7 +30,7 @@ void sum(int x) {
         result += g_values[i];
     }
 
-    printf("%d\n", (result < x) ? 1 : 0);
+    printf("%s\n", (result < x) ? "foo" : "bar");
 }
 
 void sum_ints(int x) {
@@ -39,7 +39,7 @@ void sum_ints(int x) {
         result += g_non_char_values[i];
     }
 
-    printf("%d\n", (result < x) ? 1 : 0);
+    printf("%s\n", (result < x) ? "foo" : "bar");
 }
 
 int main(int argc, char* argv[]) {
@@ -68,7 +68,7 @@ int main(int argc, char* argv[]) {
     // CHECK: Trying to solve
     // CHECK-NOT: Can't find
     // CHECK: Found diverging input
-    // CHECK: 0
+    // CHECK: bar
 
     printf("%s\n", (x < g_more_than_one_byte_int) ? "true" : "false");
     // CHECK: Trying to solve
@@ -80,7 +80,7 @@ int main(int argc, char* argv[]) {
     // CHECK: Trying to solve
     // CHECK: #x{{0*}}4b0
     // CHECK: Can't find
-    // CHECK: 0
+    // CHECK: bar
 
     return 0;
 }
