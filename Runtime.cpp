@@ -254,8 +254,18 @@ Z3_ast _sym_build_not_equal(Z3_ast a, Z3_ast b) {
   return Z3_mk_not(g_context, _sym_build_equal(a, b));
 }
 
+Z3_ast _sym_build_bool_and(Z3_ast a, Z3_ast b) {
+  Z3_ast operands[] = {a, b};
+  return Z3_mk_and(g_context, 2, operands);
+}
+
 Z3_ast _sym_build_and(Z3_ast a, Z3_ast b) {
   return Z3_mk_bvand(g_context, a, b);
+}
+
+Z3_ast _sym_build_bool_or(Z3_ast a, Z3_ast b) {
+  Z3_ast operands[] = {a, b};
+  return Z3_mk_or(g_context, 2, operands);
 }
 
 Z3_ast _sym_build_or(Z3_ast a, Z3_ast b) { return Z3_mk_bvor(g_context, a, b); }

@@ -64,6 +64,8 @@ private:
   Value *buildFloatToSignedInt{};
   Value *buildFloatToUnsignedInt{};
   Value *buildFloatAbs{};
+  Value *buildBoolAnd{};
+  Value *buildBoolOr{};
   Value *pushPathConstraint{};
   Value *getParameterExpression{};
   Value *setParameterExpression{};
@@ -498,6 +500,22 @@ public:
 
     IRBuilder<> IRB(&I);
     Value *handler = SP.binaryOperatorHandlers.at(I.getOpcode());
+
+    // Special case: the run-time library distinguishes between "and" and "or"
+    // on Boolean values and bit vectors.
+    if (I.getOperand(0)->getType() == IRB.getInt1Ty()) {
+      switch (I.getOpcode()) {
+      case Instruction::And:
+        handler = SP.buildBoolAnd;
+        break;
+      case Instruction::Or:
+        handler = SP.buildBoolOr;
+        break;
+      default:
+        llvm_unreachable("Unknown Boolean operator");
+      }
+    }
+
     assert(handler && "Unable to handle binary operator");
     auto runtimeCall =
         buildRuntimeCall(IRB, handler, {I.getOperand(0), I.getOperand(1)});
@@ -1276,6 +1294,8 @@ bool SymbolizePass::doInitialization(Module &M) {
   buildFloatToUnsignedInt = M.getOrInsertFunction(
       "_sym_build_float_to_unsigned_integer", ptrT, ptrT, int8T);
   buildFloatAbs = M.getOrInsertFunction("_sym_build_fp_abs", ptrT, ptrT);
+  buildBoolAnd = M.getOrInsertFunction("_sym_build_bool_and", ptrT, ptrT, ptrT);
+  buildBoolOr = M.getOrInsertFunction("_sym_build_bool_or", ptrT, ptrT, ptrT);
   pushPathConstraint = M.getOrInsertFunction("_sym_push_path_constraint", voidT,
                                              ptrT, IRB.getInt1Ty());
 
