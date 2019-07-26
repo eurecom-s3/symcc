@@ -270,6 +270,10 @@ Z3_ast _sym_build_bool_or(Z3_ast a, Z3_ast b) {
 
 Z3_ast _sym_build_or(Z3_ast a, Z3_ast b) { return Z3_mk_bvor(g_context, a, b); }
 
+Z3_ast _sym_build_bool_xor(Z3_ast a, Z3_ast b) {
+  return Z3_mk_xor(g_context, a, b);
+}
+
 Z3_ast _sym_build_xor(Z3_ast a, Z3_ast b) {
   return Z3_mk_bvxor(g_context, a, b);
 }

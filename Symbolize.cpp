@@ -49,6 +49,7 @@ struct Runtime {
   Value *buildFloatAbs{};
   Value *buildBoolAnd{};
   Value *buildBoolOr{};
+  Value *buildBoolXor{};
   Value *pushPathConstraint{};
   Value *getParameterExpression{};
   Value *setParameterExpression{};
@@ -106,6 +107,8 @@ struct Runtime {
     buildBoolAnd =
         M.getOrInsertFunction("_sym_build_bool_and", ptrT, ptrT, ptrT);
     buildBoolOr = M.getOrInsertFunction("_sym_build_bool_or", ptrT, ptrT, ptrT);
+    buildBoolXor =
+        M.getOrInsertFunction("_sym_build_bool_xor", ptrT, ptrT, ptrT);
     pushPathConstraint = M.getOrInsertFunction("_sym_push_path_constraint",
                                                voidT, ptrT, IRB.getInt1Ty());
 
@@ -654,8 +657,13 @@ public:
       case Instruction::Or:
         handler = runtime.buildBoolOr;
         break;
+      case Instruction::Xor:
+        handler = runtime.buildBoolXor;
+        break;
       default:
+        errs() << "Can't handle Boolean operator " << I << '\n';
         llvm_unreachable("Unknown Boolean operator");
+        break;
       }
     }
 
