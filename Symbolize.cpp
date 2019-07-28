@@ -271,7 +271,7 @@ public:
   /// switchInstructions and processed in this function.
   void finalizeSwitchInstructions() {
     for (auto switchInst : switchInstructions) {
-        IRBuilder<> IRB(switchInst);
+      IRBuilder<> IRB(switchInst);
       auto condition = switchInst->getCondition();
       auto conditionExpr = getSymbolicExpression(condition);
       if (!conditionExpr)
@@ -855,6 +855,24 @@ public:
   }
 
   void visitBitCastInst(BitCastInst &I) {
+    if (I.getSrcTy()->isIntegerTy() && I.getDestTy()->isFloatingPointTy()) {
+      IRBuilder<> IRB(&I);
+      auto conversion =
+          buildRuntimeCall(IRB, runtime.buildBitsToFloat,
+                           {{I.getOperand(0), true},
+                            {IRB.getInt1(I.getDestTy()->isDoubleTy()), false}});
+      registerSymbolicComputation(conversion, &I);
+      return;
+    }
+
+    if (I.getSrcTy()->isFloatingPointTy() && I.getDestTy()->isIntegerTy()) {
+      IRBuilder<> IRB(&I);
+      auto conversion = buildRuntimeCall(IRB, runtime.buildFloatToBits,
+                                         {{I.getOperand(0), true}});
+      registerSymbolicComputation(conversion);
+      return;
+    }
+
     assert(I.getSrcTy()->isPointerTy() && I.getDestTy()->isPointerTy() &&
            "Unhandled non-pointer bit cast");
     if (auto expr = getSymbolicExpression(I.getOperand(0)))
