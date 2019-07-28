@@ -483,6 +483,7 @@ public:
     case Intrinsic::lifetime_start:
     case Intrinsic::lifetime_end:
     case Intrinsic::dbg_declare:
+    case Intrinsic::dbg_value:
       // These are safe to ignore.
       break;
     case Intrinsic::memcpy: {
