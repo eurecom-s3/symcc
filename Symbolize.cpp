@@ -271,84 +271,27 @@ public:
   /// switchInstructions and processed in this function.
   void finalizeSwitchInstructions() {
     for (auto switchInst : switchInstructions) {
-      // TODO should we try to generate inputs for *all* other paths?
-
-      IRBuilder<> IRB(switchInst);
-      auto conditionExpr = getSymbolicExpression(switchInst->getCondition());
+        IRBuilder<> IRB(switchInst);
+      auto condition = switchInst->getCondition();
+      auto conditionExpr = getSymbolicExpression(condition);
       if (!conditionExpr)
         continue;
 
-      // The default case needs to assert that the condition doesn't equal any
-      // of the cases.
-      if (switchInst->getNumCases() > 0) {
-        auto finalDest = switchInst->getDefaultDest();
-        auto constraintBlock =
-            BasicBlock::Create(switchInst->getContext(), /* name */ "",
-                               finalDest->getParent(), finalDest);
+      // Build a check whether we have a symbolic condition, to be used later.
+      auto haveSymbolicCondition = IRB.CreateICmpNE(
+          conditionExpr, ConstantPointerNull::get(IRB.getInt8PtrTy()));
+      auto constraintBlock = SplitBlockAndInsertIfThen(
+          haveSymbolicCondition, switchInst, /* unreachable */ false);
 
-        IRB.SetInsertPoint(constraintBlock);
-
-        auto currentCase = switchInst->case_begin();
-        auto constraint = IRB.CreateCall(
-            runtime.comparisonHandlers[CmpInst::ICMP_NE],
-            {conditionExpr,
-             createValueExpression(currentCase->getCaseValue(), IRB)});
-        ++currentCase;
-
-        for (auto endCase = switchInst->case_end(); currentCase != endCase;
-             ++currentCase) {
-          constraint = IRB.CreateCall(
-              runtime.binaryOperatorHandlers[Instruction::And],
-              {constraint,
-               IRB.CreateCall(
-                   runtime.comparisonHandlers[CmpInst::ICMP_NE],
-                   {conditionExpr,
-                    createValueExpression(currentCase->getCaseValue(), IRB)})});
-        }
-
-        IRB.CreateCall(runtime.pushPathConstraint,
-                       {constraint, IRB.getInt1(true)});
-        IRB.CreateBr(finalDest);
-
-        auto constraintCheckBlock =
-            BasicBlock::Create(switchInst->getContext(), /* name */ "",
-                               finalDest->getParent(), constraintBlock);
-        IRB.SetInsertPoint(constraintCheckBlock);
-        auto haveSymbolicCondition = IRB.CreateICmpNE(
-            conditionExpr, ConstantPointerNull::get(IRB.getInt8PtrTy()));
-        IRB.CreateCondBr(haveSymbolicCondition, /* then */ constraintBlock,
-                         /* else */ finalDest);
-
-        switchInst->setDefaultDest(constraintCheckBlock);
-      }
-
-      // The individual cases just assert that the condition equals their
-      // respective value.
+      // In the constraint block, we push one path constraint per case.
+      IRB.SetInsertPoint(constraintBlock);
       for (auto &caseHandle : switchInst->cases()) {
-        auto finalDest = caseHandle.getCaseSuccessor();
-        auto constraintBlock =
-            BasicBlock::Create(switchInst->getContext(), /* name */ "",
-                               finalDest->getParent(), finalDest);
-
-        IRB.SetInsertPoint(constraintBlock);
-        auto constraint = IRB.CreateCall(
+        auto caseTaken = IRB.CreateICmpEQ(condition, caseHandle.getCaseValue());
+        auto caseConstraint = IRB.CreateCall(
             runtime.comparisonHandlers[CmpInst::ICMP_EQ],
             {conditionExpr,
              createValueExpression(caseHandle.getCaseValue(), IRB)});
-        IRB.CreateCall(runtime.pushPathConstraint,
-                       {constraint, IRB.getInt1(true)});
-        IRB.CreateBr(finalDest);
-
-        auto constraintCheckBlock =
-            BasicBlock::Create(switchInst->getContext(), /* name */ "",
-                               finalDest->getParent(), constraintBlock);
-        IRB.SetInsertPoint(constraintCheckBlock);
-        auto haveSymbolicCondition = IRB.CreateICmpNE(
-            conditionExpr, ConstantPointerNull::get(IRB.getInt8PtrTy()));
-        IRB.CreateCondBr(haveSymbolicCondition, /* then */ constraintBlock,
-                         /* else */ finalDest);
-
-        caseHandle.setSuccessor(constraintCheckBlock);
+        IRB.CreateCall(runtime.pushPathConstraint, {caseConstraint, caseTaken});
       }
     }
   }
