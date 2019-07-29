@@ -1,9 +1,12 @@
 #include "Runtime.h"
+
 #include <algorithm>
 #include <cassert>
 #include <cstring>
 #include <iostream>
-#include <map>
+#include <numeric>
+
+#include "Shadow.h"
 
 #ifdef DEBUG_RUNTIME
 // Helper to print pointers properly.
@@ -43,10 +46,6 @@ Z3_ast g_function_arguments[kMaxFunctionArguments];
 // Some global constants for efficiency.
 Z3_ast g_null_pointer, g_true, g_false;
 
-/// A mapping from page addresses to the corresponding shadow regions. Each
-/// shadow is large enough to hold one expression per byte on the shadowed page.
-std::map<uintptr_t, Z3_ast *> shadowPages;
-
 #ifdef DEBUG_RUNTIME
 void dump_known_regions() {
   std::cout << "Known regions:" << std::endl;
@@ -55,20 +54,6 @@ void dump_known_regions() {
   }
 }
 #endif
-
-// TODO handle memory regions that cross page boundaries
-
-constexpr uintptr_t kPageSize = 4096;
-
-/// Compute the corresponding page address.
-constexpr uintptr_t pageStart(uintptr_t addr) {
-  return (addr & ~(kPageSize - 1));
-}
-
-/// Compute the corresponding offset into the page.
-constexpr uintptr_t pageOffset(uintptr_t addr) {
-  return (addr & (kPageSize - 1));
-}
 
 void handle_z3_error(Z3_context c, Z3_error_code e) {
   assert(c == g_context && "Z3 error in unknown context");
@@ -474,22 +459,16 @@ Z3_ast _sym_read_memory(uint8_t *addr, size_t length, bool little_endian) {
   if (isConcrete(addr, length))
     return nullptr;
 
-  Z3_ast *shadow = getShadow(addr);
+  ReadOnlyShadow shadow(addr, length);
+  return std::accumulate(
+      shadow.begin_non_null(), shadow.end_non_null(),
+      static_cast<Z3_ast>(nullptr), [&](Z3_ast result, Z3_ast byteExpr) {
+        if (!result)
+          return byteExpr;
 
-#ifdef DEBUG_RUNTIME
-  std::cout << "Found shadow at " << shadow << std::endl;
-#endif
-
-  Z3_ast expr = shadow[0] ? shadow[0] : _sym_build_integer(addr[0], 8);
-  for (size_t i = 1; i < length; i++) {
-    // For concrete memory, create a constant expression holding the actual
-    // memory contents.
-    Z3_ast byteExpr = shadow[i] ? shadow[i] : _sym_build_integer(addr[i], 8);
-    expr = little_endian ? Z3_mk_concat(g_context, byteExpr, expr)
-                         : Z3_mk_concat(g_context, expr, byteExpr);
-  }
-
-  return expr;
+        return little_endian ? Z3_mk_concat(g_context, byteExpr, result)
+                             : Z3_mk_concat(g_context, result, byteExpr);
+      });
 }
 
 void _sym_write_memory(uint8_t *addr, size_t length, Z3_ast expr,
@@ -502,44 +481,39 @@ void _sym_write_memory(uint8_t *addr, size_t length, Z3_ast expr,
   dump_known_regions();
 #endif
 
-  if (expr == nullptr && !getShadow(addr))
+  if (expr == nullptr && isConcrete(addr, length))
     return;
 
-  Z3_ast *shadow = getOrCreateShadow(addr);
-
-#ifdef DEBUG_RUNTIME
-  std::cout << "Shadow is at " << shadow << std::endl;
-#endif
-
+  ReadWriteShadow shadow(addr, length);
   if (!expr) {
-    std::fill(shadow, shadow + length, nullptr);
+    std::fill(shadow.begin(), shadow.end(), nullptr);
   } else {
-    for (size_t i = 0; i < length; i++) {
-      shadow[i] = little_endian
-                      ? Z3_mk_extract(g_context, 8 * (i + 1) - 1, 8 * i, expr)
-                      : Z3_mk_extract(g_context, (length - i) * 8 - 1,
-                                      (length - i - 1) * 8, expr);
+    size_t i = 0;
+    for (Z3_ast &byteShadow : shadow) {
+      byteShadow = little_endian
+                       ? Z3_mk_extract(g_context, 8 * (i + 1) - 1, 8 * i, expr)
+                       : Z3_mk_extract(g_context, (length - i) * 8 - 1,
+                                       (length - i - 1) * 8, expr);
+      i++;
     }
   }
 }
 
 void _sym_memcpy(uint8_t *dest, const uint8_t *src, size_t length) {
-  if (isConcrete(dest, length))
+  if (isConcrete(src, length) && isConcrete(dest, length))
     return;
 
-  Z3_ast *srcShadow = getShadow(src);
-  Z3_ast *destShadow = getOrCreateShadow(dest);
-  memcpy(destShadow, srcShadow, length * sizeof(Z3_ast));
+  ReadOnlyShadow srcShadow(src, length);
+  ReadWriteShadow destShadow(dest, length);
+  std::copy(srcShadow.begin(), srcShadow.end(), destShadow.begin());
 }
 
 void _sym_memset(uint8_t *memory, Z3_ast value, size_t length) {
-  if ((value == nullptr) && !getShadow(memory))
+  if ((value == nullptr) && isConcrete(memory, length))
     return;
 
-  Z3_ast *shadow = getShadow(memory);
-  for (size_t index = 0; index < length; index++) {
-    shadow[index] = value;
-  }
+  ReadWriteShadow shadow(memory, length);
+  std::fill(shadow.begin(), shadow.end(), value);
 }
 
 Z3_ast _sym_build_extract(Z3_ast expr, uint64_t offset, uint64_t length,
@@ -564,35 +538,4 @@ Z3_ast _sym_build_extract(Z3_ast expr, uint64_t offset, uint64_t length,
   }
 
   return result;
-}
-
-Z3_ast *getShadow(const uint8_t *addr) {
-  auto addrInt = reinterpret_cast<uintptr_t>(addr);
-  auto shadowPageIt = shadowPages.find(pageStart(addrInt));
-  return (shadowPageIt != shadowPages.end())
-             ? (shadowPageIt->second + pageOffset(addrInt))
-             : nullptr;
-}
-
-Z3_ast *getOrCreateShadow(const uint8_t *addr) {
-  if (auto shadow = getShadow(addr)) {
-    return shadow;
-  }
-
-  // TODO lock
-  auto newShadow = static_cast<Z3_ast *>(malloc(kPageSize * sizeof(Z3_ast)));
-  auto addrInt = reinterpret_cast<uintptr_t>(addr);
-  auto page = pageStart(addrInt);
-  memset(newShadow, 0, kPageSize * sizeof(Z3_ast));
-  shadowPages[page] = newShadow;
-  return newShadow + pageOffset(addrInt);
-}
-
-bool isConcrete(const uint8_t *addr, size_t nbytes) {
-  Z3_ast *shadow = getShadow(addr);
-  if (shadow == nullptr)
-    return true;
-
-  return std::all_of(shadow, shadow + nbytes,
-                     [](Z3_ast expr) { return (expr == nullptr); });
 }

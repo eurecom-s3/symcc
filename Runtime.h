@@ -126,12 +126,4 @@ Z3_ast _sym_build_extract(Z3_ast expr, uint64_t offset, uint64_t length,
                           bool little_endian);
 }
 
-//
-// Extended C++ interface
-//
-
-Z3_ast *getShadow(const uint8_t *addr);
-Z3_ast *getOrCreateShadow(const uint8_t *addr);
-bool isConcrete(const uint8_t *addr, size_t nbytes);
-
 #endif

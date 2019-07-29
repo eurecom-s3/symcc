@@ -8,6 +8,7 @@
 #include <unistd.h>
 
 #include "Runtime.h"
+#include "Shadow.h"
 
 #define SYM(x) __symbolized_##x
 
@@ -17,10 +18,6 @@
 #endif
 
 namespace {
-/// Get the shadow for addr and assert that it covers at least n bytes.
-Z3_ast *getShadow(const void *addr, size_t n) {
-  return ::getShadow(static_cast<const uint8_t *>(addr)); // TODO
-}
 
 /// Tell the solver to try an alternative value than the given one.
 template <typename V> void tryAlternative(V value, Z3_ast valueExpr) {
@@ -69,15 +66,16 @@ ssize_t SYM(read)(int fildes, void *buf, size_t nbyte) {
   if (fildes == 0) {
     // Reading from standard input. We treat everything as unconstrained
     // symbolic data.
-    auto shadow = getOrCreateShadow(static_cast<const uint8_t *>(buf));
-    for (int index = 0; index < result; index++) {
+    ReadWriteShadow shadow(buf, nbyte);
+    std::generate(shadow.begin(), shadow.end(), []() {
       auto varName = "stdin" + std::to_string(stdinBytes.size());
       auto var = _sym_build_variable(varName.c_str(), 8);
       stdinBytes.push_back(var);
-      shadow[index] = var;
-    }
-  } else if (auto shadow = getShadow(buf, nbyte)) {
-    memset(shadow, 0, nbyte);
+      return var;
+    });
+  } else if (!isConcrete(buf, nbyte)) {
+    ReadWriteShadow shadow(buf, nbyte);
+    std::fill(shadow.begin(), shadow.end(), nullptr);
   }
 
   _sym_set_return_expression(nullptr);
@@ -117,18 +115,17 @@ char *SYM(strncpy)(char *dest, const char *src, size_t n) {
   _sym_set_return_expression(nullptr);
 
   size_t srcLen = strnlen(src, n);
-  if (isConcrete(reinterpret_cast<const uint8_t *>(src), std::min(n, srcLen)) &&
-      !getShadow(dest, n))
+  size_t copied = std::min(n, srcLen);
+  if (isConcrete(src, copied) && isConcrete(dest, n))
     return result;
 
-  auto srcShadow = getShadow(src, srcLen);
-  auto destShadow = getOrCreateShadow(reinterpret_cast<const uint8_t *>(dest));
+  auto srcShadow = ReadOnlyShadow(src, copied);
+  auto destShadow = ReadWriteShadow(dest, n);
 
-  for (size_t i = 0; i < srcLen; i++) {
-    destShadow[i] = srcShadow ? srcShadow[i] : nullptr;
-  }
-  for (size_t i = srcLen; i < n; i++) {
-    destShadow[i] = 0;
+  std::copy(srcShadow.begin(), srcShadow.end(), destShadow.begin());
+  if (copied < n) {
+    ReadWriteShadow destRestShadow(dest + copied, n - copied);
+    std::fill(destRestShadow.begin(), destRestShadow.end(), nullptr);
   }
 
   return result;
@@ -142,22 +139,21 @@ const char *SYM(strchr)(const char *s, int c) {
   _sym_set_return_expression(nullptr);
 
   Z3_ast cExpr = _sym_get_parameter_expression(1);
-  if (isConcrete(reinterpret_cast<const uint8_t *>(s),
-                 result ? (result - s) : strlen(s)) &&
-      !cExpr)
+  if (isConcrete(s, result ? (result - s) : strlen(s)) && !cExpr)
     return result;
 
   if (!cExpr)
     cExpr = _sym_build_integer(c, 8);
 
   size_t length = result ? (result - s) : strlen(s);
-  auto shadow = getShadow(s, length);
+  auto shadow = ReadOnlyShadow(s, length);
+  auto shadowIt = shadow.begin();
   for (size_t i = 0; i < length; i++) {
     _sym_push_path_constraint(
         _sym_build_not_equal(
-            (shadow && shadow[i]) ? shadow[i] : _sym_build_integer(s[i], 8),
-            cExpr),
+            *shadowIt ? *shadowIt : _sym_build_integer(s[i], 8), cExpr),
         true);
+    ++shadowIt;
   }
 
   return result;
@@ -171,16 +167,17 @@ int SYM(memcmp)(const void *a, const void *b, size_t n) {
   auto result = memcmp(a, b, n);
   _sym_set_return_expression(nullptr);
 
-  if (isConcrete(reinterpret_cast<const uint8_t *>(a), n) &&
-      isConcrete(reinterpret_cast<const uint8_t *>(b), n))
+  if (isConcrete(a, n) && isConcrete(b, n))
     return result;
 
-  auto aShadow = getShadow(a, n);
-  auto bShadow = getShadow(b, n);
-  Z3_ast allEqual = _sym_build_equal(aShadow[0], bShadow[0]);
+  auto aShadowIt = ReadOnlyShadow(a, n).begin_non_null();
+  auto bShadowIt = ReadOnlyShadow(b, n).begin_non_null();
+  Z3_ast allEqual = _sym_build_equal(*aShadowIt, *bShadowIt);
   for (size_t i = 1; i < n; i++) {
     allEqual =
-        _sym_build_and(allEqual, _sym_build_equal(aShadow[i], bShadow[i]));
+        _sym_build_and(allEqual, _sym_build_equal(*aShadowIt, *bShadowIt));
+    ++aShadowIt;
+    ++bShadowIt;
   }
 
   _sym_push_path_constraint(allEqual, result ? false : true);
