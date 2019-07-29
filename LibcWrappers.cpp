@@ -19,11 +19,7 @@
 namespace {
 /// Get the shadow for addr and assert that it covers at least n bytes.
 Z3_ast *getShadow(const void *addr, size_t n) {
-  auto region = _sym_get_memory_region(addr);
-  auto byteBuf = static_cast<const uint8_t *>(addr);
-  assert(region && (byteBuf + n <= region->end) && "Unknown memory region");
-
-  return (region->shadow + (byteBuf - region->start));
+  return ::getShadow(static_cast<const uint8_t *>(addr)); // TODO
 }
 
 /// Tell the solver to try an alternative value than the given one.
@@ -47,9 +43,6 @@ extern "C" {
 void *SYM(malloc)(size_t size) {
   auto result = malloc(size);
 
-  auto shadow = static_cast<Z3_ast *>(malloc(size * sizeof(Z3_ast)));
-  _sym_register_memory(static_cast<uint8_t *>(result), shadow, size);
-
   tryAlternative(size, _sym_get_parameter_expression(0));
 
   _sym_set_return_expression(nullptr);
@@ -62,9 +55,6 @@ void *SYM(mmap)(void *addr, size_t len, int prot, int flags, int fildes,
 
   tryAlternative(len, _sym_get_parameter_expression(1));
 
-  auto shadow = static_cast<Z3_ast *>(malloc(len * sizeof(Z3_ast)));
-  _sym_register_memory(static_cast<uint8_t *>(result), shadow, len);
-
   _sym_set_return_expression(nullptr);
   return result;
 }
@@ -76,18 +66,18 @@ ssize_t SYM(read)(int fildes, void *buf, size_t nbyte) {
   tryAlternative(nbyte, _sym_get_parameter_expression(2));
 
   auto result = read(fildes, buf, nbyte);
-  auto shadowStart = getShadow(buf, nbyte);
   if (fildes == 0) {
     // Reading from standard input. We treat everything as unconstrained
     // symbolic data.
+    auto shadow = getOrCreateShadow(static_cast<const uint8_t *>(buf));
     for (int index = 0; index < result; index++) {
       auto varName = "stdin" + std::to_string(stdinBytes.size());
       auto var = _sym_build_variable(varName.c_str(), 8);
       stdinBytes.push_back(var);
-      shadowStart[index] = var;
+      shadow[index] = var;
     }
-  } else {
-    _sym_initialize_memory(static_cast<uint8_t *>(buf), shadowStart, nbyte);
+  } else if (auto shadow = getShadow(buf, nbyte)) {
+    memset(shadow, 0, nbyte);
   }
 
   _sym_set_return_expression(nullptr);
@@ -124,19 +114,23 @@ char *SYM(strncpy)(char *dest, const char *src, size_t n) {
   tryAlternative(n, _sym_get_parameter_expression(2));
 
   auto result = strncpy(dest, src, n);
+  _sym_set_return_expression(nullptr);
+
   size_t srcLen = strnlen(src, n);
+  if (isConcrete(reinterpret_cast<const uint8_t *>(src), std::min(n, srcLen)) &&
+      !getShadow(dest, n))
+    return result;
 
   auto srcShadow = getShadow(src, srcLen);
-  auto destShadow = getShadow(dest, n);
+  auto destShadow = getOrCreateShadow(reinterpret_cast<const uint8_t *>(dest));
 
   for (size_t i = 0; i < srcLen; i++) {
-    destShadow[i] = srcShadow[i];
+    destShadow[i] = srcShadow ? srcShadow[i] : nullptr;
   }
   for (size_t i = srcLen; i < n; i++) {
     destShadow[i] = 0;
   }
 
-  _sym_set_return_expression(nullptr);
   return result;
 }
 
@@ -145,18 +139,27 @@ const char *SYM(strchr)(const char *s, int c) {
   tryAlternative(c, _sym_get_parameter_expression(1));
 
   auto result = strchr(s, c);
+  _sym_set_return_expression(nullptr);
 
   Z3_ast cExpr = _sym_get_parameter_expression(1);
+  if (isConcrete(reinterpret_cast<const uint8_t *>(s),
+                 result ? (result - s) : strlen(s)) &&
+      !cExpr)
+    return result;
+
   if (!cExpr)
     cExpr = _sym_build_integer(c, 8);
 
   size_t length = result ? (result - s) : strlen(s);
   auto shadow = getShadow(s, length);
   for (size_t i = 0; i < length; i++) {
-    _sym_push_path_constraint(_sym_build_not_equal(shadow[i], cExpr), true);
+    _sym_push_path_constraint(
+        _sym_build_not_equal(
+            (shadow && shadow[i]) ? shadow[i] : _sym_build_integer(s[i], 8),
+            cExpr),
+        true);
   }
 
-  _sym_set_return_expression(nullptr);
   return result;
 }
 
@@ -166,6 +169,11 @@ int SYM(memcmp)(const void *a, const void *b, size_t n) {
   tryAlternative(n, _sym_get_parameter_expression(2));
 
   auto result = memcmp(a, b, n);
+  _sym_set_return_expression(nullptr);
+
+  if (isConcrete(reinterpret_cast<const uint8_t *>(a), n) &&
+      isConcrete(reinterpret_cast<const uint8_t *>(b), n))
+    return result;
 
   auto aShadow = getShadow(a, n);
   auto bShadow = getShadow(b, n);

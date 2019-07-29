@@ -57,10 +57,8 @@ struct Runtime {
   Value *getReturnExpression{};
   Value *memcpy{};
   Value *memset{};
-  Value *registerMemory{};
   Value *readMemory{};
   Value *writeMemory{};
-  Value *initializeMemory{};
   Value *buildExtract{};
 
   /// Mapping from icmp predicates to the functions that build the corresponding
@@ -184,14 +182,10 @@ struct Runtime {
         M.getOrInsertFunction("_sym_memcpy", voidT, ptrT, ptrT, intPtrType);
     memset = M.getOrInsertFunction("_sym_memset", voidT, ptrT, ptrT,
                                    IRB.getInt64Ty());
-    registerMemory = M.getOrInsertFunction("_sym_register_memory", voidT,
-                                           intPtrType, ptrT, intPtrType);
     readMemory = M.getOrInsertFunction("_sym_read_memory", ptrT, intPtrType,
                                        intPtrType, int8T);
     writeMemory = M.getOrInsertFunction("_sym_write_memory", voidT, intPtrType,
                                         intPtrType, ptrT, int8T);
-    initializeMemory = M.getOrInsertFunction("_sym_initialize_memory", voidT,
-                                             intPtrType, ptrT, intPtrType);
     buildExtract =
         M.getOrInsertFunction("_sym_build_extract", ptrT, ptrT,
                               IRB.getInt64Ty(), IRB.getInt64Ty(), int8T);
@@ -713,14 +707,8 @@ public:
   }
 
   void visitAllocaInst(AllocaInst &I) {
-    IRBuilder<> IRB(I.getNextNode());
-    auto allocationLength = dataLayout.getTypeAllocSize(I.getAllocatedType());
-    auto shadow =
-        IRB.CreateAlloca(ArrayType::get(IRB.getInt8PtrTy(), allocationLength));
-    IRB.CreateCall(runtime.registerMemory,
-                   {IRB.CreatePtrToInt(&I, intPtrType),
-                    IRB.CreateBitCast(shadow, IRB.getInt8PtrTy()),
-                    ConstantInt::get(intPtrType, allocationLength)});
+    // Nothing to do: the shadow for the newly allocated memory region will be
+    // created on first write; until then, the memory contents are concrete.
   }
 
   void visitLoadInst(LoadInst &I) {
@@ -1358,53 +1346,10 @@ bool SymbolizePass::doInitialization(Module &M) {
     function.setName("__symbolized_" + name);
   }
 
-  Runtime runtime(M);
-  IRBuilder<> IRB(M.getContext());
-  const DataLayout &dataLayout = M.getDataLayout();
-
-  // For each global variable, we need another global variable that holds the
-  // corresponding symbolic expression.
-  for (auto &global : M.globals()) {
-    // Don't create symbolic shadows for LLVM's special variables.
-    if (global.getName().startswith("llvm."))
-      continue;
-
-    Type *shadowType;
-    if (global.isDeclaration()) {
-      shadowType = IRB.getInt8PtrTy();
-    } else {
-      auto valueLength = dataLayout.getTypeAllocSize(global.getValueType());
-      shadowType = ArrayType::get(IRB.getInt8PtrTy(), valueLength);
-    }
-
-    // The expression has to be initialized at run time and can therefore never
-    // be constant, even if the value that it represents is.
-    globalExpressions[&global] = new GlobalVariable(
-        M, shadowType,
-        /* isConstant */ false, global.getLinkage(),
-        global.isDeclaration() ? nullptr : Constant::getNullValue(shadowType),
-        global.getName() + ".sym_expr", &global, global.getThreadLocalMode(),
-        global.isExternallyInitialized());
-  }
-
   // Insert a constructor that initializes the runtime and any globals.
   Function *ctor;
   std::tie(ctor, std::ignore) = createSanitizerCtorAndInitFunctions(
       M, kSymCtorName, "_sym_initialize", {}, {});
-  IRB.SetInsertPoint(ctor->getEntryBlock().getTerminator());
-  auto intPtrType = dataLayout.getIntPtrType(M.getContext());
-  for (auto &&[value, expression] : globalExpressions) {
-    // External globals are initialized in their respective module.
-    if (value->isDeclaration())
-      continue;
-
-    IRB.CreateCall(
-        runtime.initializeMemory,
-        {IRB.CreatePtrToInt(value, intPtrType),
-         IRB.CreateBitCast(expression, IRB.getInt8PtrTy()),
-         ConstantInt::get(intPtrType,
-                          expression->getValueType()->getArrayNumElements())});
-  }
   appendToGlobalCtors(M, ctor, 0);
 
   return true;

@@ -3,11 +3,11 @@
 #include <cassert>
 #include <cstring>
 #include <iostream>
-#include <set>
+#include <map>
 
 #ifdef DEBUG_RUNTIME
 // Helper to print pointers properly.
-#define P(ptr) static_cast<void *>(ptr)
+#define P(ptr) reinterpret_cast<void *>(ptr)
 #endif
 
 #define FSORT(is_double)                                                       \
@@ -22,13 +22,6 @@
 namespace {
 
 constexpr int kMaxFunctionArguments = 256;
-
-#ifdef DEBUG_RUNTIME
-std::ostream &operator<<(std::ostream &out, const MemoryRegion &region) {
-  out << "<" << P(region.start) << ", " << P(region.end) << ">";
-  return out;
-}
-#endif
 
 /// Indicate whether the runtime has been initialized.
 bool g_initialized = false;
@@ -50,33 +43,32 @@ Z3_ast g_function_arguments[kMaxFunctionArguments];
 // Some global constants for efficiency.
 Z3_ast g_null_pointer, g_true, g_false;
 
-/// The set of known memory regions. The container is a sorted set to make
-/// retrieval by address efficient. Remember that we assume regions to be
-/// non-overlapping.
-std::set<MemoryRegion, std::less<>> g_memory_regions;
-
-#ifdef DEBUG_RUNTIME
-/// Make sure that g_memory_regions doesn't contain any overlapping memory
-/// regions.
-void assert_memory_region_invariant() {
-  uint8_t *last_end = nullptr;
-  for (auto &region : g_memory_regions) {
-    assert((region.start >= last_end) && "Overlapping memory regions");
-    last_end = region.end;
-  }
-}
-#else
-#define assert_memory_region_invariant() ((void)0)
-#endif
+/// A mapping from page addresses to the corresponding shadow regions. Each
+/// shadow is large enough to hold one expression per byte on the shadowed page.
+std::map<uintptr_t, Z3_ast *> shadowPages;
 
 #ifdef DEBUG_RUNTIME
 void dump_known_regions() {
   std::cout << "Known regions:" << std::endl;
-  for (auto &region : g_memory_regions) {
-    std::cout << "  " << region << std::endl;
+  for (const auto &[page, shadow] : shadowPages) {
+    std::cout << "  " << P(page) << " shadowed by " << P(shadow) << std::endl;
   }
 }
 #endif
+
+// TODO handle memory regions that cross page boundaries
+
+constexpr uintptr_t kPageSize = 4096;
+
+/// Compute the corresponding page address.
+constexpr uintptr_t pageStart(uintptr_t addr) {
+  return (addr & ~(kPageSize - 1));
+}
+
+/// Compute the corresponding offset into the page.
+constexpr uintptr_t pageOffset(uintptr_t addr) {
+  return (addr & (kPageSize - 1));
+}
 
 void handle_z3_error(Z3_context c, Z3_error_code e) {
   assert(c == g_context && "Z3 error in unknown context");
@@ -468,38 +460,7 @@ void _sym_push_path_constraint(Z3_ast constraint, int taken) {
          "Asserting infeasible path constraint");
 }
 
-void _sym_register_memory(uint8_t *addr, Z3_ast *shadow, size_t length) {
-  assert_memory_region_invariant();
-
-#ifdef DEBUG_RUNTIME
-  std::cout << "Registering memory from " << P(addr) << " to "
-            << P(addr + length) << std::endl;
-#endif
-
-  // Remove overlapping regions, if any.
-  auto first = g_memory_regions.lower_bound(addr);
-  auto last = g_memory_regions.upper_bound(addr + length - 1);
-#ifdef DEBUG_RUNTIME
-  if (first != last)
-    printf("Erasing %ld memory objects\n", std::distance(first, last));
-#endif
-  g_memory_regions.erase(first, last);
-
-  g_memory_regions.insert({addr, addr + length, shadow});
-}
-
-void _sym_initialize_memory(uint8_t *addr, Z3_ast *shadow, size_t length) {
-#ifdef DEBUG_RUNTIME
-  std::cout << "Initializing " << length << " bytes of memory at " << P(addr)
-            << std::endl;
-#endif
-
-  memset(shadow, 0, length * sizeof(Z3_ast));
-  _sym_register_memory(addr, shadow, length);
-}
-
 Z3_ast _sym_read_memory(uint8_t *addr, size_t length, bool little_endian) {
-  assert_memory_region_invariant();
   assert(length && "Invalid query for zero-length memory region");
 
 #ifdef DEBUG_RUNTIME
@@ -508,23 +469,16 @@ Z3_ast _sym_read_memory(uint8_t *addr, size_t length, bool little_endian) {
   dump_known_regions();
 #endif
 
-  auto region = _sym_get_memory_region(addr);
-
-#ifdef DEBUG_RUNTIME
-  if (region)
-    std::cout << "Found region " << *region << std::endl;
-#endif
-
-  assert(region && (region->start <= addr) && (addr + length <= region->end) &&
-         "Unknown memory region");
-
   // If the entire memory region is concrete, don't create a symbolic expression
   // at all.
-  Z3_ast *shadow = &region->shadow[addr - region->start];
-  if (std::all_of(shadow, shadow + length,
-                  [](Z3_ast expr) { return (expr == nullptr); })) {
+  if (isConcrete(addr, length))
     return nullptr;
-  }
+
+  Z3_ast *shadow = getShadow(addr);
+
+#ifdef DEBUG_RUNTIME
+  std::cout << "Found shadow at " << shadow << std::endl;
+#endif
 
   Z3_ast expr = shadow[0] ? shadow[0] : _sym_build_integer(addr[0], 8);
   for (size_t i = 1; i < length; i++) {
@@ -540,7 +494,6 @@ Z3_ast _sym_read_memory(uint8_t *addr, size_t length, bool little_endian) {
 
 void _sym_write_memory(uint8_t *addr, size_t length, Z3_ast expr,
                        bool little_endian) {
-  assert_memory_region_invariant();
   assert(length && "Invalid query for zero-length memory region");
 
 #ifdef DEBUG_RUNTIME
@@ -549,17 +502,15 @@ void _sym_write_memory(uint8_t *addr, size_t length, Z3_ast expr,
   dump_known_regions();
 #endif
 
-  auto region = _sym_get_memory_region(addr);
+  if (expr == nullptr && !getShadow(addr))
+    return;
+
+  Z3_ast *shadow = getOrCreateShadow(addr);
 
 #ifdef DEBUG_RUNTIME
-  if (region)
-    std::cout << "Found region " << *region << std::endl;
+  std::cout << "Shadow is at " << shadow << std::endl;
 #endif
 
-  assert(region && (region->start <= addr) && (addr + length <= region->end) &&
-         "Unknown memory region");
-
-  Z3_ast *shadow = &region->shadow[addr - region->start];
   if (!expr) {
     std::fill(shadow, shadow + length, nullptr);
   } else {
@@ -573,28 +524,19 @@ void _sym_write_memory(uint8_t *addr, size_t length, Z3_ast expr,
 }
 
 void _sym_memcpy(uint8_t *dest, const uint8_t *src, size_t length) {
-  assert_memory_region_invariant();
+  if (isConcrete(dest, length))
+    return;
 
-  auto srcRegion = _sym_get_memory_region(src);
-  assert(srcRegion && (src + length <= srcRegion->end) &&
-         "Unknown memory region");
-  Z3_ast *srcShadow = &srcRegion->shadow[src - srcRegion->start];
-
-  auto destRegion = _sym_get_memory_region(dest);
-  assert(destRegion && (dest + length <= destRegion->end) &&
-         "Unknown memory region");
-  Z3_ast *destShadow = &destRegion->shadow[dest - destRegion->start];
-
+  Z3_ast *srcShadow = getShadow(src);
+  Z3_ast *destShadow = getOrCreateShadow(dest);
   memcpy(destShadow, srcShadow, length * sizeof(Z3_ast));
 }
 
 void _sym_memset(uint8_t *memory, Z3_ast value, size_t length) {
-  assert_memory_region_invariant();
+  if ((value == nullptr) && !getShadow(memory))
+    return;
 
-  auto region = _sym_get_memory_region(memory);
-  assert(region && (memory + length <= region->end) && "Unknown memory region");
-
-  Z3_ast *shadow = &region->shadow[memory - region->start];
+  Z3_ast *shadow = getShadow(memory);
   for (size_t index = 0; index < length; index++) {
     shadow[index] = value;
   }
@@ -624,18 +566,33 @@ Z3_ast _sym_build_extract(Z3_ast expr, uint64_t offset, uint64_t length,
   return result;
 }
 
-bool operator<(const MemoryRegion &r, const uint8_t *addr) {
-  return r.end <= addr;
-}
-bool operator<(const uint8_t *addr, const MemoryRegion &r) {
-  return addr < r.start;
+Z3_ast *getShadow(const uint8_t *addr) {
+  auto addrInt = reinterpret_cast<uintptr_t>(addr);
+  auto shadowPageIt = shadowPages.find(pageStart(addrInt));
+  return (shadowPageIt != shadowPages.end())
+             ? (shadowPageIt->second + pageOffset(addrInt))
+             : nullptr;
 }
 
-const MemoryRegion *_sym_get_memory_region(const void *memory) {
-  auto result =
-      g_memory_regions.find(reinterpret_cast<const uint8_t *>(memory));
-  if (result == g_memory_regions.end())
-    return nullptr;
+Z3_ast *getOrCreateShadow(const uint8_t *addr) {
+  if (auto shadow = getShadow(addr)) {
+    return shadow;
+  }
 
-  return &*result;
+  // TODO lock
+  auto newShadow = static_cast<Z3_ast *>(malloc(kPageSize * sizeof(Z3_ast)));
+  auto addrInt = reinterpret_cast<uintptr_t>(addr);
+  auto page = pageStart(addrInt);
+  memset(newShadow, 0, kPageSize * sizeof(Z3_ast));
+  shadowPages[page] = newShadow;
+  return newShadow + pageOffset(addrInt);
+}
+
+bool isConcrete(const uint8_t *addr, size_t nbytes) {
+  Z3_ast *shadow = getShadow(addr);
+  if (shadow == nullptr)
+    return true;
+
+  return std::all_of(shadow, shadow + nbytes,
+                     [](Z3_ast expr) { return (expr == nullptr); });
 }
