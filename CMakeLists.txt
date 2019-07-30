@@ -24,14 +24,21 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wredundant-decls -Wcast-align \
 # This is the compiler pass that we later load into clang or opt. If LLVM is
 # built without RTTI we have to disable it for our library too, otherwise we'll
 # get linker errors.
-add_library(Symbolize MODULE Symbolize.cpp)
+add_library(Symbolize MODULE
+  compiler/Symbolize.cpp
+  compiler/Pass.cpp
+  compiler/Runtime.cpp
+  compiler/Main.cpp)
 if (NOT LLVM_ENABLE_RTTI)
   set_target_properties(Symbolize PROPERTIES COMPILE_FLAGS "-fno-rtti")
 endif()
 
-add_library(SymRuntime SHARED Runtime.cpp LibcWrappers.cpp Shadow.cpp)
+add_library(SymRuntime SHARED
+  runtime/Runtime.cpp
+  runtime/LibcWrappers.cpp
+  runtime/Shadow.cpp)
 target_link_libraries(SymRuntime "z3")
 
-configure_file("symcc.in" "symcc")
+configure_file("compiler/symcc.in" "symcc")
 
 add_subdirectory(test)
