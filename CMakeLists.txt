@@ -25,7 +25,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wredundant-decls -Wcast-align \
 # built without RTTI we have to disable it for our library too, otherwise we'll
 # get linker errors.
 add_library(Symbolize MODULE
-  compiler/Symbolize.cpp
+  compiler/Symbolizer.cpp
   compiler/Pass.cpp
   compiler/Runtime.cpp
   compiler/Main.cpp)

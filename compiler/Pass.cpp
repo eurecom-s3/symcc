@@ -4,7 +4,7 @@
 #include <llvm/IR/Verifier.h>
 #include <llvm/Transforms/Utils/ModuleUtils.h>
 
-#include "Symbolize.h"
+#include "Symbolizer.h"
 #include "Runtime.h"
 
 using namespace llvm;

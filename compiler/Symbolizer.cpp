@@ -1,4 +1,4 @@
-#include "Symbolize.h"
+#include "Symbolizer.h"
 
 #include <llvm/IR/GetElementPtrTypeIterator.h>
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
