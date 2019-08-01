@@ -21,9 +21,6 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wredundant-decls -Wcast-align \
 -Wextra -Wall -Winvalid-pch -Wredundant-decls -Wformat=2 \
 -Wmissing-format-attribute -Wformat-nonliteral")
 
-# The Qsym backend
-add_subdirectory(qsym_backend)
-
 # This is the compiler pass that we later load into clang or opt. If LLVM is
 # built without RTTI we have to disable it for our library too, otherwise we'll
 # get linker errors.
@@ -36,12 +33,19 @@ if (NOT LLVM_ENABLE_RTTI)
   set_target_properties(Symbolize PROPERTIES COMPILE_FLAGS "-fno-rtti")
 endif()
 
-add_library(SymRuntime SHARED
-  runtime/Runtime.cpp
-  runtime/LibcWrappers.cpp
-  runtime/Shadow.cpp)
-target_link_libraries(SymRuntime "z3")
+option(QSYM_BACKEND "Use the Qsym backend instead of our own" OFF)
 
+if (${QSYM_BACKEND})
+  add_subdirectory(qsym_backend)
+else()
+  add_library(SymRuntime SHARED
+    runtime/Runtime.cpp
+    runtime/LibcWrappers.cpp
+    runtime/Shadow.cpp)
+  target_link_libraries(SymRuntime "z3")
+endif()
+
+get_target_property(SYM_RUNTIME_DIR SymRuntime BINARY_DIR)
 configure_file("compiler/symcc.in" "symcc")
 
 add_subdirectory(test)

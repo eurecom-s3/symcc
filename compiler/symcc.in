@@ -1,8 +1,8 @@
 #!/bin/sh
 
 cc=clang
-runtime_dir="@CMAKE_CURRENT_BINARY_DIR@"
-pass="$runtime_dir/libSymbolize.so"
+runtime_dir="@SYM_RUNTIME_DIR@"
+pass="@CMAKE_CURRENT_BINARY_DIR@/libSymbolize.so"
 
 exec $cc                                        \
      -Xclang -load -Xclang "$pass"              \

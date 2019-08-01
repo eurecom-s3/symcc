@@ -2,7 +2,7 @@
 
 set(QSYM_SOURCE_DIR "qsym/qsym/pintool")
 
-add_library(QsymBackend SHARED
+add_library(SymRuntime SHARED
   ${QSYM_SOURCE_DIR}/expr__gen.cpp
   ${QSYM_SOURCE_DIR}/expr_builder__gen.cpp
   ${QSYM_SOURCE_DIR}/expr_cache.cpp
@@ -11,15 +11,21 @@ add_library(QsymBackend SHARED
   ${QSYM_SOURCE_DIR}/dependency.cpp
   ${QSYM_SOURCE_DIR}/logging.cpp
   ${QSYM_SOURCE_DIR}/call_stack_manager.cpp
-  # ${QSYM_SOURCE_DIR}/afl_trace_map.cpp
   ${QSYM_SOURCE_DIR}/third_party/llvm/range.cpp
-  support.cpp)
+  ${QSYM_SOURCE_DIR}/third_party/xxhash/xxhash.cpp
+  support.cpp
+  ../runtime/Shadow.cpp
+  ../runtime/LibcWrappers.cpp)
 
-set_target_properties(QsymBackend PROPERTIES COMPILE_FLAGS
+set_target_properties(SymRuntime PROPERTIES COMPILE_FLAGS
   "-Wno-unused-parameter")
 
-target_include_directories(QsymBackend PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR} # for our fake pin.H
+target_include_directories(SymRuntime PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}   # for our fake pin.H
+  ../runtime                    # for common runtime components
   ${QSYM_SOURCE_DIR})
 
-target_link_libraries(QsymBackend "z3")
+# We need to get the LLVM support component for llvm::APInt.
+llvm_map_components_to_libnames(QSYM_LLVM_DEPS support)
+
+target_link_libraries(SymRuntime "z3" ${QSYM_LLVM_DEPS})
