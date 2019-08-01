@@ -24,6 +24,10 @@
 // Runtime
 #include <Shadow.h>
 
+// A macro to create SymExpr from ExprRef. Basically, we move the shared pointer
+// to the heap.
+#define H(x) (new ExprRef(x))
+
 namespace qsym {
 
 ExprBuilder *g_expr_builder;
@@ -43,7 +47,6 @@ bool AflTraceMap::isInterestingBranch(ADDRINT pc, bool taken) {
 using namespace qsym;
 
 void _sym_initialize(void) {
-  // TODO proper input file
   // TODO proper output directory
 
   // Qsym requires the full input in a file
@@ -71,82 +74,140 @@ void _sym_initialize(void) {
 }
 
 SymExpr _sym_build_integer(uint64_t value, uint8_t bits) {
-  return new ExprRef(g_expr_builder->createConstant(value, bits));
+  return H(g_expr_builder->createConstant(value, bits));
 }
 
-// SymExpr _sym_build_float(double value, int is_double);
-// SymExpr _sym_build_variable(const char *name, uint8_t bits);
-// SymExpr _sym_build_null_pointer();
-// SymExpr _sym_build_true();
-// SymExpr _sym_build_false();
-// SymExpr _sym_build_bool(bool value);
-// SymExpr _sym_build_add(SymExpr a, SymExpr b);
-// SymExpr _sym_build_sub(SymExpr a, SymExpr b);
-// SymExpr _sym_build_mul(SymExpr a, SymExpr b);
-// SymExpr _sym_build_unsigned_div(SymExpr a, SymExpr b);
-// SymExpr _sym_build_signed_div(SymExpr a, SymExpr b);
-// SymExpr _sym_build_unsigned_rem(SymExpr a, SymExpr b);
-// SymExpr _sym_build_signed_rem(SymExpr a, SymExpr b);
-// SymExpr _sym_build_shift_left(SymExpr a, SymExpr b);
-// SymExpr _sym_build_logical_shift_right(SymExpr a, SymExpr b);
-// SymExpr _sym_build_arithmetic_shift_right(SymExpr a, SymExpr b);
+SymExpr _sym_build_null_pointer() {
+  return H(g_expr_builder->createConstant(0, sizeof(uintptr_t)));
+}
 
-// SymExpr _sym_build_fp_add(SymExpr a, SymExpr b);
-// SymExpr _sym_build_fp_sub(SymExpr a, SymExpr b);
-// SymExpr _sym_build_fp_mul(SymExpr a, SymExpr b);
-// SymExpr _sym_build_fp_div(SymExpr a, SymExpr b);
-// SymExpr _sym_build_fp_rem(SymExpr a, SymExpr b);
-// SymExpr _sym_build_fp_abs(SymExpr a);
-// SymExpr _sym_build_neg(SymExpr expr);
-// SymExpr _sym_build_signed_less_than(SymExpr a, SymExpr b);
-// SymExpr _sym_build_signed_less_equal(SymExpr a, SymExpr b);
-// SymExpr _sym_build_signed_greater_than(SymExpr a, SymExpr b);
-// SymExpr _sym_build_signed_greater_equal(SymExpr a, SymExpr b);
-// SymExpr _sym_build_unsigned_less_than(SymExpr a, SymExpr b);
-// SymExpr _sym_build_unsigned_less_equal(SymExpr a, SymExpr b);
-// SymExpr _sym_build_unsigned_greater_than(SymExpr a, SymExpr b);
-// SymExpr _sym_build_unsigned_greater_equal(SymExpr a, SymExpr b);
+SymExpr _sym_build_true() { return H(g_expr_builder->createTrue()); }
+
+SymExpr _sym_build_false() { return H(g_expr_builder->createFalse()); }
+
+SymExpr _sym_build_bool(bool value) {
+  return H(g_expr_builder->createBool(value));
+}
+
+SymExpr _sym_build_add(SymExpr a, SymExpr b) {
+  return H(g_expr_builder->createAdd(*a, *b));
+}
+
+SymExpr _sym_build_sub(SymExpr a, SymExpr b) {
+  return H(g_expr_builder->createSub(*a, *b));
+}
+
+SymExpr _sym_build_mul(SymExpr a, SymExpr b) {
+  return H(g_expr_builder->createMul(*a, *b));
+}
+
+SymExpr _sym_build_unsigned_div(SymExpr a, SymExpr b) {
+  return H(g_expr_builder->createUDiv(*a, *b));
+}
+
+SymExpr _sym_build_signed_div(SymExpr a, SymExpr b) {
+  return H(g_expr_builder->createSDiv(*a, *b));
+}
+
+SymExpr _sym_build_unsigned_rem(SymExpr a, SymExpr b) {
+  return H(g_expr_builder->createURem(*a, *b));
+}
+
+SymExpr _sym_build_signed_rem(SymExpr a, SymExpr b) {
+  return H(g_expr_builder->createSRem(*a, *b));
+}
+
+SymExpr _sym_build_shift_left(SymExpr a, SymExpr b) {
+  return H(g_expr_builder->createShl(*a, *b));
+}
+
+SymExpr _sym_build_logical_shift_right(SymExpr a, SymExpr b) {
+  return H(g_expr_builder->createLShr(*a, *b));
+}
+
+SymExpr _sym_build_arithmetic_shift_right(SymExpr a, SymExpr b) {
+  return H(g_expr_builder->createAShr(*a, *b));
+}
+
+SymExpr _sym_build_neg(SymExpr expr) {
+  return H(g_expr_builder->createNeg(*expr));
+}
+
+SymExpr _sym_build_signed_less_than(SymExpr a, SymExpr b) {
+  return H(g_expr_builder->createSlt(*a, *b));
+}
+
+SymExpr _sym_build_signed_less_equal(SymExpr a, SymExpr b) {
+  return H(g_expr_builder->createSle(*a, *b));
+}
+
+SymExpr _sym_build_signed_greater_than(SymExpr a, SymExpr b) {
+  return H(g_expr_builder->createSgt(*a, *b));
+}
+
+SymExpr _sym_build_signed_greater_equal(SymExpr a, SymExpr b) {
+  return H(g_expr_builder->createSge(*a, *b));
+}
+
+SymExpr _sym_build_unsigned_less_than(SymExpr a, SymExpr b) {
+  return H(g_expr_builder->createUlt(*a, *b));
+}
+
+SymExpr _sym_build_unsigned_less_equal(SymExpr a, SymExpr b) {
+  return H(g_expr_builder->createUle(*a, *b));
+}
+
+SymExpr _sym_build_unsigned_greater_than(SymExpr a, SymExpr b) {
+  return H(g_expr_builder->createUgt(*a, *b));
+}
+
+SymExpr _sym_build_unsigned_greater_equal(SymExpr a, SymExpr b) {
+  return H(g_expr_builder->createUge(*a, *b));
+}
 
 SymExpr _sym_build_equal(SymExpr a, SymExpr b) {
-  return new ExprRef(g_expr_builder->createEqual(*a, *b));
+  return H(g_expr_builder->createEqual(*a, *b));
 }
 
 SymExpr _sym_build_not_equal(SymExpr a, SymExpr b) {
-  return new ExprRef(g_expr_builder->createDistinct(*a, *b));
+  return H(g_expr_builder->createDistinct(*a, *b));
 }
 
-// SymExpr _sym_build_bool_and(SymExpr a, SymExpr b);
+SymExpr _sym_build_bool_and(SymExpr a, SymExpr b) {
+  return H(g_expr_builder->createLAnd(*a, *b));
+}
 
 SymExpr _sym_build_and(SymExpr a, SymExpr b) {
-  return new ExprRef(g_expr_builder->createAnd(*a, *b));
+  return H(g_expr_builder->createAnd(*a, *b));
 }
 
-// SymExpr _sym_build_bool_or(SymExpr a, SymExpr b);
-// SymExpr _sym_build_or(SymExpr a, SymExpr b);
-// SymExpr _sym_build_bool_xor(SymExpr a, SymExpr b);
-// SymExpr _sym_build_xor(SymExpr a, SymExpr b);
-// SymExpr _sym_build_float_ordered_greater_than(SymExpr a, SymExpr b);
-// SymExpr _sym_build_float_ordered_greater_equal(SymExpr a, SymExpr b);
-// SymExpr _sym_build_float_ordered_less_than(SymExpr a, SymExpr b);
-// SymExpr _sym_build_float_ordered_less_equal(SymExpr a, SymExpr b);
-// SymExpr _sym_build_float_ordered_equal(SymExpr a, SymExpr b);
-// SymExpr _sym_build_float_ordered_not_equal(SymExpr a, SymExpr b);
-// SymExpr _sym_build_float_unordered(SymExpr a, SymExpr b);
-// SymExpr _sym_build_float_unordered_greater_than(SymExpr a, SymExpr b);
-// SymExpr _sym_build_float_unordered_greater_equal(SymExpr a, SymExpr b);
-// SymExpr _sym_build_float_unordered_less_than(SymExpr a, SymExpr b);
-// SymExpr _sym_build_float_unordered_less_equal(SymExpr a, SymExpr b);
-// SymExpr _sym_build_float_unordered_equal(SymExpr a, SymExpr b);
-// SymExpr _sym_build_float_unordered_not_equal(SymExpr a, SymExpr b);
-// SymExpr _sym_build_sext(SymExpr expr, uint8_t bits);
-// SymExpr _sym_build_zext(SymExpr expr, uint8_t bits);
-// SymExpr _sym_build_trunc(SymExpr expr, uint8_t bits);
-// SymExpr _sym_build_int_to_float(SymExpr value, int is_double, int is_signed);
-// SymExpr _sym_build_float_to_float(SymExpr expr, int to_double);
-// SymExpr _sym_build_bits_to_float(SymExpr expr, int to_double);
-// SymExpr _sym_build_float_to_bits(SymExpr expr);
-// SymExpr _sym_build_float_to_signed_integer(SymExpr expr, uint8_t bits);
-// SymExpr _sym_build_float_to_unsigned_integer(SymExpr expr, uint8_t bits);
+SymExpr _sym_build_bool_or(SymExpr a, SymExpr b) {
+  return H(g_expr_builder->createLOr(*a, *b));
+}
+
+SymExpr _sym_build_or(SymExpr a, SymExpr b) {
+  return H(g_expr_builder->createOr(*a, *b));
+}
+
+SymExpr _sym_build_bool_xor(SymExpr a, SymExpr b) {
+  return H(g_expr_builder->createLOr(*a, *b));
+}
+
+SymExpr _sym_build_xor(SymExpr a, SymExpr b) {
+  return H(g_expr_builder->createXor(*a, *b));
+}
+
+SymExpr _sym_build_sext(SymExpr expr, uint8_t bits) {
+  return H(g_expr_builder->createSExt(*expr, bits + (*expr)->bits()));
+}
+
+SymExpr _sym_build_zext(SymExpr expr, uint8_t bits) {
+  return H(g_expr_builder->createZExt(*expr, bits + (*expr)->bits()));
+}
+
+SymExpr _sym_build_trunc(SymExpr expr, uint8_t bits) {
+  return H(g_expr_builder->createTrunc(*expr, (*expr)->bits() - bits));
+}
 
 void _sym_push_path_constraint(SymExpr constraint, int taken) {
   if (!constraint)
@@ -157,7 +218,7 @@ void _sym_push_path_constraint(SymExpr constraint, int taken) {
 }
 
 SymExpr _sym_get_input_byte(size_t offset) {
-  return new ExprRef(g_expr_builder->createRead(offset));
+  return H(g_expr_builder->createRead(offset));
 }
 
 // TODO unify
@@ -188,7 +249,41 @@ SymExpr _sym_read_memory(uint8_t *addr, size_t length, bool little_endian) {
       });
 }
 
+// TODO
 // void _sym_write_memory(uint8_t *addr, size_t length, SymExpr expr,
 //                        bool little_endian);
 // SymExpr _sym_build_extract(SymExpr expr, uint64_t offset, uint64_t length,
 //                           bool little_endian);
+
+//
+// Floating-point operations (unsupported in Qsym)
+//
+
+// TODO concretize?
+
+// SymExpr _sym_build_float(double value, int is_double);
+// SymExpr _sym_build_fp_add(SymExpr a, SymExpr b);
+// SymExpr _sym_build_fp_sub(SymExpr a, SymExpr b);
+// SymExpr _sym_build_fp_mul(SymExpr a, SymExpr b);
+// SymExpr _sym_build_fp_div(SymExpr a, SymExpr b);
+// SymExpr _sym_build_fp_rem(SymExpr a, SymExpr b);
+// SymExpr _sym_build_fp_abs(SymExpr a);
+// SymExpr _sym_build_float_ordered_greater_than(SymExpr a, SymExpr b);
+// SymExpr _sym_build_float_ordered_greater_equal(SymExpr a, SymExpr b);
+// SymExpr _sym_build_float_ordered_less_than(SymExpr a, SymExpr b);
+// SymExpr _sym_build_float_ordered_less_equal(SymExpr a, SymExpr b);
+// SymExpr _sym_build_float_ordered_equal(SymExpr a, SymExpr b);
+// SymExpr _sym_build_float_ordered_not_equal(SymExpr a, SymExpr b);
+// SymExpr _sym_build_float_unordered(SymExpr a, SymExpr b);
+// SymExpr _sym_build_float_unordered_greater_than(SymExpr a, SymExpr b);
+// SymExpr _sym_build_float_unordered_greater_equal(SymExpr a, SymExpr b);
+// SymExpr _sym_build_float_unordered_less_than(SymExpr a, SymExpr b);
+// SymExpr _sym_build_float_unordered_less_equal(SymExpr a, SymExpr b);
+// SymExpr _sym_build_float_unordered_equal(SymExpr a, SymExpr b);
+// SymExpr _sym_build_float_unordered_not_equal(SymExpr a, SymExpr b);
+// SymExpr _sym_build_int_to_float(SymExpr value, int is_double, int is_signed);
+// SymExpr _sym_build_float_to_float(SymExpr expr, int to_double);
+// SymExpr _sym_build_bits_to_float(SymExpr expr, int to_double);
+// SymExpr _sym_build_float_to_bits(SymExpr expr);
+// SymExpr _sym_build_float_to_signed_integer(SymExpr expr, uint8_t bits);
+// SymExpr _sym_build_float_to_unsigned_integer(SymExpr expr, uint8_t bits);
