@@ -6,7 +6,7 @@
 #include <iterator>
 #include <map>
 
-#include "Runtime.h"
+#include <Runtime.h>
 
 #include <z3.h>
 
@@ -35,16 +35,16 @@ constexpr uintptr_t pageOffset(uintptr_t addr) {
 
 /// A mapping from page addresses to the corresponding shadow regions. Each
 /// shadow is large enough to hold one expression per byte on the shadowed page.
-extern std::map<uintptr_t, Z3_ast *> g_shadow_pages;
+extern std::map<uintptr_t, SymExpr *> g_shadow_pages;
 
 /// An iterator that walks over the shadow bytes corresponding to a memory
 /// region. If there is no shadow for any given memory address, it just returns
 /// null.
 class ReadShadowIterator
-    : public std::iterator<std::input_iterator_tag, Z3_ast> {
+    : public std::iterator<std::input_iterator_tag, SymExpr> {
 public:
   explicit ReadShadowIterator(uintptr_t address)
-      : std::iterator<std::input_iterator_tag, Z3_ast>(), address_(address),
+      : std::iterator<std::input_iterator_tag, SymExpr>(), address_(address),
         shadow_(getShadow(address)) {}
 
   ReadShadowIterator &operator++() {
@@ -56,7 +56,7 @@ public:
     return *this;
   }
 
-  Z3_ast operator*() { return shadow_ ? *shadow_ : nullptr; }
+  SymExpr operator*() { return shadow_ ? *shadow_ : nullptr; }
 
   bool operator==(const ReadShadowIterator &other) {
     return (address_ == other.address_);
@@ -65,7 +65,7 @@ public:
   bool operator!=(const ReadShadowIterator &other) { return !(*this == other); }
 
 protected:
-  static Z3_ast *getShadow(uintptr_t address) {
+  static SymExpr *getShadow(uintptr_t address) {
     if (auto shadowPageIt = g_shadow_pages.find(pageStart(address));
         shadowPageIt != g_shadow_pages.end())
       return shadowPageIt->second + pageOffset(address);
@@ -74,7 +74,7 @@ protected:
   }
 
   uintptr_t address_;
-  Z3_ast *shadow_;
+  SymExpr *shadow_;
 };
 
 /// Like ReadShadowIterator, but return an expression for the concrete memory
@@ -84,7 +84,7 @@ public:
   explicit NonNullReadShadowIterator(uintptr_t address)
       : ReadShadowIterator(address) {}
 
-  Z3_ast operator*() {
+  SymExpr operator*() {
     if (auto symbolicResult = ReadShadowIterator::operator*())
       return symbolicResult;
 
@@ -109,15 +109,16 @@ public:
     return *this;
   }
 
-  Z3_ast &operator*() { return *shadow_; }
+  SymExpr &operator*() { return *shadow_; }
 
 protected:
-  static Z3_ast *getOrCreateShadow(uintptr_t address) {
+  static SymExpr *getOrCreateShadow(uintptr_t address) {
     if (auto shadow = getShadow(address))
       return shadow;
 
-    auto newShadow = static_cast<Z3_ast *>(malloc(kPageSize * sizeof(Z3_ast)));
-    memset(newShadow, 0, kPageSize * sizeof(Z3_ast));
+    auto newShadow =
+        static_cast<SymExpr *>(malloc(kPageSize * sizeof(SymExpr)));
+    memset(newShadow, 0, kPageSize * sizeof(SymExpr));
     g_shadow_pages[pageStart(address)] = newShadow;
     return newShadow + pageOffset(address);
   }
@@ -167,7 +168,7 @@ template <typename T> bool isConcrete(T *addr, size_t nbytes) {
 
   ReadOnlyShadow shadow(addr, nbytes);
   return std::all_of(shadow.begin(), shadow.end(),
-                     [](Z3_ast expr) { return (expr == nullptr); });
+                     [](SymExpr expr) { return (expr == nullptr); });
 }
 
 #endif

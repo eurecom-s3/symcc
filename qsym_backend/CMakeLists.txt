@@ -13,12 +13,13 @@ add_library(SymRuntime SHARED
   ${QSYM_SOURCE_DIR}/call_stack_manager.cpp
   ${QSYM_SOURCE_DIR}/third_party/llvm/range.cpp
   ${QSYM_SOURCE_DIR}/third_party/xxhash/xxhash.cpp
-  support.cpp
+  RuntimeQsym.cpp
+  ../runtime/RuntimeCommon.cpp
   ../runtime/Shadow.cpp
   ../runtime/LibcWrappers.cpp)
 
 set_target_properties(SymRuntime PROPERTIES COMPILE_FLAGS
-  "-Wno-unused-parameter")
+  "-Wno-unused-parameter -Wno-implicit-fallthrough")
 
 target_include_directories(SymRuntime PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}   # for our fake pin.H
@@ -29,3 +30,6 @@ target_include_directories(SymRuntime PRIVATE
 llvm_map_components_to_libnames(QSYM_LLVM_DEPS support)
 
 target_link_libraries(SymRuntime "z3" ${QSYM_LLVM_DEPS})
+
+configure_file(RuntimeQsym.h Runtime.h COPYONLY)
+target_include_directories(SymRuntime PRIVATE ${CMAKE_CURRENT_BINARY_DIR})

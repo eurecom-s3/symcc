@@ -1,4 +1,4 @@
-#include "Runtime.h"
+#include <Runtime.h>
 
 #include <algorithm>
 #include <cassert>
@@ -24,8 +24,6 @@
 
 namespace {
 
-constexpr int kMaxFunctionArguments = 256;
-
 /// Indicate whether the runtime has been initialized.
 bool g_initialized = false;
 
@@ -37,11 +35,6 @@ Z3_ast g_rounding_mode;
 
 /// The global Z3 solver.
 Z3_solver g_solver; // TODO make thread-local
-
-/// Global storage for function parameters and the return value.
-Z3_ast g_return_value;
-Z3_ast g_function_arguments[kMaxFunctionArguments];
-// TODO make thread-local
 
 // Some global constants for efficiency.
 Z3_ast g_null_pointer, g_true, g_false;
@@ -59,6 +52,11 @@ void handle_z3_error(Z3_context c, Z3_error_code e) {
   assert(c == g_context && "Z3 error in unknown context");
   std::cerr << Z3_get_error_msg(g_context, e) << std::endl;
   assert(!"Z3 error");
+}
+
+Z3_ast build_variable(const char *name, uint8_t bits) {
+  Z3_symbol sym = Z3_mk_string_symbol(g_context, name);
+  return Z3_mk_const(g_context, sym, Z3_mk_bv_sort(g_context, bits));
 }
 
 } // namespace
@@ -94,6 +92,19 @@ void _sym_initialize(void) {
   g_false = Z3_mk_false(g_context);
 }
 
+uint32_t sym_make_symbolic(const char *name, uint32_t value, uint8_t bits) {
+  /* TODO find a way to make this more generic, not just for uint32_t */
+
+  /* This function is the connection between the target program and our
+     instrumentation; it serves as a way to mark variables as symbolic. We just
+     return the concrete value but also set the expression for the return value;
+     the instrumentation knows to treat this function specially and check the
+     returned expression even though it's an external call. */
+
+  _sym_set_return_expression(build_variable(name, bits));
+  return value;
+}
+
 Z3_ast _sym_build_integer(uint64_t value, uint8_t bits) {
   return Z3_mk_int(g_context, value, Z3_mk_bv_sort(g_context, bits));
 }
@@ -104,22 +115,19 @@ Z3_ast _sym_build_float(double value, int is_double) {
                                             : Z3_mk_fpa_sort_single(g_context));
 }
 
-Z3_ast _sym_build_variable(const char *name, uint8_t bits) {
-  Z3_symbol sym = Z3_mk_string_symbol(g_context, name);
-  return Z3_mk_const(g_context, sym, Z3_mk_bv_sort(g_context, bits));
-}
+Z3_ast _sym_get_input_byte(size_t offset) {
+  static std::vector<SymExpr> stdinBytes;
 
-uint32_t sym_make_symbolic(const char *name, uint32_t value, uint8_t bits) {
-  /* TODO find a way to make this more generic, not just for uint32_t */
+  if (offset < stdinBytes.size())
+    return stdinBytes[offset];
 
-  /* This function is the connection between the target program and our
-     instrumentation; it serves as a way to mark variables as symbolic. We just
-     return the concrete value but also set the expression for the return value;
-     the instrumentation knows to treat this function specially and check the
-     returned expression even though it's an external call. */
+  auto varName = "stdin" + std::to_string(stdinBytes.size());
+  auto var = build_variable(varName.c_str(), 8);
 
-  g_return_value = _sym_build_variable(name, bits);
-  return value;
+  stdinBytes.resize(offset);
+  stdinBytes.push_back(var);
+
+  return var;
 }
 
 Z3_ast _sym_build_null_pointer(void) { return g_null_pointer; }
@@ -380,23 +388,6 @@ Z3_ast _sym_build_float_to_unsigned_integer(Z3_ast expr, uint8_t bits) {
                           expr, bits);
 }
 
-void _sym_set_parameter_expression(uint8_t index, Z3_ast expr) {
-  g_function_arguments[index] = expr;
-}
-
-Z3_ast _sym_get_parameter_expression(uint8_t index) {
-  return g_function_arguments[index];
-}
-
-void _sym_set_return_expression(Z3_ast expr) { g_return_value = expr; }
-
-Z3_ast _sym_get_return_expression(void) {
-  auto result = g_return_value;
-  // TODO this is a safeguard that can eventually be removed
-  g_return_value = nullptr;
-  return result;
-}
-
 void _sym_push_path_constraint(Z3_ast constraint, int taken) {
   if (!constraint)
     return;
@@ -497,23 +488,6 @@ void _sym_write_memory(uint8_t *addr, size_t length, Z3_ast expr,
       i++;
     }
   }
-}
-
-void _sym_memcpy(uint8_t *dest, const uint8_t *src, size_t length) {
-  if (isConcrete(src, length) && isConcrete(dest, length))
-    return;
-
-  ReadOnlyShadow srcShadow(src, length);
-  ReadWriteShadow destShadow(dest, length);
-  std::copy(srcShadow.begin(), srcShadow.end(), destShadow.begin());
-}
-
-void _sym_memset(uint8_t *memory, Z3_ast value, size_t length) {
-  if ((value == nullptr) && isConcrete(memory, length))
-    return;
-
-  ReadWriteShadow shadow(memory, length);
-  std::fill(shadow.begin(), shadow.end(), value);
 }
 
 Z3_ast _sym_build_extract(Z3_ast expr, uint64_t offset, uint64_t length,

@@ -7,8 +7,8 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
-#include "Runtime.h"
 #include "Shadow.h"
+#include <Runtime.h>
 
 #define SYM(x) __symbolized_##x
 
@@ -20,7 +20,7 @@
 namespace {
 
 /// Tell the solver to try an alternative value than the given one.
-template <typename V> void tryAlternative(V value, Z3_ast valueExpr) {
+template <typename V> void tryAlternative(V value, SymExpr valueExpr) {
   if (valueExpr) {
     _sym_push_path_constraint(
         _sym_build_equal(valueExpr,
@@ -30,7 +30,7 @@ template <typename V> void tryAlternative(V value, Z3_ast valueExpr) {
 }
 
 // A partial specialization for pointer types for convenience.
-template <typename E> void tryAlternative(E *value, Z3_ast valueExpr) {
+template <typename E> void tryAlternative(E *value, SymExpr valueExpr) {
   tryAlternative(reinterpret_cast<intptr_t>(value), valueExpr);
 }
 } // namespace
@@ -57,28 +57,28 @@ void *SYM(mmap)(void *addr, size_t len, int prot, int flags, int fildes,
 }
 
 ssize_t SYM(read)(int fildes, void *buf, size_t nbyte) {
-  static std::vector<Z3_ast> stdinBytes;
+  static size_t inputOffset = 0;
 
   tryAlternative(buf, _sym_get_parameter_expression(1));
   tryAlternative(nbyte, _sym_get_parameter_expression(2));
 
   auto result = read(fildes, buf, nbyte);
+  _sym_set_return_expression(nullptr);
+
+  if (result < 0)
+    return result;
+
   if (fildes == 0) {
     // Reading from standard input. We treat everything as unconstrained
     // symbolic data.
     ReadWriteShadow shadow(buf, nbyte);
-    std::generate(shadow.begin(), shadow.end(), []() {
-      auto varName = "stdin" + std::to_string(stdinBytes.size());
-      auto var = _sym_build_variable(varName.c_str(), 8);
-      stdinBytes.push_back(var);
-      return var;
-    });
+    std::generate(shadow.begin(), shadow.end(),
+                  []() { return _sym_get_input_byte(inputOffset++); });
   } else if (!isConcrete(buf, nbyte)) {
     ReadWriteShadow shadow(buf, nbyte);
     std::fill(shadow.begin(), shadow.end(), nullptr);
   }
 
-  _sym_set_return_expression(nullptr);
   return result;
 }
 
@@ -138,7 +138,7 @@ const char *SYM(strchr)(const char *s, int c) {
   auto result = strchr(s, c);
   _sym_set_return_expression(nullptr);
 
-  Z3_ast cExpr = _sym_get_parameter_expression(1);
+  auto cExpr = _sym_get_parameter_expression(1);
   if (isConcrete(s, result ? (result - s) : strlen(s)) && !cExpr)
     return result;
 
@@ -172,7 +172,7 @@ int SYM(memcmp)(const void *a, const void *b, size_t n) {
 
   auto aShadowIt = ReadOnlyShadow(a, n).begin_non_null();
   auto bShadowIt = ReadOnlyShadow(b, n).begin_non_null();
-  Z3_ast allEqual = _sym_build_equal(*aShadowIt, *bShadowIt);
+  auto allEqual = _sym_build_equal(*aShadowIt, *bShadowIt);
   for (size_t i = 1; i < n; i++) {
     allEqual =
         _sym_build_and(allEqual, _sym_build_equal(*aShadowIt, *bShadowIt));

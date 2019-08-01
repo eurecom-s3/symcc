@@ -19,7 +19,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wredundant-decls -Wcast-align \
 -Wmissing-include-dirs -Wswitch-default \
 -Wextra -Wall -Winvalid-pch -Wredundant-decls -Wformat=2 \
--Wmissing-format-attribute -Wformat-nonliteral")
+-Wmissing-format-attribute -Wformat-nonliteral -Werror")
 
 # This is the compiler pass that we later load into clang or opt. If LLVM is
 # built without RTTI we have to disable it for our library too, otherwise we'll
@@ -39,10 +39,15 @@ if (${QSYM_BACKEND})
   add_subdirectory(qsym_backend)
 else()
   add_library(SymRuntime SHARED
-    runtime/Runtime.cpp
+    runtime/RuntimeCommon.cpp
+    runtime/RuntimeSimple.cpp
     runtime/LibcWrappers.cpp
     runtime/Shadow.cpp)
   target_link_libraries(SymRuntime "z3")
+  configure_file(runtime/RuntimeSimple.h Runtime.h COPYONLY)
+  target_include_directories(SymRuntime PRIVATE
+    ${CMAKE_CURRENT_BINARY_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime)
 endif()
 
 get_target_property(SYM_RUNTIME_DIR SymRuntime BINARY_DIR)

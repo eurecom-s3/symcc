@@ -4,6 +4,7 @@
 // Make sure that we can handle large allocations symbolically.
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 int sym_make_symbolic(const char *, int, uint8_t);
 
