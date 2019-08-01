@@ -46,13 +46,13 @@ void dump_known_regions() {
     std::cout << "  " << P(page) << " shadowed by " << P(shadow) << std::endl;
   }
 }
-#endif
 
 void handle_z3_error(Z3_context c, Z3_error_code e) {
   assert(c == g_context && "Z3 error in unknown context");
   std::cerr << Z3_get_error_msg(g_context, e) << std::endl;
   assert(!"Z3 error");
 }
+#endif
 
 Z3_ast build_variable(const char *name, uint8_t bits) {
   Z3_symbol sym = Z3_mk_string_symbol(g_context, name);
@@ -79,7 +79,9 @@ void _sym_initialize(void) {
   g_context = Z3_mk_context(cfg);
   Z3_del_config(cfg);
 
+#ifdef DEBUG_RUNTIME
   Z3_set_error_handler(g_context, handle_z3_error);
+#endif
 
   g_rounding_mode = Z3_mk_fpa_round_nearest_ties_to_even(g_context);
 
