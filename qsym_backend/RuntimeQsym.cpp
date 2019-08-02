@@ -44,9 +44,21 @@ bool AflTraceMap::isInterestingBranch(ADDRINT pc, bool taken) {
 
 } // namespace qsym
 
+namespace {
+
+/// Indicate whether the runtime has been initialized.
+bool g_initialized = false;
+
+}
+
 using namespace qsym;
 
 void _sym_initialize(void) {
+  if (g_initialized)
+    return;
+
+  g_initialized = true;
+
   // TODO proper output directory
 
   // Qsym requires the full input in a file
@@ -56,6 +68,13 @@ void _sym_initialize(void) {
   std::copy(inputData.begin(), inputData.end(),
             std::ostreambuf_iterator<char>(inputFile));
   inputFile.close();
+
+#ifdef DEBUG_RUNTIME
+  std::cout << "Loaded input:" << std::endl;
+  std::copy(inputData.begin(), inputData.end(),
+            std::ostreambuf_iterator<char>(std::cout));
+  std::cout << std::endl;
+#endif
 
   // Restore some semblance of standard input
   int inputFd = open("/tmp/input", O_RDONLY);
