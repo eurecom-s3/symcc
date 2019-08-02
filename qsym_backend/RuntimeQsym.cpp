@@ -259,31 +259,34 @@ SymExpr _sym_read_memory(uint8_t *addr, size_t length, bool little_endian) {
 // Floating-point operations (unsupported in Qsym)
 //
 
-// TODO concretize?
+#define UNSUPPORTED(prototype) prototype { return nullptr; }
 
-// SymExpr _sym_build_float(double value, int is_double);
-// SymExpr _sym_build_fp_add(SymExpr a, SymExpr b);
-// SymExpr _sym_build_fp_sub(SymExpr a, SymExpr b);
-// SymExpr _sym_build_fp_mul(SymExpr a, SymExpr b);
-// SymExpr _sym_build_fp_div(SymExpr a, SymExpr b);
-// SymExpr _sym_build_fp_rem(SymExpr a, SymExpr b);
-// SymExpr _sym_build_fp_abs(SymExpr a);
-// SymExpr _sym_build_float_ordered_greater_than(SymExpr a, SymExpr b);
-// SymExpr _sym_build_float_ordered_greater_equal(SymExpr a, SymExpr b);
-// SymExpr _sym_build_float_ordered_less_than(SymExpr a, SymExpr b);
-// SymExpr _sym_build_float_ordered_less_equal(SymExpr a, SymExpr b);
-// SymExpr _sym_build_float_ordered_equal(SymExpr a, SymExpr b);
-// SymExpr _sym_build_float_ordered_not_equal(SymExpr a, SymExpr b);
-// SymExpr _sym_build_float_unordered(SymExpr a, SymExpr b);
-// SymExpr _sym_build_float_unordered_greater_than(SymExpr a, SymExpr b);
-// SymExpr _sym_build_float_unordered_greater_equal(SymExpr a, SymExpr b);
-// SymExpr _sym_build_float_unordered_less_than(SymExpr a, SymExpr b);
-// SymExpr _sym_build_float_unordered_less_equal(SymExpr a, SymExpr b);
-// SymExpr _sym_build_float_unordered_equal(SymExpr a, SymExpr b);
-// SymExpr _sym_build_float_unordered_not_equal(SymExpr a, SymExpr b);
-// SymExpr _sym_build_int_to_float(SymExpr value, int is_double, int is_signed);
-// SymExpr _sym_build_float_to_float(SymExpr expr, int to_double);
-// SymExpr _sym_build_bits_to_float(SymExpr expr, int to_double);
-// SymExpr _sym_build_float_to_bits(SymExpr expr);
-// SymExpr _sym_build_float_to_signed_integer(SymExpr expr, uint8_t bits);
-// SymExpr _sym_build_float_to_unsigned_integer(SymExpr expr, uint8_t bits);
+UNSUPPORTED(SymExpr _sym_build_float(double value, int is_double))
+UNSUPPORTED(SymExpr _sym_build_fp_add(SymExpr a, SymExpr b))
+UNSUPPORTED(SymExpr _sym_build_fp_sub(SymExpr a, SymExpr b))
+UNSUPPORTED(SymExpr _sym_build_fp_mul(SymExpr a, SymExpr b))
+UNSUPPORTED(SymExpr _sym_build_fp_div(SymExpr a, SymExpr b))
+UNSUPPORTED(SymExpr _sym_build_fp_rem(SymExpr a, SymExpr b))
+UNSUPPORTED(SymExpr _sym_build_fp_abs(SymExpr a))
+UNSUPPORTED(SymExpr _sym_build_float_ordered_greater_than(SymExpr a, SymExpr b))
+UNSUPPORTED(SymExpr _sym_build_float_ordered_greater_equal(SymExpr a, SymExpr b))
+UNSUPPORTED(SymExpr _sym_build_float_ordered_less_than(SymExpr a, SymExpr b))
+UNSUPPORTED(SymExpr _sym_build_float_ordered_less_equal(SymExpr a, SymExpr b))
+UNSUPPORTED(SymExpr _sym_build_float_ordered_equal(SymExpr a, SymExpr b))
+UNSUPPORTED(SymExpr _sym_build_float_ordered_not_equal(SymExpr a, SymExpr b))
+UNSUPPORTED(SymExpr _sym_build_float_unordered(SymExpr a, SymExpr b))
+UNSUPPORTED(SymExpr _sym_build_float_unordered_greater_than(SymExpr a, SymExpr b))
+UNSUPPORTED(SymExpr _sym_build_float_unordered_greater_equal(SymExpr a, SymExpr b))
+UNSUPPORTED(SymExpr _sym_build_float_unordered_less_than(SymExpr a, SymExpr b))
+UNSUPPORTED(SymExpr _sym_build_float_unordered_less_equal(SymExpr a, SymExpr b))
+UNSUPPORTED(SymExpr _sym_build_float_unordered_equal(SymExpr a, SymExpr b))
+UNSUPPORTED(SymExpr _sym_build_float_unordered_not_equal(SymExpr a, SymExpr b))
+UNSUPPORTED(SymExpr _sym_build_int_to_float(SymExpr value, int is_double, int is_signed))
+UNSUPPORTED(SymExpr _sym_build_float_to_float(SymExpr expr, int to_double))
+UNSUPPORTED(SymExpr _sym_build_bits_to_float(SymExpr expr, int to_double))
+UNSUPPORTED(SymExpr _sym_build_float_to_bits(SymExpr expr))
+UNSUPPORTED(SymExpr _sym_build_float_to_signed_integer(SymExpr expr, uint8_t bits))
+UNSUPPORTED(SymExpr _sym_build_float_to_unsigned_integer(SymExpr expr, uint8_t bits))
+
+#undef UNSUPPORTED
+#undef H
