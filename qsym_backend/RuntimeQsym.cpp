@@ -206,7 +206,7 @@ SymExpr _sym_build_zext(SymExpr expr, uint8_t bits) {
 }
 
 SymExpr _sym_build_trunc(SymExpr expr, uint8_t bits) {
-  return H(g_expr_builder->createTrunc(*expr, (*expr)->bits() - bits));
+  return H(g_expr_builder->createTrunc(*expr, bits));
 }
 
 void _sym_push_path_constraint(SymExpr constraint, int taken) {
