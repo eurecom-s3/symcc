@@ -1,5 +1,5 @@
 // RUN: %symcc -O2 %s -o %t
-// RUN: echo -ne "\x05\x00\x00\x00" | %t | FileCheck %s
+// RUN: echo -ne "\x05\x00\x00\x00" | %t 2>&1 | %filecheck %s
 //
 // Make sure that our instrumentation works with back-jumps.
 #include <stdio.h>
@@ -9,8 +9,9 @@
 int fac(int x) {
     int result = 1;
 
-    // CHECK-COUNT-5: Found diverging input
-    // CHECK-NOT: Found diverging input
+    // SIMPLE-COUNT-5: Found diverging input
+    // SIMPLE-NOT: Found diverging input
+    // QSYM-COUNT-5: New testcase
     for (int i = 2; i <= x; i++)
         result *= i;
 

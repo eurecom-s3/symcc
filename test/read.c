@@ -1,5 +1,5 @@
 // RUN: %symcc -O2 %s -o %t
-// RUN: echo b | %t | FileCheck %s
+// RUN: echo b | %t 2>&1 | %filecheck %s
 //
 // Check the symbolic handling of "read"
 
@@ -13,13 +13,15 @@ int main(int argc, char* argv[]) {
   if (nbytes != 1)
     return 1;
 
-  // CHECK: Trying to solve
-  // CHECK: Found diverging input
-  // CHECK: stdin0 -> #x61
+  // SIMPLE: Trying to solve
+  // SIMPLE: Found diverging input
+  // SIMPLE: stdin0 -> #x61
+  // QSYM-COUNT-2: SMT
+  // QSYM: New testcase
   if (c == 'a')
     printf("Correct\n");
   else
     printf("Next time...\n");
-  // CHECK: Next time...
+  // ANY: Next time...
   return 0;
 }

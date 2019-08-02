@@ -7,3 +7,8 @@ config.test_exec_root = "@CMAKE_CURRENT_BINARY_DIR@"
 
 # Delegate to the generic configuration file
 lit_config.load_config(config, path.join(config.test_source_root, "lit.cfg"))
+
+# Depending on the backend, the tests have to look for different output
+config.substitutions += [
+    ("%filecheck", "FileCheck @SYM_TEST_FILECHECK_ARGS@"),
+]

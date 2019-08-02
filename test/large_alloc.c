@@ -1,5 +1,5 @@
 // RUN: %symcc -O2 %s -o %t
-// RUN: echo -ne "\x2a\x00\x00\x00" | %t | FileCheck %s
+// RUN: echo -ne "\x2a\x00\x00\x00" | %t 2>&1 | %filecheck %s
 //
 // Make sure that we can handle large allocations symbolically.
 #include <stdio.h>
@@ -18,8 +18,10 @@ int main(int argc, char *argv[]) {
   memset(largeAllocation, (char)x, 10000);
 
   printf("%s\n", (largeAllocation[9999] == 42) ? "worked" : "error");
-  // CHECK: Trying to solve
-  // CHECK: Found diverging input
+  // SIMPLE: Trying to solve
+  // SIMPLE: Found diverging input
+  // QSYM-COUNT-2: SMT
+  // QSYM: New testcase
 
   return 0;
 }

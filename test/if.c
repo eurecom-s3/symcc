@@ -1,5 +1,5 @@
 // RUN: %symcc -O2 %s -o %t
-// RUN: echo -ne "\x05\x00\x00\x00" | %t | FileCheck %s
+// RUN: echo -ne "\x05\x00\x00\x00" | %t 2>&1 | %filecheck %s
 // This test is disabled until we can move the pass behind the optimizer in the pipeline:
 // RUN-disabled: %symcc -O2 -emit-llvm -S %s -o - | FileCheck --check-prefix=BITCODE %s
 //
@@ -16,11 +16,13 @@ int foo(int a, int b) {
     // BITCODE-NOT: alloca
     // BITCODE-NOT: load
     // BITCODE-NOT: store
-    // CHECK: Trying to solve
+    // SIMPLE: Trying to solve
+    // QSYM-COUNT-2: SMT
     // BITCODE: shl
     if (2 * a < b)
         return a;
-    // CHECK: Trying to solve
+    // SIMPLE: Trying to solve
+    // QSYM-COUNT-2: SMT
     else if (a % b)
         return b;
     else
@@ -33,6 +35,7 @@ int main(int argc, char* argv[]) {
         printf("Failed to read x\n");
         return -1;
     }
+    printf("%d\n", x);
     printf("%d\n", foo(x, 7));
     return 0;
 }

@@ -1,5 +1,5 @@
 // RUN: %symcc -O2 %s -o %t
-// RUN: echo -ne "\x05\x00\x00\x00" | %t | FileCheck %s
+// RUN: echo -ne "\x05\x00\x00\x00" | %t 2>&1 | %filecheck %s
 #include <stdio.h>
 #include <stdint.h>
 #include <unistd.h>
@@ -27,37 +27,48 @@ int main(int argc, char* argv[]) {
     struct point p = {x, 17};
 
     printf("%s\n", (p.x < 100) ? "yes" : "no");
-    // CHECK: Trying to solve
-    // CHECK: Found diverging input
-    // CHECK: yes
+    // SIMPLE: Trying to solve
+    // SIMPLE: Found diverging input
+    // QSYM-COUNT-2: SMT
+    // QSYM: New testcase
+    // ANY: yes
 
     printf("%s\n", (p.y < 100) ? "yes" : "no");
-    // CHECK-NOT: Trying to solve
-    // CHECK: yes
+    // SIMPLE-NOT: Trying to solve
+    // QSYM-NOT: SMT
+    // ANY: yes
 
     printf("%s\n", (p.x < p.y) ? "yes" : "no");
-    // CHECK: Trying to solve
-    // CHECK: Found diverging input
-    // CHECK: yes
+    // SIMPLE: Trying to solve
+    // SIMPLE: Found diverging input
+    // QSYM-COUNT-2: SMT
+    // QSYM: New testcase
+    // ANY: yes
 
     printf("%s\n", ((p.x < g_point.x) || (p.y < g_point.y)) ? "yes" : "no");
-    // CHECK: Trying to solve
-    // CHECK: Found diverging input
-    // CHECK: no
+    // SIMPLE: Trying to solve
+    // SIMPLE: Found diverging input
+    // QSYM-COUNT-2: SMT
+    // QSYM: New testcase
+    // ANY: no
 
     printf("%s\n", (g_point_array[1].x < x) ? "yes" : "no");
-    // CHECK: Trying to solve
-    // CHECK: Found diverging input
-    // CHECK: yes
+    // SIMPLE: Trying to solve
+    // SIMPLE: Found diverging input
+    // QSYM-COUNT-2: SMT
+    // QSYM: New testcase
+    // ANY: yes
 
     // Nested structs
 
     struct line l = {{0, 0}, {5, 5}};
 
     printf("%s\n", (l.end.x > x) ? "yes" : "no");
-    // CHECK: Trying to solve
-    // CHECK: Found diverging input
-    // CHECK: no
+    // SIMPLE: Trying to solve
+    // SIMPLE: Found diverging input
+    // QSYM-COUNT-2: SMT
+    // QSYM: New testcase
+    // ANY: no
 
     return 0;
 }

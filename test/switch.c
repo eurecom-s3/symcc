@@ -1,5 +1,5 @@
 // RUN: %symcc -O2 %s -o %t
-// RUN: echo -ne "\x05\x00\x00\x00" | %t | FileCheck %s
+// RUN: echo -ne "\x05\x00\x00\x00" | %t 2>&1 | %filecheck %s
 //
 // Check the symbolic handling of "read"
 
@@ -34,12 +34,14 @@ int main(int argc, char* argv[]) {
     printf("x is something else\n");
     break;
   }
-  // CHECK: Trying to solve
-  // CHECK: Found diverging input
-  // CHECK: x is 5
+  // SIMPLE: Trying to solve
+  // SIMPLE: Found diverging input
+  // QSYM-COUNT-2: SMT
+  // QSYM: New testcase
+  // ANY: x is 5
 
   printf("%d\n", foo);
-  // CHECK: 2
+  // ANY: 2
 
   // When the value to branch on is concrete there should be no solver
   // interaction.
@@ -58,8 +60,9 @@ int main(int argc, char* argv[]) {
     printf("y is something else\n");
     break;
   }
-  // CHECK-NOT: Trying to solve
-  // CHECK: y is something else
+  // SIMPLE-NOT: Trying to solve
+  // QSYM-NOT: SMT
+  // ANY: y is something else
 
   return 0;
 }
