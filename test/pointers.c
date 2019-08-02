@@ -1,14 +1,17 @@
 // RUN: %symcc -O2 %s -o %t
-// RUN: %t | FileCheck %s
+// RUN: echo -ne "\x05\x00\x00\x00" | %t | FileCheck %s
 #include <stdio.h>
 #include <stdint.h>
-
-int sym_make_symbolic(const char*, int, uint8_t);
+#include <unistd.h>
 
 volatile int g_value = 0x00ab0012;
 
 int main(int argc, char* argv[]) {
-    int x = sym_make_symbolic("x", 5, 32);
+    int x;
+    if (read(STDIN_FILENO, &x, sizeof(x)) != sizeof(x)) {
+        printf("Failed to read x\n");
+        return -1;
+    }
     uint8_t *charPtr = (uint8_t*)&g_value;
 
     charPtr += 2;
@@ -18,7 +21,7 @@ int main(int argc, char* argv[]) {
     printf("%s\n", (*charPtr == x) ? "equal" : "different");
     // CHECK: Trying to solve
     // CHECK: Found diverging input
-    // CHECK: #x000000ab
+    // CHECK: #xab
     // CHECK: different
 
     volatile int local = 0x12345678;
@@ -27,7 +30,7 @@ int main(int argc, char* argv[]) {
     printf("%s\n", (*charPtr == x) ? "equal" : "different");
     // CHECK: Trying to solve
     // CHECK: Found diverging input
-    // CHECK: #x00000056
+    // CHECK: #x56
     // CHECK: different
 
     return 0;

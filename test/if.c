@@ -1,5 +1,5 @@
 // RUN: %symcc -O2 %s -o %t
-// RUN: %t | FileCheck %s
+// RUN: echo -ne "\x05\x00\x00\x00" | %t | FileCheck %s
 // This test is disabled until we can move the pass behind the optimizer in the pipeline:
 // RUN-disabled: %symcc -O2 -emit-llvm -S %s -o - | FileCheck --check-prefix=BITCODE %s
 //
@@ -10,8 +10,7 @@
 //    break compiler optimizations.
 #include <stdio.h>
 #include <stdint.h>
-
-int sym_make_symbolic(const char*, int, uint8_t);
+#include <unistd.h>
 
 int foo(int a, int b) {
     // BITCODE-NOT: alloca
@@ -29,7 +28,11 @@ int foo(int a, int b) {
 }
 
 int main(int argc, char* argv[]) {
-    int x = sym_make_symbolic("x", 5, 32);
+    int x;
+    if (read(STDIN_FILENO, &x, sizeof(x)) != sizeof(x)) {
+        printf("Failed to read x\n");
+        return -1;
+    }
     printf("%d\n", foo(x, 7));
     return 0;
 }

@@ -1,13 +1,12 @@
 // RUN: %symcc -O2 %s -o %t
-// RUN: %t | FileCheck %s
+// RUN: echo -ne "\x05\x00\x00\x00" | %t | FileCheck %s
 //
 // Test that global variables are handled correctly. The special challenge is
 // that we need to initialize the symbolic expression corresponding to any
 // global variable that has an initial value.
 #include <stdio.h>
 #include <stdint.h>
-
-int sym_make_symbolic(const char*, int, uint8_t);
+#include <unistd.h>
 
 int g_increment = 17;
 int g_uninitialized;
@@ -43,24 +42,29 @@ void sum_ints(int x) {
 }
 
 int main(int argc, char* argv[]) {
-    int x = sym_make_symbolic("x", 5, 32);
+    int x;
+    if (read(STDIN_FILENO, &x, sizeof(x)) != sizeof(x)) {
+        printf("Failed to read x\n");
+        return -1;
+    }
+
     printf("%d\n", increment(x));
     // CHECK: Trying to solve
-    // CHECK: (bvadd #x{{0*}}11 x)
+    // CHECK: (bvadd #x{{0*}}11
     // CHECK: Found diverging input
     // CHECK: 22
 
     g_increment = 18;
     printf("%d\n", increment(x));
     // CHECK: Trying to solve
-    // CHECK: (bvadd #x{{0*}}12 x)
+    // CHECK: (bvadd #x{{0*}}12
     // CHECK: Found diverging input
     // CHECK: 23
 
     g_uninitialized = 101;
     printf("%s\n", (x < g_uninitialized) ? "smaller" : "greater or equal");
     // CHECK: Trying to solve
-    // CHECK: (bvsle #x{{0*}}65 x)
+    // CHECK: (bvsle #x{{0*}}65
     // CHECK: Found diverging input
     // CHECK: smaller
 

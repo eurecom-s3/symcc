@@ -1,11 +1,10 @@
 // RUN: %symcc -O2 %s -o %t
-// RUN: %t | FileCheck %s
+// RUN: echo -ne "\x05\x00\x00\x00" | %t | FileCheck %s
 //
 // Make sure that our instrumentation works with back-jumps.
 #include <stdio.h>
 #include <stdint.h>
-
-int sym_make_symbolic(const char*, int, uint8_t);
+#include <unistd.h>
 
 int fac(int x) {
     int result = 1;
@@ -19,7 +18,11 @@ int fac(int x) {
 }
 
 int main(int argc, char* argv[]) {
-    int x = sym_make_symbolic("x", 5, 32);
+    int x;
+    if (read(STDIN_FILENO, &x, sizeof(x)) != sizeof(x)) {
+        printf("Failed to read x\n");
+        return -1;
+    }
     printf("%d\n", fac(x));
     return 0;
 }

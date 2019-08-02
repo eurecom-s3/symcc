@@ -1,15 +1,18 @@
 // RUN: %symcc -O2 %s -o %t
-// RUN: %t | FileCheck %s
+// RUN: echo -ne "\x05\x00\x00\x00" | %t | FileCheck %s
 //
 // Check the symbolic handling of "read"
 
 #include <stdio.h>
 #include <stdint.h>
-
-int sym_make_symbolic(const char*, int, uint8_t);
+#include <unistd.h>
 
 int main(int argc, char* argv[]) {
-  int x = sym_make_symbolic("x", 5, 32);
+  int x;
+  if (read(STDIN_FILENO, &x, sizeof(x)) != sizeof(x)) {
+    printf("Failed to read x\n");
+    return -1;
+  }
 
   int foo = 0;
   switch (x) {

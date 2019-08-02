@@ -1,9 +1,8 @@
 // RUN: %symcc -O2 %s -o %t
-// RUN: %t | FileCheck %s
+// RUN: echo -ne "\x05\x00\x00\x00" | %t | FileCheck %s
 #include <stdio.h>
 #include <stdint.h>
-
-int sym_make_symbolic(const char*, int, uint8_t);
+#include <unistd.h>
 
 struct point {
     int x;
@@ -19,7 +18,12 @@ static struct point g_point = {1, 2};
 static struct point g_point_array[] = {{1, 2}, {3, 4}, {5, 6}};
 
 int main(int argc, char* argv[]) {
-    int x = sym_make_symbolic("x", 5, 32);
+    int x;
+    if (read(STDIN_FILENO, &x, sizeof(x)) != sizeof(x)) {
+        printf("Failed to read x\n");
+        return -1;
+    }
+
     struct point p = {x, 17};
 
     printf("%s\n", (p.x < 100) ? "yes" : "no");
