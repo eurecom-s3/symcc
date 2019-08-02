@@ -249,17 +249,64 @@ SymExpr _sym_read_memory(uint8_t *addr, size_t length, bool little_endian) {
       });
 }
 
-// TODO
-// void _sym_write_memory(uint8_t *addr, size_t length, SymExpr expr,
-//                        bool little_endian);
-// SymExpr _sym_build_extract(SymExpr expr, uint64_t offset, uint64_t length,
-//                           bool little_endian);
+// TODO unify
+void _sym_write_memory(uint8_t *addr, size_t length, SymExpr expr,
+                       bool little_endian) {
+  assert(length && "Invalid query for zero-length memory region");
+
+#ifdef DEBUG_RUNTIME
+  std::cout << "Writing " << length << " bytes to address " << P(addr)
+            << std::endl;
+  dump_known_regions();
+#endif
+
+  if (expr == nullptr && isConcrete(addr, length))
+    return;
+
+  ReadWriteShadow shadow(addr, length);
+  if (!expr) {
+    std::fill(shadow.begin(), shadow.end(), nullptr);
+  } else {
+    size_t i = 0;
+    for (SymExpr &byteShadow : shadow) {
+      byteShadow = little_endian
+                       ? H(g_expr_builder->createExtract(*expr, 8 * i, 8))
+                       : H(g_expr_builder->createExtract(
+                             *expr, (length - i - 1) * 8, 8));
+      i++;
+    }
+  }
+}
+
+// TODO unify
+SymExpr _sym_build_extract(SymExpr expr, uint64_t offset, uint64_t length,
+                           bool little_endian) {
+  unsigned totalBits = (*expr)->bits();
+  assert((totalBits % 8 == 0) && "Aggregate type contains partial bytes");
+
+  SymExpr result;
+  if (little_endian) {
+    result =
+        H(g_expr_builder->createExtract(*expr, totalBits - offset * 8 - 8, 8));
+    for (size_t i = 1; i < length; i++) {
+      result = H(g_expr_builder->createConcat(
+          *result, g_expr_builder->createExtract(
+                       *expr, totalBits - (offset + i + 1) * 8, 8)));
+    }
+  } else {
+    result = H(g_expr_builder->createExtract(
+        *expr, totalBits - (offset + length) * 8, length * 8));
+  }
+
+  return result;
+}
 
 //
 // Floating-point operations (unsupported in Qsym)
 //
 
-#define UNSUPPORTED(prototype) prototype { return nullptr; }
+#define UNSUPPORTED(prototype)                                                 \
+  prototype { return nullptr; }
 
 UNSUPPORTED(SymExpr _sym_build_float(double value, int is_double))
 UNSUPPORTED(SymExpr _sym_build_fp_add(SymExpr a, SymExpr b))
@@ -269,24 +316,30 @@ UNSUPPORTED(SymExpr _sym_build_fp_div(SymExpr a, SymExpr b))
 UNSUPPORTED(SymExpr _sym_build_fp_rem(SymExpr a, SymExpr b))
 UNSUPPORTED(SymExpr _sym_build_fp_abs(SymExpr a))
 UNSUPPORTED(SymExpr _sym_build_float_ordered_greater_than(SymExpr a, SymExpr b))
-UNSUPPORTED(SymExpr _sym_build_float_ordered_greater_equal(SymExpr a, SymExpr b))
+UNSUPPORTED(SymExpr _sym_build_float_ordered_greater_equal(SymExpr a,
+                                                           SymExpr b))
 UNSUPPORTED(SymExpr _sym_build_float_ordered_less_than(SymExpr a, SymExpr b))
 UNSUPPORTED(SymExpr _sym_build_float_ordered_less_equal(SymExpr a, SymExpr b))
 UNSUPPORTED(SymExpr _sym_build_float_ordered_equal(SymExpr a, SymExpr b))
 UNSUPPORTED(SymExpr _sym_build_float_ordered_not_equal(SymExpr a, SymExpr b))
 UNSUPPORTED(SymExpr _sym_build_float_unordered(SymExpr a, SymExpr b))
-UNSUPPORTED(SymExpr _sym_build_float_unordered_greater_than(SymExpr a, SymExpr b))
-UNSUPPORTED(SymExpr _sym_build_float_unordered_greater_equal(SymExpr a, SymExpr b))
+UNSUPPORTED(SymExpr _sym_build_float_unordered_greater_than(SymExpr a,
+                                                            SymExpr b))
+UNSUPPORTED(SymExpr _sym_build_float_unordered_greater_equal(SymExpr a,
+                                                             SymExpr b))
 UNSUPPORTED(SymExpr _sym_build_float_unordered_less_than(SymExpr a, SymExpr b))
 UNSUPPORTED(SymExpr _sym_build_float_unordered_less_equal(SymExpr a, SymExpr b))
 UNSUPPORTED(SymExpr _sym_build_float_unordered_equal(SymExpr a, SymExpr b))
 UNSUPPORTED(SymExpr _sym_build_float_unordered_not_equal(SymExpr a, SymExpr b))
-UNSUPPORTED(SymExpr _sym_build_int_to_float(SymExpr value, int is_double, int is_signed))
+UNSUPPORTED(SymExpr _sym_build_int_to_float(SymExpr value, int is_double,
+                                            int is_signed))
 UNSUPPORTED(SymExpr _sym_build_float_to_float(SymExpr expr, int to_double))
 UNSUPPORTED(SymExpr _sym_build_bits_to_float(SymExpr expr, int to_double))
 UNSUPPORTED(SymExpr _sym_build_float_to_bits(SymExpr expr))
-UNSUPPORTED(SymExpr _sym_build_float_to_signed_integer(SymExpr expr, uint8_t bits))
-UNSUPPORTED(SymExpr _sym_build_float_to_unsigned_integer(SymExpr expr, uint8_t bits))
+UNSUPPORTED(SymExpr _sym_build_float_to_signed_integer(SymExpr expr,
+                                                       uint8_t bits))
+UNSUPPORTED(SymExpr _sym_build_float_to_unsigned_integer(SymExpr expr,
+                                                         uint8_t bits))
 
 #undef UNSUPPORTED
 #undef H
