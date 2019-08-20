@@ -42,7 +42,14 @@ namespace {
 /// Indicate whether the runtime has been initialized.
 bool g_initialized = false;
 
+/// The file that contains out input.
+std::string inputFileName;
+
+void deleteInputFile() {
+  std::remove(inputFileName.c_str());
 }
+
+} // namespace
 
 using namespace qsym;
 
@@ -57,7 +64,8 @@ void _sym_initialize(void) {
   // Qsym requires the full input in a file
   std::istreambuf_iterator<char> in_begin(std::cin), in_end;
   std::vector<char> inputData(in_begin, in_end);
-  std::ofstream inputFile("/tmp/input", std::ios::trunc);
+  inputFileName = std::tmpnam(nullptr);
+  std::ofstream inputFile(inputFileName, std::ios::trunc);
   std::copy(inputData.begin(), inputData.end(),
             std::ostreambuf_iterator<char>(inputFile));
   inputFile.close();
@@ -69,8 +77,10 @@ void _sym_initialize(void) {
   std::cout << std::endl;
 #endif
 
+  atexit(deleteInputFile);
+
   // Restore some semblance of standard input
-  int inputFd = open("/tmp/input", O_RDONLY);
+  int inputFd = open(inputFileName.c_str(), O_RDONLY);
   if (inputFd < 0) {
     perror("Failed to open the input file");
     exit(-1);
@@ -81,7 +91,7 @@ void _sym_initialize(void) {
     exit(-1);
   }
 
-  g_solver = new Solver("/tmp/input"s, "/tmp/output"s, "fake"s);
+  g_solver = new Solver(inputFileName, "/tmp/output"s, ""s);
   g_expr_builder = SymbolicExprBuilder::create();
 }
 
