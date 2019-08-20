@@ -2,6 +2,24 @@
 
 set(QSYM_SOURCE_DIR "qsym/qsym/pintool")
 
+add_custom_command(OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/${QSYM_SOURCE_DIR}/expr__gen.cpp
+  COMMAND python gen_expr.py
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${QSYM_SOURCE_DIR}/codegen
+  COMMENT "Generating Qsym's expr__gen.cpp"
+  VERBATIM
+  DEPENDS
+  ${QSYM_SOURCE_DIR}/codegen/expr.cpp
+  ${QSYM_SOURCE_DIR}/codegen/gen_expr.py)
+
+add_custom_command(OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/${QSYM_SOURCE_DIR}/expr_builder__gen.cpp
+  COMMAND python gen_expr_builder.py
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${QSYM_SOURCE_DIR}/codegen
+  COMMENT "Generating Qsym's expr__gen.cpp"
+  VERBATIM
+  DEPENDS
+  ${QSYM_SOURCE_DIR}/codegen/expr_builder.cpp
+  ${QSYM_SOURCE_DIR}/codegen/gen_expr_builder.py)
+
 add_library(SymRuntime SHARED
   ${QSYM_SOURCE_DIR}/expr__gen.cpp
   ${QSYM_SOURCE_DIR}/expr_builder__gen.cpp
