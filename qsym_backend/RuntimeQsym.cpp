@@ -228,12 +228,12 @@ SymExpr _sym_build_trunc(SymExpr expr, uint8_t bits) {
   return H(g_expr_builder->createTrunc(*expr, bits));
 }
 
-void _sym_push_path_constraint(SymExpr constraint, int taken) {
+void _sym_push_path_constraint(SymExpr constraint, int taken,
+                               uintptr_t site_id) {
   if (!constraint)
     return;
 
-  // TODO program counter
-  g_solver->addJcc(*constraint, taken, 42);
+  g_solver->addJcc(*constraint, taken, site_id);
 }
 
 SymExpr _sym_get_input_byte(size_t offset) {

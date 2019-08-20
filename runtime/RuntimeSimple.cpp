@@ -390,7 +390,8 @@ Z3_ast _sym_build_float_to_unsigned_integer(Z3_ast expr, uint8_t bits) {
                           expr, bits);
 }
 
-void _sym_push_path_constraint(Z3_ast constraint, int taken) {
+void _sym_push_path_constraint(Z3_ast constraint, int taken,
+                               uintptr_t site_id [[maybe_unused]]) {
   if (!constraint)
     return;
 

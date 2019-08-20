@@ -20,18 +20,20 @@
 namespace {
 
 /// Tell the solver to try an alternative value than the given one.
-template <typename V> void tryAlternative(V value, SymExpr valueExpr) {
+template <typename V, typename F>
+void tryAlternative(V value, SymExpr valueExpr, F caller) {
   if (valueExpr) {
     _sym_push_path_constraint(
         _sym_build_equal(valueExpr,
                          _sym_build_integer(value, sizeof(value) * 8)),
-        true);
+        true, reinterpret_cast<uintptr_t>(caller));
   }
 }
 
 // A partial specialization for pointer types for convenience.
-template <typename E> void tryAlternative(E *value, SymExpr valueExpr) {
-  tryAlternative(reinterpret_cast<intptr_t>(value), valueExpr);
+template <typename E, typename F>
+void tryAlternative(E *value, SymExpr valueExpr, F caller) {
+  tryAlternative(reinterpret_cast<intptr_t>(value), valueExpr, caller);
 }
 } // namespace
 
@@ -40,7 +42,7 @@ extern "C" {
 void *SYM(malloc)(size_t size) {
   auto result = malloc(size);
 
-  tryAlternative(size, _sym_get_parameter_expression(0));
+  tryAlternative(size, _sym_get_parameter_expression(0), SYM(malloc));
 
   _sym_set_return_expression(nullptr);
   return result;
@@ -50,7 +52,7 @@ void *SYM(mmap)(void *addr, size_t len, int prot, int flags, int fildes,
                 off_t off) {
   auto result = mmap(addr, len, prot, flags, fildes, off);
 
-  tryAlternative(len, _sym_get_parameter_expression(1));
+  tryAlternative(len, _sym_get_parameter_expression(1), SYM(mmap));
 
   _sym_set_return_expression(nullptr);
   return result;
@@ -59,8 +61,8 @@ void *SYM(mmap)(void *addr, size_t len, int prot, int flags, int fildes,
 ssize_t SYM(read)(int fildes, void *buf, size_t nbyte) {
   static size_t inputOffset = 0;
 
-  tryAlternative(buf, _sym_get_parameter_expression(1));
-  tryAlternative(nbyte, _sym_get_parameter_expression(2));
+  tryAlternative(buf, _sym_get_parameter_expression(1), SYM(read));
+  tryAlternative(nbyte, _sym_get_parameter_expression(2), SYM(read));
 
   auto result = read(fildes, buf, nbyte);
   _sym_set_return_expression(nullptr);
@@ -85,9 +87,9 @@ ssize_t SYM(read)(int fildes, void *buf, size_t nbyte) {
 void *SYM(memcpy)(void *dest, const void *src, size_t n) {
   auto result = memcpy(dest, src, n);
 
-  tryAlternative(dest, _sym_get_parameter_expression(0));
-  tryAlternative(src, _sym_get_parameter_expression(1));
-  tryAlternative(n, _sym_get_parameter_expression(2));
+  tryAlternative(dest, _sym_get_parameter_expression(0), SYM(memcpy));
+  tryAlternative(src, _sym_get_parameter_expression(1), SYM(memcpy));
+  tryAlternative(n, _sym_get_parameter_expression(2), SYM(memcpy));
 
   _sym_memcpy(static_cast<uint8_t *>(dest), static_cast<const uint8_t *>(src),
               n);
@@ -98,8 +100,8 @@ void *SYM(memcpy)(void *dest, const void *src, size_t n) {
 void *SYM(memset)(void *s, int c, size_t n) {
   auto result = memset(s, c, n);
 
-  tryAlternative(s, _sym_get_parameter_expression(0));
-  tryAlternative(n, _sym_get_parameter_expression(2));
+  tryAlternative(s, _sym_get_parameter_expression(0), SYM(memset));
+  tryAlternative(n, _sym_get_parameter_expression(2), SYM(memset));
 
   _sym_memset(static_cast<uint8_t *>(s), _sym_get_parameter_expression(1), n);
   _sym_set_return_expression(_sym_get_parameter_expression(0));
@@ -107,9 +109,9 @@ void *SYM(memset)(void *s, int c, size_t n) {
 }
 
 char *SYM(strncpy)(char *dest, const char *src, size_t n) {
-  tryAlternative(dest, _sym_get_parameter_expression(0));
-  tryAlternative(src, _sym_get_parameter_expression(1));
-  tryAlternative(n, _sym_get_parameter_expression(2));
+  tryAlternative(dest, _sym_get_parameter_expression(0), SYM(strncpy));
+  tryAlternative(src, _sym_get_parameter_expression(1), SYM(strncpy));
+  tryAlternative(n, _sym_get_parameter_expression(2), SYM(strncpy));
 
   auto result = strncpy(dest, src, n);
   _sym_set_return_expression(nullptr);
@@ -132,8 +134,8 @@ char *SYM(strncpy)(char *dest, const char *src, size_t n) {
 }
 
 const char *SYM(strchr)(const char *s, int c) {
-  tryAlternative(s, _sym_get_parameter_expression(0));
-  tryAlternative(c, _sym_get_parameter_expression(1));
+  tryAlternative(s, _sym_get_parameter_expression(0), SYM(strchr));
+  tryAlternative(c, _sym_get_parameter_expression(1), SYM(strchr));
 
   auto result = strchr(s, c);
   _sym_set_return_expression(nullptr);
@@ -152,7 +154,7 @@ const char *SYM(strchr)(const char *s, int c) {
     _sym_push_path_constraint(
         _sym_build_not_equal(
             *shadowIt ? *shadowIt : _sym_build_integer(s[i], 8), cExpr),
-        true);
+        true, reinterpret_cast<uintptr_t>(SYM(strchr)));
     ++shadowIt;
   }
 
@@ -160,9 +162,9 @@ const char *SYM(strchr)(const char *s, int c) {
 }
 
 int SYM(memcmp)(const void *a, const void *b, size_t n) {
-  tryAlternative(a, _sym_get_parameter_expression(0));
-  tryAlternative(b, _sym_get_parameter_expression(1));
-  tryAlternative(n, _sym_get_parameter_expression(2));
+  tryAlternative(a, _sym_get_parameter_expression(0), SYM(memcmp));
+  tryAlternative(b, _sym_get_parameter_expression(1), SYM(memcmp));
+  tryAlternative(n, _sym_get_parameter_expression(2), SYM(memcmp));
 
   auto result = memcmp(a, b, n);
   _sym_set_return_expression(nullptr);
@@ -180,7 +182,8 @@ int SYM(memcmp)(const void *a, const void *b, size_t n) {
     ++bShadowIt;
   }
 
-  _sym_push_path_constraint(allEqual, result ? false : true);
+  _sym_push_path_constraint(allEqual, result ? false : true,
+                            reinterpret_cast<uintptr_t>(SYM(memcmp)));
   return result;
 }
 }

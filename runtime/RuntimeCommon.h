@@ -112,7 +112,8 @@ SymExpr _sym_get_return_expression(void);
 /*
  * Constraint handling
  */
-void _sym_push_path_constraint(SymExpr constraint, int taken);
+void _sym_push_path_constraint(SymExpr constraint, int taken,
+                               uintptr_t site_id);
 SymExpr _sym_get_input_byte(size_t offset);
 
 /*

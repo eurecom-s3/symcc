@@ -41,7 +41,7 @@ Runtime::Runtime(Module &M) {
   buildBoolOr = M.getOrInsertFunction("_sym_build_bool_or", ptrT, ptrT, ptrT);
   buildBoolXor = M.getOrInsertFunction("_sym_build_bool_xor", ptrT, ptrT, ptrT);
   pushPathConstraint = M.getOrInsertFunction("_sym_push_path_constraint", voidT,
-                                             ptrT, IRB.getInt1Ty());
+                                             ptrT, IRB.getInt1Ty(), intPtrType);
 
   setParameterExpression = M.getOrInsertFunction(
       "_sym_set_parameter_expression", voidT, int8T, ptrT);

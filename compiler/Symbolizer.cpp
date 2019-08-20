@@ -42,7 +42,9 @@ void Symbolizer::finalizeSwitchInstructions() {
           runtime.comparisonHandlers[CmpInst::ICMP_EQ],
           {conditionExpr,
            createValueExpression(caseHandle.getCaseValue(), IRB)});
-      IRB.CreateCall(runtime.pushPathConstraint, {caseConstraint, caseTaken});
+      IRB.CreateCall(runtime.pushPathConstraint,
+                     {caseConstraint, caseTaken,
+                      IRB.getInt64(reinterpret_cast<uintptr_t>(switchInst))});
     }
   }
 }
@@ -315,9 +317,11 @@ void Symbolizer::visitSelectInst(SelectInst &I) {
   // expression over from the chosen argument.
 
   IRBuilder<> IRB(&I);
-  auto runtimeCall =
-      buildRuntimeCall(IRB, runtime.pushPathConstraint,
-                       {{I.getCondition(), true}, {I.getCondition(), false}});
+  auto runtimeCall = buildRuntimeCall(
+      IRB, runtime.pushPathConstraint,
+      {{I.getCondition(), true},
+       {I.getCondition(), false},
+       {IRB.getInt64(reinterpret_cast<uintptr_t>(&I)), false}});
   registerSymbolicComputation(runtimeCall);
 }
 
@@ -357,9 +361,11 @@ void Symbolizer::visitBranchInst(BranchInst &I) {
     return;
 
   IRBuilder<> IRB(&I);
-  auto runtimeCall =
-      buildRuntimeCall(IRB, runtime.pushPathConstraint,
-                       {{I.getCondition(), true}, {I.getCondition(), false}});
+  auto runtimeCall = buildRuntimeCall(
+      IRB, runtime.pushPathConstraint,
+      {{I.getCondition(), true},
+       {I.getCondition(), false},
+       {IRB.getInt64(reinterpret_cast<uintptr_t>(&I)), false}});
   registerSymbolicComputation(runtimeCall);
 }
 
@@ -828,8 +834,10 @@ void Symbolizer::tryAlternative(IRBuilder<> &IRB, Value *V) {
     auto destAssertion =
         IRB.CreateCall(runtime.comparisonHandlers[CmpInst::ICMP_EQ],
                        {destExpr, concreteDestExpr});
-    auto pushAssertion = IRB.CreateCall(runtime.pushPathConstraint,
-                                        {destAssertion, IRB.getInt1(true)});
+    auto pushAssertion =
+        IRB.CreateCall(runtime.pushPathConstraint,
+                       {destAssertion, IRB.getInt1(true),
+                        IRB.getInt64(reinterpret_cast<uintptr_t>(V))});
     registerSymbolicComputation(SymbolicComputation(
         concreteDestExpr, pushAssertion, {{V, 0, destAssertion}}));
   }
