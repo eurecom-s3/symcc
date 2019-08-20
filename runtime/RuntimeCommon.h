@@ -8,8 +8,8 @@
 // Whoever uses this file has to define the type "SymExpr" first; we use it to
 // keep this header independent of the back-end implementation.
 
-#ifndef RUNTIME_H
-#define RUNTIME_H
+#ifndef RUNTIMECOMMON_H
+#define RUNTIMECOMMON_H
 
 extern "C" {
 /*

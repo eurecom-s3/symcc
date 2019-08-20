@@ -36,18 +36,9 @@ endif()
 option(QSYM_BACKEND "Use the Qsym backend instead of our own" OFF)
 
 if (${QSYM_BACKEND})
-  add_subdirectory(qsym_backend)
+  add_subdirectory(runtime/qsym_backend)
 else()
-  add_library(SymRuntime SHARED
-    runtime/RuntimeCommon.cpp
-    runtime/RuntimeSimple.cpp
-    runtime/LibcWrappers.cpp
-    runtime/Shadow.cpp)
-  target_link_libraries(SymRuntime "z3")
-  configure_file(runtime/RuntimeSimple.h Runtime.h COPYONLY)
-  target_include_directories(SymRuntime PRIVATE
-    ${CMAKE_CURRENT_BINARY_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/runtime)
+  add_subdirectory(runtime/simple_backend)
 endif()
 
 get_target_property(SYM_RUNTIME_DIR SymRuntime BINARY_DIR)
