@@ -10,6 +10,8 @@ add_library(SymRuntime SHARED
   ${QSYM_SOURCE_DIR}/solver.cpp
   ${QSYM_SOURCE_DIR}/dependency.cpp
   ${QSYM_SOURCE_DIR}/logging.cpp
+  ${QSYM_SOURCE_DIR}/afl_trace_map.cpp
+  ${QSYM_SOURCE_DIR}/allocation.cpp
   ${QSYM_SOURCE_DIR}/call_stack_manager.cpp
   ${QSYM_SOURCE_DIR}/third_party/llvm/range.cpp
   ${QSYM_SOURCE_DIR}/third_party/xxhash/xxhash.cpp

@@ -35,13 +35,6 @@ Solver *g_solver;
 CallStackManager g_call_stack_manager;
 z3::context g_z3_context;
 
-AflTraceMap::AflTraceMap(const std::string path) {}
-
-bool AflTraceMap::isInterestingBranch(ADDRINT pc, bool taken) {
-  // TODO
-  return true;
-}
-
 } // namespace qsym
 
 namespace {
