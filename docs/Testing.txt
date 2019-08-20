@@ -26,14 +26,26 @@ the LLVM source code), here is an overview of the setup:
    containing site-specific configuration such as the output directory of the
    build. The template is "test/lit.site.cfg.in".
 
-4. CMake adds the "test" target, which invokes lit on the test suite with two
-   additional arguments: the compiler pass and the runtime. (The reason for not
-   passing those arguments through "lit.site.cfg" is that CMake doesn't know
-   them early enough in the configuration process.)
+4. CMake adds the "test" target, which invokes lit on the test suite.
 
 Test files can use the following patterns:
 
 %s             The test file itself.
 %t             A temporary file.
 %symcc         Invocation of clang with our custom pass loaded.
-%symruntime    Compiler flags for building with the runtime.
+%filecheck     Invocation of FileCheck with the right arguments for the backend.
+
+Since we support multiple symbolic backends, the tests must account for
+different output from different backends. To this end, we rely on FileCheck's
+prefix mechanism: test files use different prefixes to specify requirements on
+different backends. The following prefixes are supported:
+
+SIMPLE:   Active when we test with our own backend.
+QSYM:     Active when we test with the Qsym backend.
+ANY:      Always active.
+
+The build system makes sure that "%filecheck" always expands to an invocation of
+FileCheck that activates the right prefixes for the current build configuration.
+
+Note that we run the tests only with the backend selected at configuration time,
+so a full test requires building the project in multiple configurations.

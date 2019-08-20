@@ -9,25 +9,24 @@ each value in the program. The actual computation happens through calls to a
 support library at run time.
 
 To build the pass and the support library, make sure that LLVM 8 and Z3 are
-installed and obtain the source code of compiler-rt from the LLVM project. Note
-that it is not necessary to build compiler-rt. Then create a build directory
-somewhere, and execute the following commands inside it:
+installed. Then create a build directory somewhere, and execute the following
+commands inside it:
 
-$ cmake -G Ninja -DCOMPILER_RT_SOURCE=/path/to/compiler-rt /path/to/compiler/sources
+$ cmake -G Ninja /path/to/compiler/sources
 $ ninja
 
 If LLVM is installed in a non-standard location, add the CMake parameter
 "-DLLVM_DIR=/path/to/llvm/cmake/module". The results of the build process are
-libSymbolize.so, a pass that can be loaded into clang or opt, and
-libSymRuntime.so, the support library that has to be linked with the target
-programs.
+libSymbolize.so, a pass that can be loaded into clang or opt; libSymRuntime.so,
+the support library that is linked with the target programs; and symcc, a
+wrapper script around clang that sets the right options to load our pass and
+link against the run-time library.
 
 To try the compiler, take some simple C code like the following:
 
 #include <stdio.h>
 #include <stdint.h>
-
-int sym_make_symbolic(const char*, int, uint8_t);
+#include <unistd.h>
 
 int foo(int a, int b) {
     if (2 * a < b)
@@ -39,20 +38,36 @@ int foo(int a, int b) {
 }
 
 int main(int argc, char* argv[]) {
-    int x = sym_make_symbolic("x", 5, 32);
+    int x;
+    if (read(STDIN_FILENO, &x, sizeof(x)) != sizeof(x)) {
+        printf("Failed to read x\n");
+        return -1;
+    }
     printf("%d\n", foo(x, 7));
     return 0;
 }
 
 Save the code as "test.c". To compile it with symbolic execution built in, we
-call "symcc", a wrapper around clang that loads our compiler pass and links the
-program against the support library:
+call symcc as we would normally call clang:
 
 $ ./symcc test.c -o test
 $ ./test
 
 The program will execute the same computations as the uninstrumented version,
 but additionally the injected code will track computations symbolically and
-attempt to compute diverging inputs at each branch point. Note that, instead of
-calling "sym_make_symbolic", you can also read from standard input; the data
-will receive the same symbolic treatment.
+attempt to compute diverging inputs at each branch point. All data that the
+program reads from standard input is treated as symbolic.
+
+
+                             Using the Qsym backend
+
+In addition to our own symbolic backend, we support running with the Qsym
+backend. In this case, symbolic expressions are handled by the corresponding
+code from Qsym rather than by our own wrapper around Z3. To build with the Qsym
+backend, first pull in the Qsym code:
+
+$ git submodule init
+$ git submodule update
+
+Then build as described above, but add the option "-DQSYM_BACKEND=ON" to the
+CMake invocation.
