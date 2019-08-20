@@ -1,5 +1,8 @@
 #include <Runtime.h>
 
+#include <cassert>
+#include <numeric>
+
 #include "Shadow.h"
 
 namespace {
@@ -45,4 +48,81 @@ void _sym_memset(uint8_t *memory, SymExpr value, size_t length) {
 
   ReadWriteShadow shadow(memory, length);
   std::fill(shadow.begin(), shadow.end(), value);
+}
+
+SymExpr _sym_read_memory(uint8_t *addr, size_t length, bool little_endian) {
+  assert(length && "Invalid query for zero-length memory region");
+
+#ifdef DEBUG_RUNTIME
+  std::cout << "Reading " << length << " bytes from address " << P(addr)
+            << std::endl;
+  dump_known_regions();
+#endif
+
+  // If the entire memory region is concrete, don't create a symbolic expression
+  // at all.
+  if (isConcrete(addr, length))
+    return nullptr;
+
+  ReadOnlyShadow shadow(addr, length);
+  return std::accumulate(shadow.begin_non_null(), shadow.end_non_null(),
+                         static_cast<SymExpr>(nullptr),
+                         [&](SymExpr result, SymExpr byteExpr) {
+                           if (!result)
+                             return byteExpr;
+
+                           return little_endian
+                                      ? _sym_concat_helper(byteExpr, result)
+                                      : _sym_concat_helper(result, byteExpr);
+                         });
+}
+
+void _sym_write_memory(uint8_t *addr, size_t length, SymExpr expr,
+                       bool little_endian) {
+  assert(length && "Invalid query for zero-length memory region");
+
+#ifdef DEBUG_RUNTIME
+  std::cout << "Writing " << length << " bytes to address " << P(addr)
+            << std::endl;
+  dump_known_regions();
+#endif
+
+  if (expr == nullptr && isConcrete(addr, length))
+    return;
+
+  ReadWriteShadow shadow(addr, length);
+  if (!expr) {
+    std::fill(shadow.begin(), shadow.end(), nullptr);
+  } else {
+    size_t i = 0;
+    for (SymExpr &byteShadow : shadow) {
+      byteShadow = little_endian
+                       ? _sym_extract_helper(expr, 8 * (i + 1) - 1, 8 * i)
+                       : _sym_extract_helper(expr, (length - i) * 8 - 1,
+                                             (length - i - 1) * 8);
+      i++;
+    }
+  }
+}
+
+SymExpr _sym_build_extract(SymExpr expr, uint64_t offset, uint64_t length,
+                           bool little_endian) {
+  size_t totalBits = _sym_bits_helper(expr);
+  assert((totalBits % 8 == 0) && "Aggregate type contains partial bytes");
+
+  SymExpr result;
+  if (little_endian) {
+    result = _sym_extract_helper(expr, totalBits - offset * 8 - 1,
+                                 totalBits - offset * 8 - 8);
+    for (size_t i = 1; i < length; i++) {
+      result = _sym_concat_helper(
+          result, _sym_extract_helper(expr, totalBits - (offset + i) * 8 - 1,
+                                      totalBits - (offset + i + 1) * 8));
+    }
+  } else {
+    result = _sym_extract_helper(expr, totalBits - offset * 8 - 1,
+                                 totalBits - (offset + length) * 8);
+  }
+
+  return result;
 }

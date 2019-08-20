@@ -7,7 +7,6 @@
 // C++
 #include <fstream>
 #include <iterator>
-#include <numeric>
 
 // C
 #include <fcntl.h>
@@ -45,9 +44,7 @@ bool g_initialized = false;
 /// The file that contains out input.
 std::string inputFileName;
 
-void deleteInputFile() {
-  std::remove(inputFileName.c_str());
-}
+void deleteInputFile() { std::remove(inputFileName.c_str()); }
 
 } // namespace
 
@@ -243,84 +240,17 @@ SymExpr _sym_get_input_byte(size_t offset) {
   return H(g_expr_builder->createRead(offset));
 }
 
-// TODO unify
-SymExpr _sym_read_memory(uint8_t *addr, size_t length, bool little_endian) {
-  assert(length && "Invalid query for zero-length memory region");
-
-#ifdef DEBUG_RUNTIME
-  std::cout << "Reading " << length << " bytes from address " << P(addr)
-            << std::endl;
-  dump_known_regions();
-#endif
-
-  // If the entire memory region is concrete, don't create a symbolic expression
-  // at all.
-  if (isConcrete(addr, length))
-    return nullptr;
-
-  ReadOnlyShadow shadow(addr, length);
-  return std::accumulate(
-      shadow.begin_non_null(), shadow.end_non_null(),
-      static_cast<SymExpr>(nullptr), [&](SymExpr result, SymExpr byteExpr) {
-        if (!result)
-          return byteExpr;
-
-        return new ExprRef(
-            little_endian ? g_expr_builder->createConcat(*byteExpr, *result)
-                          : g_expr_builder->createConcat(*result, *byteExpr));
-      });
+SymExpr _sym_concat_helper(SymExpr a, SymExpr b) {
+  return H(g_expr_builder->createConcat(*a, *b));
 }
 
-// TODO unify
-void _sym_write_memory(uint8_t *addr, size_t length, SymExpr expr,
-                       bool little_endian) {
-  assert(length && "Invalid query for zero-length memory region");
-
-#ifdef DEBUG_RUNTIME
-  std::cout << "Writing " << length << " bytes to address " << P(addr)
-            << std::endl;
-  dump_known_regions();
-#endif
-
-  if (expr == nullptr && isConcrete(addr, length))
-    return;
-
-  ReadWriteShadow shadow(addr, length);
-  if (!expr) {
-    std::fill(shadow.begin(), shadow.end(), nullptr);
-  } else {
-    size_t i = 0;
-    for (SymExpr &byteShadow : shadow) {
-      byteShadow = little_endian
-                       ? H(g_expr_builder->createExtract(*expr, 8 * i, 8))
-                       : H(g_expr_builder->createExtract(
-                             *expr, (length - i - 1) * 8, 8));
-      i++;
-    }
-  }
+SymExpr _sym_extract_helper(SymExpr expr, size_t first_bit, size_t last_bit) {
+  return H(
+      g_expr_builder->createExtract(*expr, last_bit, first_bit - last_bit + 1));
 }
 
-// TODO unify
-SymExpr _sym_build_extract(SymExpr expr, uint64_t offset, uint64_t length,
-                           bool little_endian) {
-  unsigned totalBits = (*expr)->bits();
-  assert((totalBits % 8 == 0) && "Aggregate type contains partial bytes");
-
-  SymExpr result;
-  if (little_endian) {
-    result =
-        H(g_expr_builder->createExtract(*expr, totalBits - offset * 8 - 8, 8));
-    for (size_t i = 1; i < length; i++) {
-      result = H(g_expr_builder->createConcat(
-          *result, g_expr_builder->createExtract(
-                       *expr, totalBits - (offset + i + 1) * 8, 8)));
-    }
-  } else {
-    result = H(g_expr_builder->createExtract(
-        *expr, totalBits - (offset + length) * 8, length * 8));
-  }
-
-  return result;
+size_t _sym_bits_helper(SymExpr expr) {
+  return (*expr)->bits();
 }
 
 //

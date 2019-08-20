@@ -4,7 +4,6 @@
 #include <cassert>
 #include <cstring>
 #include <iostream>
-#include <numeric>
 
 #include "Shadow.h"
 
@@ -439,80 +438,14 @@ void _sym_push_path_constraint(Z3_ast constraint, int taken,
          "Asserting infeasible path constraint");
 }
 
-Z3_ast _sym_read_memory(uint8_t *addr, size_t length, bool little_endian) {
-  assert(length && "Invalid query for zero-length memory region");
-
-#ifdef DEBUG_RUNTIME
-  std::cout << "Reading " << length << " bytes from address " << P(addr)
-            << std::endl;
-  dump_known_regions();
-#endif
-
-  // If the entire memory region is concrete, don't create a symbolic expression
-  // at all.
-  if (isConcrete(addr, length))
-    return nullptr;
-
-  ReadOnlyShadow shadow(addr, length);
-  return std::accumulate(
-      shadow.begin_non_null(), shadow.end_non_null(),
-      static_cast<Z3_ast>(nullptr), [&](Z3_ast result, Z3_ast byteExpr) {
-        if (!result)
-          return byteExpr;
-
-        return little_endian ? Z3_mk_concat(g_context, byteExpr, result)
-                             : Z3_mk_concat(g_context, result, byteExpr);
-      });
+SymExpr _sym_concat_helper(SymExpr a, SymExpr b) {
+  return Z3_mk_concat(g_context, a, b);
 }
 
-void _sym_write_memory(uint8_t *addr, size_t length, Z3_ast expr,
-                       bool little_endian) {
-  assert(length && "Invalid query for zero-length memory region");
-
-#ifdef DEBUG_RUNTIME
-  std::cout << "Writing " << length << " bytes to address " << P(addr)
-            << std::endl;
-  dump_known_regions();
-#endif
-
-  if (expr == nullptr && isConcrete(addr, length))
-    return;
-
-  ReadWriteShadow shadow(addr, length);
-  if (!expr) {
-    std::fill(shadow.begin(), shadow.end(), nullptr);
-  } else {
-    size_t i = 0;
-    for (Z3_ast &byteShadow : shadow) {
-      byteShadow = little_endian
-                       ? Z3_mk_extract(g_context, 8 * (i + 1) - 1, 8 * i, expr)
-                       : Z3_mk_extract(g_context, (length - i) * 8 - 1,
-                                       (length - i - 1) * 8, expr);
-      i++;
-    }
-  }
+SymExpr _sym_extract_helper(SymExpr expr, size_t first_bit, size_t last_bit) {
+  return Z3_mk_extract(g_context, first_bit, last_bit, expr);
 }
 
-Z3_ast _sym_build_extract(Z3_ast expr, uint64_t offset, uint64_t length,
-                          bool little_endian) {
-  unsigned totalBits =
-      Z3_get_bv_sort_size(g_context, Z3_get_sort(g_context, expr));
-  assert((totalBits % 8 == 0) && "Aggregate type contains partial bytes");
-
-  Z3_ast result;
-  if (little_endian) {
-    result = Z3_mk_extract(g_context, totalBits - offset * 8 - 1,
-                           totalBits - offset * 8 - 8, expr);
-    for (size_t i = 1; i < length; i++) {
-      result = Z3_mk_concat(
-          g_context, result,
-          Z3_mk_extract(g_context, totalBits - (offset + i) * 8 - 1,
-                        totalBits - (offset + i + 1) * 8, expr));
-    }
-  } else {
-    result = Z3_mk_extract(g_context, totalBits - offset * 8 - 1,
-                           totalBits - (offset + length) * 8, expr);
-  }
-
-  return result;
+size_t _sym_bits_helper(SymExpr expr) {
+  return Z3_get_bv_sort_size(g_context, Z3_get_sort(g_context, expr));
 }

@@ -102,6 +102,13 @@ SymExpr _sym_build_float_to_signed_integer(SymExpr expr, uint8_t bits);
 SymExpr _sym_build_float_to_unsigned_integer(SymExpr expr, uint8_t bits);
 
 /*
+ * Bit-array helpers
+ */
+SymExpr _sym_concat_helper(SymExpr a, SymExpr b);
+SymExpr _sym_extract_helper(SymExpr expr, size_t first_bit, size_t last_bit);
+size_t _sym_bits_helper(SymExpr expr);
+
+/*
  * Function-call helpers
  */
 void _sym_set_parameter_expression(uint8_t index, SymExpr expr);
