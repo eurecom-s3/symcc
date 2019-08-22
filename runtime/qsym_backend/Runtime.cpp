@@ -5,6 +5,7 @@
 #include "Runtime.h"
 
 // C++
+#include <atomic>
 #include <fstream>
 #include <iterator>
 
@@ -39,7 +40,7 @@ z3::context g_z3_context;
 namespace {
 
 /// Indicate whether the runtime has been initialized.
-bool g_initialized = false;
+std::atomic_flag g_initialized = ATOMIC_FLAG_INIT;
 
 /// The file that contains out input.
 std::string inputFileName;
@@ -51,10 +52,8 @@ void deleteInputFile() { std::remove(inputFileName.c_str()); }
 using namespace qsym;
 
 void _sym_initialize(void) {
-  if (g_initialized)
+  if (g_initialized.test_and_set())
     return;
-
-  g_initialized = true;
 
   // TODO proper output directory
 

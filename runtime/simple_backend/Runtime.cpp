@@ -1,6 +1,7 @@
 #include <Runtime.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <cstring>
 #include <iostream>
@@ -24,7 +25,7 @@
 namespace {
 
 /// Indicate whether the runtime has been initialized.
-bool g_initialized = false;
+std::atomic_flag g_initialized = ATOMIC_FLAG_INIT;
 
 /// The global Z3 context.
 Z3_context g_context;
@@ -61,10 +62,8 @@ Z3_ast build_variable(const char *name, uint8_t bits) {
 } // namespace
 
 void _sym_initialize(void) {
-  if (g_initialized)
+  if (g_initialized.test_and_set())
     return;
-
-  g_initialized = true;
 
 #ifdef DEBUG_RUNTIME
   std::cout << "Initializing symbolic runtime" << std::endl;
