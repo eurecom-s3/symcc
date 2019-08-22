@@ -34,6 +34,7 @@ add_library(SymRuntime SHARED
   ${QSYM_SOURCE_DIR}/third_party/llvm/range.cpp
   ${QSYM_SOURCE_DIR}/third_party/xxhash/xxhash.cpp
   Runtime.cpp
+  ../Config.cpp
   ../RuntimeCommon.cpp
   ../Shadow.cpp
   ../LibcWrappers.cpp)

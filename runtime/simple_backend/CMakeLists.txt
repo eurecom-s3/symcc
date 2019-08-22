@@ -1,5 +1,6 @@
 
 add_library(SymRuntime SHARED
+  ../Config.cpp
   ../RuntimeCommon.cpp
   ../LibcWrappers.cpp
   ../Shadow.cpp

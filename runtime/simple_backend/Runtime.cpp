@@ -6,6 +6,7 @@
 #include <cstring>
 #include <iostream>
 
+#include "Config.h"
 #include "Shadow.h"
 
 #ifdef DEBUG_RUNTIME
@@ -68,6 +69,8 @@ void _sym_initialize(void) {
 #ifdef DEBUG_RUNTIME
   std::cout << "Initializing symbolic runtime" << std::endl;
 #endif
+
+  loadConfig();
 
   Z3_config cfg;
 

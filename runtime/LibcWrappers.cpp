@@ -7,6 +7,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+#include "Config.h"
 #include "Shadow.h"
 #include <Runtime.h>
 
@@ -70,7 +71,7 @@ ssize_t SYM(read)(int fildes, void *buf, size_t nbyte) {
   if (result < 0)
     return result;
 
-  if (fildes == 0) {
+  if (fildes == 0 && !g_config.fullyConcrete) {
     // Reading from standard input. We treat everything as unconstrained
     // symbolic data.
     ReadWriteShadow shadow(buf, nbyte);

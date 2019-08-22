@@ -22,6 +22,7 @@
 #include <solver.h>
 
 // Runtime
+#include <Config.h>
 #include <Shadow.h>
 
 // A macro to create SymExpr from ExprRef. Basically, we move the shared pointer
@@ -54,6 +55,8 @@ using namespace qsym;
 void _sym_initialize(void) {
   if (g_initialized.test_and_set())
     return;
+
+  loadConfig();
 
   // TODO proper output directory
 
@@ -248,9 +251,7 @@ SymExpr _sym_extract_helper(SymExpr expr, size_t first_bit, size_t last_bit) {
       g_expr_builder->createExtract(*expr, last_bit, first_bit - last_bit + 1));
 }
 
-size_t _sym_bits_helper(SymExpr expr) {
-  return (*expr)->bits();
-}
+size_t _sym_bits_helper(SymExpr expr) { return (*expr)->bits(); }
 
 //
 // Floating-point operations (unsupported in Qsym)
