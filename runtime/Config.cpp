@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <sstream>
-#include <string>
 
 namespace {
 
@@ -28,4 +27,7 @@ void loadConfig() {
   auto fullyConcrete = getenv("SYMCC_NO_SYMBOLIC_INPUT");
   g_config.fullyConcrete =
       (fullyConcrete == nullptr) ? false : checkFlagString(fullyConcrete);
+
+  auto outputDir = getenv("SYMCC_OUTPUT_DIR");
+  g_config.outputDir = (outputDir == nullptr) ? "/tmp/output" : outputDir;
 }

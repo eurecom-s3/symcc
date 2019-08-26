@@ -1,8 +1,14 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#include <string>
+
 struct Config {
+  /// Should we allow symbolic data in the program?
   bool fullyConcrete;
+
+  /// The directory for storing new outputs.
+  std::string outputDir;
 };
 
 /// The global configuration object.

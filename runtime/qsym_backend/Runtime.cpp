@@ -90,7 +90,7 @@ void _sym_initialize(void) {
     exit(-1);
   }
 
-  g_solver = new Solver(inputFileName, "/tmp/output"s, ""s);
+  g_solver = new Solver(inputFileName, g_config.outputDir, ""s);
   g_expr_builder = SymbolicExprBuilder::create();
 }
 
