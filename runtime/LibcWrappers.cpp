@@ -11,7 +11,7 @@
 #include "Shadow.h"
 #include <Runtime.h>
 
-#define SYM(x) __symbolized_##x
+#define SYM(x) x##_symbolized
 
 // #define DEBUG_RUNTIME
 #ifdef DEBUG_RUNTIME
@@ -44,6 +44,16 @@ void *SYM(malloc)(size_t size) {
   auto result = malloc(size);
 
   tryAlternative(size, _sym_get_parameter_expression(0), SYM(malloc));
+
+  _sym_set_return_expression(nullptr);
+  return result;
+}
+
+void *SYM(calloc)(size_t nmemb, size_t size) {
+  auto result = calloc(nmemb, size);
+
+  tryAlternative(nmemb, _sym_get_parameter_expression(0), SYM(calloc));
+  tryAlternative(size, _sym_get_parameter_expression(1), SYM(calloc));
 
   _sym_set_return_expression(nullptr);
   return result;

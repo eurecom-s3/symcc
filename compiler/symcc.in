@@ -1,12 +1,12 @@
 #!/bin/sh
 
-cc=clang
 runtime_dir="@SYM_RUNTIME_DIR@"
 pass="@CMAKE_CURRENT_BINARY_DIR@/libSymbolize.so"
 
-exec $cc                                        \
+exec clang                                      \
      -Xclang -load -Xclang "$pass"              \
      "$@"                                       \
      -L"$runtime_dir"                           \
      -lSymRuntime                               \
-     -Wl,-rpath,"$runtime_dir"
+     -Wl,-rpath,"$runtime_dir"                  \
+     -Qunused-arguments

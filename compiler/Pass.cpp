@@ -31,7 +31,7 @@ bool SymbolizePass::doInitialization(Module &M) {
         name.startswith("llvm.") || name == "sym_make_symbolic")
       continue;
 
-    function.setName("__symbolized_" + name);
+    function.setName(name + "_symbolized");
   }
 
   // Insert a constructor that initializes the runtime and any globals.

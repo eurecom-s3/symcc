@@ -127,10 +127,14 @@ Runtime::Runtime(Module &M) {
 bool isSymbolizedFunction(const Function &f) {
   static const StringSet<> kConcretizedFunctions = {
       // Some libc functions whose results we can concretize
-      "printf", "err", "exit", "munmap", "free", "perror", "getenv", "select",
-      "write", "rand", "setjmp", "longjmp",
-      // Returns the address of errno, so always concrete
-      "__errno_location",
+      "printf", "vsnprintf", "snprintf", "err", "exit", "munmap", "free",
+      "perror", "getenv", "select", "write", "rand", "setjmp", "longjmp",
+      "fopen", "fopen64", "fread", "fwrite", "ferror", "fclose", "fprintf",
+      "open", "lseek64", "close", "unlink", "clock_gettime", "strerror",
+      "fileno",
+      // Return the addresses of places in the libc implementation, so always
+      // concrete
+      "__errno_location", "__ctype_b_loc", "__ctype_toupper_loc",
       // CGC run-time functions that Z3 can't really represent in the logic of
       // bit vectors
       "cgc_rint", "cgc_pow", "cgc_log10", "cgc_sin", "cgc_cos", "cgc_sqrt",
@@ -141,7 +145,8 @@ bool isSymbolizedFunction(const Function &f) {
       "__isoc99_sscanf",
       // TODO
       "strlen", "cgc_remainder", "cgc_fabs", "cgc_setjmp", "cgc_longjmp",
-      "__stack_chk_fail"};
+      "__stack_chk_fail", "strtod", "pow", "strcmp", "strcpy", "memchr",
+      "strchr", "strrchr"};
 
   if (kConcretizedFunctions.count(f.getName()))
     return false;
