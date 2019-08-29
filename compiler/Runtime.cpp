@@ -127,13 +127,17 @@ Runtime::Runtime(Module &M) {
 bool isSymbolizedFunction(const Function &f) {
   static const StringSet<> kConcretizedFunctions = {
       // Some libc functions whose results we can concretize
-      "printf", "vsnprintf", "snprintf", "err", "exit", "munmap", "free",
-      "perror", "getenv", "select", "write", "rand", "setjmp", "longjmp",
+      "printf", "vprintf", "vsnprintf", "snprintf", "sprintf", "err", "exit",
+      "munmap", "free", "perror", "getenv", "select", "write", "rand", "setjmp",
+      "_setjmp", "longjmp", "clock_gettime", "gmtime", "strerror",
+      "feenableexcept", "__assert_fail", "__stack_chk_fail", "abort", "tmpfile",
+      "signal",
+      // File handling
       "fopen", "fopen64", "fread", "fwrite", "ferror", "fclose", "fprintf",
-      "open", "lseek64", "close", "unlink", "clock_gettime", "strerror",
-      "fileno",
-      // Return the addresses of places in the libc implementation, so always
-      // concrete
+      "vfprintf", "fgetpos", "fsetpos", "fseek", "fflush", "fgets", "fputc",
+      "fputs", "feof", "open", "lseek64", "close", "unlink", "fileno", "remove",
+      "putc", "getc", "rewind", "ftell", "access", "rename", "__xstat",
+      // Addresses of places in the libc implementation, so always concrete
       "__errno_location", "__ctype_b_loc", "__ctype_toupper_loc",
       // CGC run-time functions that Z3 can't really represent in the logic of
       // bit vectors
@@ -145,8 +149,8 @@ bool isSymbolizedFunction(const Function &f) {
       "__isoc99_sscanf",
       // TODO
       "strlen", "cgc_remainder", "cgc_fabs", "cgc_setjmp", "cgc_longjmp",
-      "__stack_chk_fail", "strtod", "pow", "strcmp", "strcpy", "memchr",
-      "strchr", "strrchr"};
+      "strtod", "pow", "strcmp", "strcpy", "memchr", "strchr", "strrchr",
+      "strncmp", "strtol", "frexp", "modf", "abs", "strtoul", "strcat"};
 
   if (kConcretizedFunctions.count(f.getName()))
     return false;
