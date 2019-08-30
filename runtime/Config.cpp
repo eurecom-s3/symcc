@@ -25,9 +25,10 @@ Config g_config;
 
 void loadConfig() {
   auto fullyConcrete = getenv("SYMCC_NO_SYMBOLIC_INPUT");
-  g_config.fullyConcrete =
-      (fullyConcrete == nullptr) ? false : checkFlagString(fullyConcrete);
+  if (fullyConcrete != nullptr)
+    g_config.fullyConcrete = checkFlagString(fullyConcrete);
 
   auto outputDir = getenv("SYMCC_OUTPUT_DIR");
-  g_config.outputDir = (outputDir == nullptr) ? "/tmp/output" : outputDir;
+  if (outputDir != nullptr)
+    g_config.outputDir = outputDir;
 }

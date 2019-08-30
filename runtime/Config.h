@@ -5,10 +5,10 @@
 
 struct Config {
   /// Should we allow symbolic data in the program?
-  bool fullyConcrete;
+  bool fullyConcrete = false;
 
   /// The directory for storing new outputs.
-  std::string outputDir;
+  std::string outputDir = "/tmp/output";
 };
 
 /// The global configuration object.
