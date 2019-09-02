@@ -404,10 +404,10 @@ void Symbolizer::visitCallInst(CallInst &I) {
                       getSymbolicExpressionOrNull(arg)});
   }
 
-  if (!callee || isSymbolizedFunction(*callee)) {
-    IRB.SetInsertPoint(I.getNextNode());
-    symbolicExpressions[&I] = IRB.CreateCall(runtime.getReturnExpression);
-  }
+  IRB.CreateCall(runtime.setReturnExpression,
+                 ConstantPointerNull::get(IRB.getInt8PtrTy()));
+  IRB.SetInsertPoint(I.getNextNode());
+  symbolicExpressions[&I] = IRB.CreateCall(runtime.getReturnExpression);
 }
 
 void Symbolizer::visitAllocaInst(AllocaInst &) {

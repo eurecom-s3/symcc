@@ -1,8 +1,8 @@
 #ifndef RUNTIME_H
 #define RUNTIME_H
 
-#include <llvm/IR/Module.h>
 #include <llvm/IR/InstrTypes.h>
+#include <llvm/IR/Module.h>
 
 /// Runtime functions
 struct Runtime {
@@ -41,13 +41,15 @@ struct Runtime {
 
   /// Mapping from icmp predicates to the functions that build the corresponding
   /// symbolic expressions.
-  std::array<llvm::Value *, llvm::CmpInst::BAD_ICMP_PREDICATE> comparisonHandlers{};
+  std::array<llvm::Value *, llvm::CmpInst::BAD_ICMP_PREDICATE>
+      comparisonHandlers{};
 
   /// Mapping from binary operators to the functions that build the
   /// corresponding symbolic expressions.
-  std::array<llvm::Value *, llvm::Instruction::BinaryOpsEnd> binaryOperatorHandlers{};
+  std::array<llvm::Value *, llvm::Instruction::BinaryOpsEnd>
+      binaryOperatorHandlers{};
 };
 
-bool isSymbolizedFunction(const llvm::Function &f);
+bool isInterceptedFunction(const llvm::Function &f);
 
 #endif
