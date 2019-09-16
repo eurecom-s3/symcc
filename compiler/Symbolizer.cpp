@@ -746,15 +746,21 @@ CallInst *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
   }
 
   if (valueType->isIntegerTy()) {
-    // Special case: LLVM uses the type i1 to represent Boolean values, but
-    // for Z3 we have to create expressions of a separate sort.
-    if (valueType->getPrimitiveSizeInBits() == 1) {
+    switch (valueType->getPrimitiveSizeInBits()) {
+    case 1:
+      // Special case: LLVM uses the type i1 to represent Boolean values, but
+      // for Z3 we have to create expressions of a separate sort.
       return IRB.CreateCall(runtime.buildBool, {V});
+    case 128:
+      // 128-bit integers are a bit tricky because the symbolic backends don't
+      // support them per se. We have a special function in the run-time library
+      // that handles such large integers.
+      return IRB.CreateCall(runtime.buildInteger128, V);
+    default:
+      return IRB.CreateCall(runtime.buildInteger,
+                            {IRB.CreateZExtOrBitCast(V, IRB.getInt64Ty()),
+                             IRB.getInt8(valueType->getPrimitiveSizeInBits())});
     }
-
-    return IRB.CreateCall(runtime.buildInteger,
-                          {IRB.CreateZExtOrBitCast(V, IRB.getInt64Ty()),
-                           IRB.getInt8(valueType->getPrimitiveSizeInBits())});
   }
 
   if (valueType->isFloatingPointTy()) {

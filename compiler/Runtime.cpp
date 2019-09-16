@@ -14,6 +14,8 @@ Runtime::Runtime(Module &M) {
 
   buildInteger = M.getOrInsertFunction("_sym_build_integer", ptrT,
                                        IRB.getInt64Ty(), int8T);
+  buildInteger128 =
+      M.getOrInsertFunction("_sym_build_integer128", ptrT, IRB.getInt128Ty());
   buildFloat = M.getOrInsertFunction("_sym_build_float", ptrT,
                                      IRB.getDoubleTy(), IRB.getInt1Ty());
   buildNullPointer = M.getOrInsertFunction("_sym_build_null_pointer", ptrT);

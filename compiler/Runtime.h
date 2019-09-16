@@ -9,6 +9,7 @@ struct Runtime {
   Runtime(llvm::Module &M);
 
   llvm::Value *buildInteger{};
+  llvm::Value *buildInteger128{};
   llvm::Value *buildFloat{};
   llvm::Value *buildNullPointer{};
   llvm::Value *buildTrue{};

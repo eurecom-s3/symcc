@@ -112,6 +112,16 @@ Z3_ast _sym_build_integer(uint64_t value, uint8_t bits) {
   return Z3_mk_int(g_context, value, Z3_mk_bv_sort(g_context, bits));
 }
 
+Z3_ast _sym_build_integer128(unsigned __int128 value) {
+  bool bits[128];
+
+  for (int i = 0; i < 128; i++) {
+    bits[i] = (value & ((unsigned __int128)1 << i));
+  }
+
+  return Z3_mk_bv_numeral(g_context, 128, bits);
+}
+
 Z3_ast _sym_build_float(double value, int is_double) {
   return Z3_mk_fpa_numeral_double(g_context, value,
                                   is_double ? Z3_mk_fpa_sort_double(g_context)

@@ -26,6 +26,7 @@ uint32_t sym_make_symbolic(const char *name, uint32_t value, uint8_t bits);
  * Construction of simple values
  */
 SymExpr _sym_build_integer(uint64_t value, uint8_t bits);
+SymExpr _sym_build_integer128(unsigned __int128 value);
 SymExpr _sym_build_float(double value, int is_double);
 SymExpr _sym_build_null_pointer();
 SymExpr _sym_build_true();

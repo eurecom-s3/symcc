@@ -1,18 +1,19 @@
 // RUN: %symcc -O2 %s -o %t
 // RUN: echo -ne "\x05\x00\x00\x00" | %t 2>&1 | %filecheck %s
 //
-// Make sure that our instrumentation works with back-jumps.
+// Make sure that our instrumentation works with back-jumps. Also, test support
+// for 128-bit integers.
 #include <stdio.h>
 #include <stdint.h>
 #include <unistd.h>
 
 int fac(int x) {
-    int result = 1;
+    __int128 result = 1;
 
     // SIMPLE-COUNT-5: Found diverging input
     // SIMPLE-NOT: Found diverging input
     // QSYM-COUNT-5: New testcase
-    for (int i = 2; i <= x; i++)
+    for (__int128 i = 2; i <= x; i++)
         result *= i;
 
     return result;
