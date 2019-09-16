@@ -264,9 +264,6 @@ void Symbolizer::handleInlineAssembly(CallInst &I) {
 
   errs() << "Warning: losing track of symbolic expressions at inline assembly "
          << I << '\n';
-
-  IRBuilder<> IRB(I.getNextNode());
-  symbolicExpressions[&I] = createValueExpression(&I, IRB);
 }
 
 void Symbolizer::visitBinaryOperator(BinaryOperator &I) {
