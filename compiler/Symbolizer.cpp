@@ -1,5 +1,6 @@
 #include "Symbolizer.h"
 
+#include <llvm/ADT/SmallPtrSet.h>
 #include <llvm/IR/GetElementPtrTypeIterator.h>
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
 
@@ -50,6 +51,8 @@ void Symbolizer::finalizeSwitchInstructions() {
 }
 
 void Symbolizer::finalizePHINodes() {
+  SmallPtrSet<PHINode *, 32> nodesToErase;
+
   for (auto phi : phiNodes) {
     auto symbolicPHI = cast<PHINode>(symbolicExpressions[phi]);
 
@@ -58,16 +61,7 @@ void Symbolizer::finalizePHINodes() {
     if (std::all_of(phi->op_begin(), phi->op_end(), [this](Value *input) {
           return (getSymbolicExpression(input) == nullptr);
         })) {
-      symbolicPHI->replaceAllUsesWith(
-          ConstantPointerNull::get(cast<PointerType>(symbolicPHI->getType())));
-      symbolicPHI->eraseFromParent();
-      // Replacing all uses will fix uses of the symbolic PHI node in existing
-      // code, but the node may still be referenced via symbolicExpressions in
-      // the generation of new code (e.g., if the current PHI is the input to
-      // another PHI that we process later). Therefore, we need to delete it
-      // from symbolicExpressions, indicating that the current PHI does not
-      // have a symbolic expression.
-      symbolicExpressions.erase(phi);
+      nodesToErase.insert(symbolicPHI);
       continue;
     }
 
@@ -78,6 +72,18 @@ void Symbolizer::finalizePHINodes() {
           phi->getIncomingBlock(incoming));
     }
   }
+
+  for (auto symbolicPHI : nodesToErase) {
+    symbolicPHI->replaceAllUsesWith(
+        ConstantPointerNull::get(cast<PointerType>(symbolicPHI->getType())));
+    symbolicPHI->eraseFromParent();
+  }
+
+  // Replacing all uses has fixed uses of the symbolic PHI nodes in existing
+  // code, but the nodes may still be referenced via symbolicExpressions. We
+  // therefore invalidate symbolicExpressions, meaning that it cannot be used
+  // after this point.
+  symbolicExpressions.clear();
 }
 
 void Symbolizer::shortCircuitExpressionUses() {

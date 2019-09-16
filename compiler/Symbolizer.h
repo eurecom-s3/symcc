@@ -33,6 +33,8 @@ public:
   /// instructions have been processed in order to fix up PHI nodes. See the
   /// documentation of member phiNodes for why we process PHI nodes in two
   /// steps.
+  ///
+  /// Important! Calling this function invalidates symbolicExpressions.
   void finalizePHINodes();
 
   /// Rewrite symbolic computation to only occur if some operand is symbolic.
@@ -267,6 +269,10 @@ private:
   /// For pointer values, the stored value is an expression describing the value
   /// of the pointer itself (i.e., the address, not the referenced value). For
   /// structure values, the expression is a single large bit vector.
+  ///
+  /// TODO This member adds a lot of complexity: various methods rely on it, and
+  /// finalizePHINodes invalidates it. We may want to pass the map around
+  /// explicitly.
   llvm::ValueMap<llvm::Value *, llvm::Value *> symbolicExpressions;
 
   /// A record of switch instructions in this function.
