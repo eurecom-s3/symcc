@@ -191,6 +191,8 @@ void Symbolizer::handleIntrinsicCall(CallInst &I) {
   case Intrinsic::lifetime_end:
   case Intrinsic::dbg_declare:
   case Intrinsic::dbg_value:
+  case Intrinsic::is_constant:
+  case Intrinsic::trap:
     // These are safe to ignore.
     break;
   case Intrinsic::memcpy: {
