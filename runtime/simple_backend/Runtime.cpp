@@ -300,6 +300,10 @@ Z3_ast _sym_build_float_ordered_not_equal(Z3_ast a, Z3_ast b) {
   return Z3_mk_not(g_context, _sym_build_float_ordered_equal(a, b));
 }
 
+Z3_ast _sym_build_float_ordered(Z3_ast a, Z3_ast b) {
+  return Z3_mk_not(g_context, _sym_build_float_unordered(a, b));
+}
+
 Z3_ast _sym_build_float_unordered(Z3_ast a, Z3_ast b) {
   Z3_ast checks[2];
   checks[0] = Z3_mk_fpa_is_nan(g_context, a);

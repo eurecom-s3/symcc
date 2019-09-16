@@ -103,6 +103,7 @@ Runtime::Runtime(Module &M) {
   LOAD_COMPARISON_HANDLER(FCMP_OLE, float_ordered_less_equal)
   LOAD_COMPARISON_HANDLER(FCMP_OEQ, float_ordered_equal)
   LOAD_COMPARISON_HANDLER(FCMP_ONE, float_ordered_not_equal)
+  LOAD_COMPARISON_HANDLER(FCMP_ORD, float_ordered)
   LOAD_COMPARISON_HANDLER(FCMP_UNO, float_unordered)
   LOAD_COMPARISON_HANDLER(FCMP_UGT, float_unordered_greater_than)
   LOAD_COMPARISON_HANDLER(FCMP_UGE, float_unordered_greater_equal)

@@ -284,6 +284,7 @@ UNSUPPORTED(SymExpr _sym_build_float_ordered_less_than(SymExpr a, SymExpr b))
 UNSUPPORTED(SymExpr _sym_build_float_ordered_less_equal(SymExpr a, SymExpr b))
 UNSUPPORTED(SymExpr _sym_build_float_ordered_equal(SymExpr a, SymExpr b))
 UNSUPPORTED(SymExpr _sym_build_float_ordered_not_equal(SymExpr a, SymExpr b))
+UNSUPPORTED(SymExpr _sym_build_float_ordered(SymExpr a, SymExpr b))
 UNSUPPORTED(SymExpr _sym_build_float_unordered(SymExpr a, SymExpr b))
 UNSUPPORTED(SymExpr _sym_build_float_unordered_greater_than(SymExpr a,
                                                             SymExpr b))
