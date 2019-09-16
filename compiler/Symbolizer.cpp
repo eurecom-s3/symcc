@@ -213,8 +213,6 @@ void Symbolizer::handleIntrinsicCall(CallInst &I) {
   case Intrinsic::stacksave: {
     // The intrinsic returns an opaque pointer that should only be passed to
     // the stackrestore intrinsic later. We treat the pointer as a constant.
-    IRBuilder<> IRB(I.getNextNode());
-    symbolicExpressions[&I] = createValueExpression(&I, IRB);
     break;
   }
   case Intrinsic::stackrestore:
@@ -243,10 +241,6 @@ void Symbolizer::handleIntrinsicCall(CallInst &I) {
     errs() << "Warning: losing track of symbolic expressions at bit-count "
               "operation "
            << I << "\n";
-    IRBuilder<> IRB(I.getNextNode());
-    symbolicExpressions[&I] = IRB.CreateCall(
-        runtime.buildInteger, {IRB.CreateZExt(&I, IRB.getInt64Ty()),
-                               IRB.getInt8(I.getType()->getIntegerBitWidth())});
     break;
   }
   case Intrinsic::returnaddress: {
@@ -254,10 +248,6 @@ void Symbolizer::handleIntrinsicCall(CallInst &I) {
     // on the stack. We just concretize.
 
     errs() << "Warning: using concrete value for return address\n";
-    IRBuilder<> IRB(I.getNextNode());
-    symbolicExpressions[&I] = IRB.CreateCall(
-        runtime.buildInteger,
-        {IRB.CreatePtrToInt(&I, intPtrType), IRB.getInt8(ptrBits)});
     break;
   }
   default:
