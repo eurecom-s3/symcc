@@ -117,6 +117,8 @@ Runtime::Runtime(Module &M) {
   memcpy = M.getOrInsertFunction("_sym_memcpy", voidT, ptrT, ptrT, intPtrType);
   memset =
       M.getOrInsertFunction("_sym_memset", voidT, ptrT, ptrT, IRB.getInt64Ty());
+  memmove =
+      M.getOrInsertFunction("_sym_memmove", voidT, ptrT, ptrT, intPtrType);
   readMemory = M.getOrInsertFunction("_sym_read_memory", ptrT, intPtrType,
                                      intPtrType, int8T);
   writeMemory = M.getOrInsertFunction("_sym_write_memory", voidT, intPtrType,
@@ -129,8 +131,8 @@ Runtime::Runtime(Module &M) {
 /// Decide whether a function is called symbolically.
 bool isInterceptedFunction(const Function &f) {
   static const StringSet<> kInterceptedFunctions = {
-      "malloc", "calloc",  "mmap",   "read",  "memcpy",
-      "memset", "strncpy", "strchr", "memcmp"};
+      "malloc", "calloc",  "mmap",   "read",   "memcpy",
+      "memset", "strncpy", "strchr", "memcmp", "memmove"};
 
   return (kInterceptedFunctions.count(f.getName()) > 0);
 }

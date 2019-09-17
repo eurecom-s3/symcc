@@ -56,6 +56,15 @@ public:
     return *this;
   }
 
+  ReadShadowIterator &operator--() {
+    auto previousAddress = address_--;
+    if (shadow_)
+      shadow_--;
+    if (pageStart(address_) != pageStart(previousAddress))
+      shadow_ = getShadow(address_);
+    return *this;
+  }
+
   SymExpr operator*() { return shadow_ ? *shadow_ : nullptr; }
 
   bool operator==(const ReadShadowIterator &other) {
@@ -104,6 +113,14 @@ public:
   WriteShadowIterator &operator++() {
     auto previousAddress = address_++;
     shadow_++;
+    if (pageStart(address_) != pageStart(previousAddress))
+      shadow_ = getOrCreateShadow(address_);
+    return *this;
+  }
+
+  WriteShadowIterator &operator--() {
+    auto previousAddress = address_--;
+    shadow_--;
     if (pageStart(address_) != pageStart(previousAddress))
       shadow_ = getOrCreateShadow(address_);
     return *this;

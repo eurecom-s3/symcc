@@ -50,6 +50,18 @@ void _sym_memset(uint8_t *memory, SymExpr value, size_t length) {
   std::fill(shadow.begin(), shadow.end(), value);
 }
 
+void _sym_memmove(uint8_t *dest, const uint8_t *src, size_t length) {
+  if (isConcrete(src, length) && isConcrete(dest, length))
+    return;
+
+  ReadOnlyShadow srcShadow(src, length);
+  ReadWriteShadow destShadow(dest, length);
+  if (dest > src)
+    std::copy_backward(srcShadow.begin(), srcShadow.end(), destShadow.end());
+  else
+    std::copy(srcShadow.begin(), srcShadow.end(), destShadow.begin());
+}
+
 SymExpr _sym_read_memory(uint8_t *addr, size_t length, bool little_endian) {
   assert(length && "Invalid query for zero-length memory region");
 

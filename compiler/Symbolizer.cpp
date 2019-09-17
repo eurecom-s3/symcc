@@ -220,6 +220,17 @@ void Symbolizer::handleIntrinsicCall(CallInst &I) {
                     IRB.CreateZExt(I.getOperand(2), IRB.getInt64Ty())});
     break;
   }
+  case Intrinsic::memmove: {
+    IRBuilder<> IRB(&I);
+
+    tryAlternative(IRB, I.getOperand(0));
+    tryAlternative(IRB, I.getOperand(1));
+    tryAlternative(IRB, I.getOperand(2));
+
+    IRB.CreateCall(runtime.memmove,
+                   {I.getOperand(0), I.getOperand(1), I.getOperand(2)});
+    break;
+  }
   case Intrinsic::stacksave: {
     // The intrinsic returns an opaque pointer that should only be passed to
     // the stackrestore intrinsic later. We treat the pointer as a constant.

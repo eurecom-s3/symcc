@@ -119,6 +119,19 @@ void *SYM(memset)(void *s, int c, size_t n) {
   return result;
 }
 
+void *SYM(memmove)(void *dest, const void *src, size_t n) {
+  tryAlternative(dest, _sym_get_parameter_expression(0), SYM(memmove));
+  tryAlternative(src, _sym_get_parameter_expression(1), SYM(memmove));
+  tryAlternative(n, _sym_get_parameter_expression(2), SYM(memmove));
+
+  auto result = memmove(dest, src, n);
+  _sym_memmove(static_cast<uint8_t *>(dest), static_cast<const uint8_t *>(src),
+               n);
+
+  _sym_set_return_expression(_sym_get_parameter_expression(0));
+  return result;
+}
+
 char *SYM(strncpy)(char *dest, const char *src, size_t n) {
   tryAlternative(dest, _sym_get_parameter_expression(0), SYM(strncpy));
   tryAlternative(src, _sym_get_parameter_expression(1), SYM(strncpy));

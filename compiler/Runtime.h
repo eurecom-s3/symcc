@@ -36,6 +36,7 @@ struct Runtime {
   llvm::Value *getReturnExpression{};
   llvm::Value *memcpy{};
   llvm::Value *memset{};
+  llvm::Value *memmove{};
   llvm::Value *readMemory{};
   llvm::Value *writeMemory{};
   llvm::Value *buildExtract{};
