@@ -193,6 +193,8 @@ void Symbolizer::handleIntrinsicCall(CallInst &I) {
   case Intrinsic::dbg_value:
   case Intrinsic::is_constant:
   case Intrinsic::trap:
+  case Intrinsic::invariant_start:
+  case Intrinsic::invariant_end:
     // These are safe to ignore.
     break;
   case Intrinsic::memcpy: {
