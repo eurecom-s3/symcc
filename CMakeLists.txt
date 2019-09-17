@@ -43,5 +43,6 @@ endif()
 
 get_target_property(SYM_RUNTIME_DIR SymRuntime BINARY_DIR)
 configure_file("compiler/symcc.in" "symcc")
+configure_file("compiler/sym++.in" "sym++")
 
 add_subdirectory(test)

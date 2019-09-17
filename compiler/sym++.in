@@ -1,0 +1,25 @@
+#!/bin/sh
+
+runtime_dir="@SYM_RUNTIME_DIR@"
+pass="@CMAKE_CURRENT_BINARY_DIR@/libSymbolize.so"
+
+if [[ -v SYMCC_COMPILING_LIBCXX ]]; then
+    stdlib_cflags=
+    stdlib_ldflags=
+elif [[ ! -v SYMCC_LIBCXX_PATH ]]; then
+    >&2 echo "Please set SYMCC_LIBCXX_PATH to the build directory of libc++!"
+    exit 255
+else
+    stdlib_cflags="-isystem $SYMCC_LIBCXX_PATH/include/c++/v1 -stdlib=libc++"
+    stdlib_ldflags="-L$SYMCC_LIBCXX_PATH/lib -Wl,-rpath,'$SYMCC_LIBCXX_PATH/lib'"
+fi
+
+exec clang++                                    \
+     -Xclang -load -Xclang "$pass"              \
+     $stdlib_cflags                             \
+     "$@"                                       \
+     $stdlib_ldflags                            \
+     -L"$runtime_dir"                           \
+     -lSymRuntime                               \
+     -Wl,-rpath,"$runtime_dir"                  \
+     -Qunused-arguments
