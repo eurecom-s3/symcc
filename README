@@ -71,3 +71,9 @@ $ git submodule update
 
 Then build as described above, but add the option "-DQSYM_BACKEND=ON" to the
 CMake invocation.
+
+
+                                 Documentation
+
+The directory "docs" contains documentation on several internal aspects of
+SymCC, as well as building C++ code.

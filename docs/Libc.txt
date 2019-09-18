@@ -31,6 +31,6 @@ approach.
 Function renaming provided a convenient alternative: we control all code that is
 supposed to call wrappers rather the libc functions proper, so we just rename
 the targets of their calls. For example, a call to "memset" in the program under
-test turns into a call to "__symbolized_memset", which we can easily define as a
-regular function wrapping "memset". Calls from our run-time library, on the
+test is turned into a call to "memset_symbolized", which we can easily define as
+a regular function wrapping "memset". Calls from our run-time library, on the
 other hand, use the regular function names and thus end up in libc as usual.

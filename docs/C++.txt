@@ -1,0 +1,78 @@
+
+
+                                 Compiling C++
+
+
+SymCC has full support for C++ code and provides a wrapper "sym++" around
+clang++. Since C++ programs typically depend on the C++ standard library, we
+have two options when building them with SymCC:
+
+1. Use the C++ standard library provided by the system. This is the easiest,
+   requiring no additional effort, but it has an important drawback: data that
+   passes through the standard library will be concretized, i.e., we lose track
+   of the corresponding symbolic expressions.
+2. The alternative is to build an instrumented C++ standard library. This means
+   that we can track data through the library, but it requires building the
+   library and compiling all code against it.
+
+We discuss both approaches in more detail below.
+
+
+               Building against the system's C++ standard library
+
+
+In order to use the regular (uninstrumented) C++ standard library that the
+system provides, just call sym++ as a drop-in replacement for clang++:
+
+$ export SYMCC_REGULAR_LIBCXX=yes
+$ sym++ -o myprogram mysource.cpp
+$ ./myprogram
+
+The program will execute and produce alternative outputs as usual with SymCC,
+but it will not be able to trace operations that happen in C++ standard classes,
+such as std::vector.
+
+
+                     Instrumenting the C++ standard library
+
+
+Building an instrumented C++ standard library is a one-time effort; the library
+can then be used in all subsequent C++ compilations. We use "libc++", the LLVM's
+implementation of the standard library. First, get the source code:
+
+$ git clone https://github.com/llvm/llvm-project.git
+
+Then build the library with SymCC:
+
+$ mkdir libcxx_symcc
+$ cd libcxx_symcc
+$ export SYMCC_REGULAR_LIBCXX=yes
+$ export SYMCC_NO_SYMBOLIC_INPUT=yes
+$ cmake -G Ninja /path-to-llvm-project/llvm \
+    -DLLVM_ENABLE_PROJECTS="libcxx;libcxxabi" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_C_COMPILER=/path-to-symcc/symcc \
+    -DCMAKE_CXX_COMPILER=/path-to-symcc/sym++
+$ ninja
+$ unset SYMCC_REGULAR_LIBCXX SYMCC_NO_SYMBOLIC_INPUT
+
+Note the two environment variables: SYMCC_REGULAR_LIBCXX avoids a
+chicken-and-egg problem - without it, SymCC would expect to compile against the
+instrumented C++ standard library. SYMCC_NO_SYMBOLIC_INPUT disables symbolic
+handling of input data - the build process of libc++ involves the creation of
+helper programs that are subsequently run, and we do not want them to perform
+symbolic analysis.
+
+Once the library is ready, tell SymCC where to find it and compile C++ code as
+usual:
+
+$ export SYMCC_LIBCXX_PATH=/path-to-libcxx-build-directory
+$ sym++ -o myprogram mysource.cpp
+$ ./myprogram
+
+Now the program will use the instrumented C++ standard library, which enables it
+to trace computations inside the library. Note that you need to compile all code
+against the instrumented standard library - attempts to mix it with code
+compiled against the system's C++ standard library will lead to linker errors.
+And if you're so brave as to mix it with code compiled against an uninstrumented
+libc++, a run-time crash is the best you can hope for...
