@@ -1,9 +1,19 @@
 # -*- Python -*-
+import os
 from os import path
 
 # Used by lit to locate tests and output locations
 config.test_source_root = "@CMAKE_CURRENT_SOURCE_DIR@"
 config.test_exec_root = "@CMAKE_CURRENT_BINARY_DIR@"
+
+outputDir = "@CMAKE_CURRENT_BINARY_DIR@/SymccOutput"
+try:
+    os.mkdir(outputDir)
+except OSError:
+    # Directory exists - fine
+    pass
+
+config.environment["SYMCC_OUTPUT_DIR"] = outputDir
 
 # Delegate to the generic configuration file
 lit_config.load_config(config, path.join(config.test_source_root, "lit.cfg"))
