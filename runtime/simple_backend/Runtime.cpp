@@ -41,14 +41,14 @@ Z3_solver g_solver; // TODO make thread-local
 Z3_ast g_null_pointer, g_true, g_false;
 
 #ifdef DEBUG_RUNTIME
-void dump_known_regions() {
+[[maybe_unused]] void dump_known_regions() {
   std::cout << "Known regions:" << std::endl;
-  for (const auto &[page, shadow] : shadowPages) {
+  for (const auto &[page, shadow] : g_shadow_pages) {
     std::cout << "  " << P(page) << " shadowed by " << P(shadow) << std::endl;
   }
 }
 
-void handle_z3_error(Z3_context c, Z3_error_code e) {
+void handle_z3_error(Z3_context c [[maybe_unused]], Z3_error_code e) {
   assert(c == g_context && "Z3 error in unknown context");
   std::cerr << Z3_get_error_msg(g_context, e) << std::endl;
   assert(!"Z3 error");

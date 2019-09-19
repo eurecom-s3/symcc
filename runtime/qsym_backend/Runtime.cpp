@@ -10,10 +10,7 @@
 #include <iterator>
 
 // C
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <unistd.h>
+#include <cstdio>
 
 // Qsym
 #include <afl_trace_map.h>
@@ -61,8 +58,8 @@ void _sym_initialize(void) {
     return;
 
   loadConfig();
-
-  // TODO proper output directory
+  if (g_config.fullyConcrete)
+    return;
 
   // Qsym requires the full input in a file
   std::istreambuf_iterator<char> in_begin(std::cin), in_end;
@@ -83,14 +80,9 @@ void _sym_initialize(void) {
   atexit(deleteInputFile);
 
   // Restore some semblance of standard input
-  int inputFd = open(inputFileName.c_str(), O_RDONLY);
-  if (inputFd < 0) {
-    perror("Failed to open the input file");
-    exit(-1);
-  }
-
-  if (dup2(inputFd, STDIN_FILENO) < 0) {
-    perror("Failed to redirect standard input");
+  auto newStdin = freopen(inputFileName.c_str(), "r", stdin);
+  if (newStdin == nullptr) {
+    perror("Failed to reopen stdin");
     exit(-1);
   }
 

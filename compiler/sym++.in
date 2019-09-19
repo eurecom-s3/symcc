@@ -10,8 +10,11 @@ elif [[ ! -v SYMCC_LIBCXX_PATH ]]; then
     >&2 echo "Please set SYMCC_LIBCXX_PATH to the build directory of libc++!"
     exit 255
 else
-    stdlib_cflags="-isystem $SYMCC_LIBCXX_PATH/include/c++/v1 -stdlib=libc++"
-    stdlib_ldflags="-L$SYMCC_LIBCXX_PATH/lib -Wl,-rpath,$SYMCC_LIBCXX_PATH/lib"
+    # It is important that the resulting binaries load libstdc++ before libc++;
+    # otherwise our backend calls the instrumented library in cases where
+    # exported names collide.
+    stdlib_cflags="-isystem $SYMCC_LIBCXX_PATH/include/c++/v1 -nostdlib++"
+    stdlib_ldflags="-L$SYMCC_LIBCXX_PATH/lib -Wl,-rpath,$SYMCC_LIBCXX_PATH/lib -lstdc++ -lc++"
 fi
 
 exec clang++                                    \

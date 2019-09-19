@@ -131,7 +131,7 @@ Runtime::Runtime(Module &M) {
 /// Decide whether a function is called symbolically.
 bool isInterceptedFunction(const Function &f) {
   static const StringSet<> kInterceptedFunctions = {
-      "malloc", "calloc",  "mmap",   "read",   "memcpy",
+      "malloc", "calloc",  "mmap",   "read",   "getc",   "memcpy",
       "memset", "strncpy", "strchr", "memcmp", "memmove"};
 
   return (kInterceptedFunctions.count(f.getName()) > 0);

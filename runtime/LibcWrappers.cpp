@@ -20,6 +20,9 @@
 
 namespace {
 
+/// The current position in the (symbolic) input.
+static size_t inputOffset = 0;
+
 /// Tell the solver to try an alternative value than the given one.
 template <typename V, typename F>
 void tryAlternative(V value, SymExpr valueExpr, F caller) {
@@ -70,8 +73,6 @@ void *SYM(mmap)(void *addr, size_t len, int prot, int flags, int fildes,
 }
 
 ssize_t SYM(read)(int fildes, void *buf, size_t nbyte) {
-  static size_t inputOffset = 0;
-
   tryAlternative(buf, _sym_get_parameter_expression(1), SYM(read));
   tryAlternative(nbyte, _sym_get_parameter_expression(2), SYM(read));
 
@@ -91,6 +92,22 @@ ssize_t SYM(read)(int fildes, void *buf, size_t nbyte) {
     ReadWriteShadow shadow(buf, nbyte);
     std::fill(shadow.begin(), shadow.end(), nullptr);
   }
+
+  return result;
+}
+
+int SYM(getc)(FILE *stream) {
+  auto result = getc(stream);
+  if (result == EOF) {
+    _sym_set_return_expression(nullptr);
+    return result;
+  }
+
+  if (fileno(stream) == 0 && !g_config.fullyConcrete)
+    _sym_set_return_expression(_sym_build_zext(
+        _sym_get_input_byte(inputOffset++), sizeof(int) * 8 - 8));
+  else
+    _sym_set_return_expression(nullptr);
 
   return result;
 }
