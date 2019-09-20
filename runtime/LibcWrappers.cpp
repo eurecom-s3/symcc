@@ -217,10 +217,10 @@ int SYM(memcmp)(const void *a, const void *b, size_t n) {
   auto bShadowIt = ReadOnlyShadow(b, n).begin_non_null();
   auto allEqual = _sym_build_equal(*aShadowIt, *bShadowIt);
   for (size_t i = 1; i < n; i++) {
-    allEqual =
-        _sym_build_and(allEqual, _sym_build_equal(*aShadowIt, *bShadowIt));
     ++aShadowIt;
     ++bShadowIt;
+    allEqual =
+        _sym_build_bool_and(allEqual, _sym_build_equal(*aShadowIt, *bShadowIt));
   }
 
   _sym_push_path_constraint(allEqual, result ? false : true,
