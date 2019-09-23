@@ -82,8 +82,9 @@ public:
   /// operations without symbolic data.
   void shortCircuitExpressionUses();
 
-  void handleIntrinsicCall(llvm::CallInst &I);
+  void handleIntrinsicCall(llvm::CallBase &I);
   void handleInlineAssembly(llvm::CallInst &I);
+  void handleFunctionCall(llvm::CallBase &I, llvm::Instruction *returnPoint);
 
   //
   // Implementation of InstVisitor
@@ -95,6 +96,7 @@ public:
   void visitBranchInst(llvm::BranchInst &I);
   void visitIndirectBrInst(llvm::IndirectBrInst &I);
   void visitCallInst(llvm::CallInst &I);
+  void visitInvokeInst(llvm::InvokeInst &I);
   void visitAllocaInst(llvm::AllocaInst &);
   void visitLoadInst(llvm::LoadInst &I);
   void visitStoreInst(llvm::StoreInst &I);

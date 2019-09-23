@@ -16,8 +16,9 @@ void Symbolizer::symbolizeFunctionArguments(Function &F) {
   IRBuilder<> IRB(F.getEntryBlock().getFirstNonPHI());
 
   for (auto &arg : F.args()) {
-    symbolicExpressions[&arg] = IRB.CreateCall(runtime.getParameterExpression,
-                                               IRB.getInt8(arg.getArgNo()));
+    if (!arg.user_empty())
+      symbolicExpressions[&arg] = IRB.CreateCall(runtime.getParameterExpression,
+                                                 IRB.getInt8(arg.getArgNo()));
   }
 }
 
@@ -183,7 +184,7 @@ void Symbolizer::shortCircuitExpressionUses() {
   }
 }
 
-void Symbolizer::handleIntrinsicCall(CallInst &I) {
+void Symbolizer::handleIntrinsicCall(CallBase &I) {
   auto callee = I.getCalledFunction();
 
   switch (callee->getIntrinsicID()) {
@@ -287,6 +288,39 @@ void Symbolizer::handleInlineAssembly(CallInst &I) {
          << I << '\n';
 }
 
+void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
+  auto callee = I.getCalledFunction();
+  if (callee && callee->isIntrinsic()) {
+    handleIntrinsicCall(I);
+    return;
+  }
+
+  IRBuilder<> IRB(&I);
+
+  if (!callee)
+    tryAlternative(IRB, I.getCalledValue());
+
+  auto targetName = callee ? callee->getName() : StringRef{};
+  bool isMakeSymbolic = (targetName == "sym_make_symbolic");
+
+  if (targetName.startswith("_sym_") && !isMakeSymbolic)
+    return;
+
+  if (!isMakeSymbolic) {
+    for (Use &arg : I.args())
+      IRB.CreateCall(runtime.setParameterExpression,
+                     {ConstantInt::get(IRB.getInt8Ty(), arg.getOperandNo()),
+                      getSymbolicExpressionOrNull(arg)});
+  }
+
+  if (!I.user_empty()) {
+    IRB.CreateCall(runtime.setReturnExpression,
+                   ConstantPointerNull::get(IRB.getInt8PtrTy()));
+    IRB.SetInsertPoint(returnPoint);
+    symbolicExpressions[&I] = IRB.CreateCall(runtime.getReturnExpression);
+  }
+}
+
 void Symbolizer::visitBinaryOperator(BinaryOperator &I) {
   // Binary operators propagate into the symbolic expression.
 
@@ -383,39 +417,14 @@ void Symbolizer::visitIndirectBrInst(IndirectBrInst &I) {
 }
 
 void Symbolizer::visitCallInst(CallInst &I) {
-  if (I.isInlineAsm()) {
+  if (I.isInlineAsm())
     handleInlineAssembly(I);
-    return;
-  }
+  else
+    handleFunctionCall(I, I.getNextNode());
+}
 
-  auto callee = I.getCalledFunction();
-  if (callee && callee->isIntrinsic()) {
-    handleIntrinsicCall(I);
-    return;
-  }
-
-  IRBuilder<> IRB(&I);
-
-  if (!callee)
-    tryAlternative(IRB, I.getCalledValue());
-
-  auto targetName = callee ? callee->getName() : StringRef{};
-  bool isMakeSymbolic = (targetName == "sym_make_symbolic");
-
-  if (targetName.startswith("_sym_") && !isMakeSymbolic)
-    return;
-
-  if (!isMakeSymbolic) {
-    for (Use &arg : I.args())
-      IRB.CreateCall(runtime.setParameterExpression,
-                     {ConstantInt::get(IRB.getInt8Ty(), arg.getOperandNo()),
-                      getSymbolicExpressionOrNull(arg)});
-  }
-
-  IRB.CreateCall(runtime.setReturnExpression,
-                 ConstantPointerNull::get(IRB.getInt8PtrTy()));
-  IRB.SetInsertPoint(I.getNextNode());
-  symbolicExpressions[&I] = IRB.CreateCall(runtime.getReturnExpression);
+void Symbolizer::visitInvokeInst(InvokeInst &I) {
+  handleFunctionCall(I, I.getNormalDest()->getFirstNonPHI());
 }
 
 void Symbolizer::visitAllocaInst(AllocaInst &) {
@@ -756,6 +765,11 @@ void Symbolizer::visitUnreachableInst(UnreachableInst &) {
 }
 
 void Symbolizer::visitInstruction(Instruction &I) {
+  // Some instructions are only used in the context of exception handling, which
+  // we ignore for now.
+  if (isa<LandingPadInst>(I) || isa<ResumeInst>(I) || isa<InsertValueInst>(I))
+    return;
+
   errs() << "Warning: unknown instruction " << I << '\n';
 }
 
