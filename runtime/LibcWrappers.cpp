@@ -96,6 +96,28 @@ ssize_t SYM(read)(int fildes, void *buf, size_t nbyte) {
   return result;
 }
 
+size_t SYM(fread)(void *ptr, size_t size, size_t nmemb, FILE *stream) {
+  tryAlternative(ptr, _sym_get_parameter_expression(0), SYM(fread));
+  tryAlternative(size, _sym_get_parameter_expression(1), SYM(fread));
+  tryAlternative(nmemb, _sym_get_parameter_expression(2), SYM(fread));
+
+  auto result = fread(ptr, size, nmemb, stream);
+  _sym_set_return_expression(nullptr);
+
+  if (stream == stdin && !g_config.fullyConcrete) {
+    // Reading from standard input. We treat everything as unconstrained
+    // symbolic data.
+    ReadWriteShadow shadow(ptr, result * size);
+    std::generate(shadow.begin(), shadow.end(),
+                  []() { return _sym_get_input_byte(inputOffset++); });
+  } else if (!isConcrete(ptr, result * size)) {
+    ReadWriteShadow shadow(ptr, result * size);
+    std::fill(shadow.begin(), shadow.end(), nullptr);
+  }
+
+  return result;
+}
+
 int SYM(getc)(FILE *stream) {
   auto result = getc(stream);
   if (result == EOF) {
@@ -108,6 +130,16 @@ int SYM(getc)(FILE *stream) {
         _sym_get_input_byte(inputOffset++), sizeof(int) * 8 - 8));
   else
     _sym_set_return_expression(nullptr);
+
+  return result;
+}
+
+int SYM(ungetc)(int c, FILE *stream) {
+  auto result = ungetc(c, stream);
+  _sym_set_return_expression(_sym_get_parameter_expression(0));
+
+  if (fileno(stream) == 0 && !g_config.fullyConcrete && result != EOF)
+    inputOffset--;
 
   return result;
 }

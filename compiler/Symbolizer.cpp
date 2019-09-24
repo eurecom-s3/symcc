@@ -196,6 +196,7 @@ void Symbolizer::handleIntrinsicCall(CallBase &I) {
   case Intrinsic::trap:
   case Intrinsic::invariant_start:
   case Intrinsic::invariant_end:
+  case Intrinsic::assume:
     // These are safe to ignore.
     break;
   case Intrinsic::memcpy: {
