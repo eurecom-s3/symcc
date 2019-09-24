@@ -101,7 +101,7 @@ SymExpr _sym_build_integer128(unsigned __int128 value) {
 }
 
 SymExpr _sym_build_null_pointer() {
-  return H(g_expr_builder->createConstant(0, sizeof(uintptr_t)));
+  return H(g_expr_builder->createConstant(0, sizeof(uintptr_t) * 8));
 }
 
 SymExpr _sym_build_true() { return H(g_expr_builder->createTrue()); }

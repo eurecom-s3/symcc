@@ -1,5 +1,5 @@
 // RUN: %symcc -O2 %s -o %t
-// RUN: echo -ne "\x05\x00\x00\x00" | %t 2>&1 | %filecheck %s
+// RUN: echo -ne "\x05\x00\x00\x00\x12\x34\x56\x78\x90\xab\xcd\xef" | %t 2>&1 | %filecheck %s
 #include <stdio.h>
 #include <stdint.h>
 #include <unistd.h>
@@ -8,8 +8,13 @@ volatile int g_value = 0x00ab0012;
 
 int main(int argc, char* argv[]) {
     int x;
+    void *ptr;
     if (read(STDIN_FILENO, &x, sizeof(x)) != sizeof(x)) {
         printf("Failed to read x\n");
+        return -1;
+    }
+    if (read(STDIN_FILENO, &ptr, sizeof(ptr)) != sizeof(ptr)) {
+        printf("Failed to read ptr\n");
         return -1;
     }
     uint8_t *charPtr = (uint8_t*)&g_value;
@@ -36,6 +41,14 @@ int main(int argc, char* argv[]) {
     // QSYM-COUNT-2: SMT
     // QSYM: New testcase
     // ANY: different
+
+    printf("%s\n", !ptr ? "null" : "not null");
+    // SIMPLE: Trying to solve
+    // SIMPLE: Found diverging input
+    // SIMPLE-COUNT-8: #x00
+    // QSYM-COUNT-2: SMT
+    // QSYM: New testcase
+    // ANY: not null
 
     return 0;
 }
