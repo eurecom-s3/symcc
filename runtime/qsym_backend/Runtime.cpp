@@ -255,6 +255,10 @@ SymExpr _sym_extract_helper(SymExpr expr, size_t first_bit, size_t last_bit) {
 
 size_t _sym_bits_helper(SymExpr expr) { return (*expr)->bits(); }
 
+SymExpr _sym_build_bool_to_bits(SymExpr expr, uint8_t bits) {
+  return H(g_expr_builder->boolToBit(*expr, bits));
+}
+
 //
 // Floating-point operations (unsupported in Qsym)
 //

@@ -42,6 +42,8 @@ Runtime::Runtime(Module &M) {
   buildBoolAnd = M.getOrInsertFunction("_sym_build_bool_and", ptrT, ptrT, ptrT);
   buildBoolOr = M.getOrInsertFunction("_sym_build_bool_or", ptrT, ptrT, ptrT);
   buildBoolXor = M.getOrInsertFunction("_sym_build_bool_xor", ptrT, ptrT, ptrT);
+  buildBoolToBits =
+      M.getOrInsertFunction("_sym_build_bool_to_bits", ptrT, ptrT, int8T);
   pushPathConstraint = M.getOrInsertFunction("_sym_push_path_constraint", voidT,
                                              ptrT, IRB.getInt1Ty(), intPtrType);
 

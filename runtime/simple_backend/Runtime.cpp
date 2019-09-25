@@ -405,6 +405,11 @@ Z3_ast _sym_build_float_to_unsigned_integer(Z3_ast expr, uint8_t bits) {
                           expr, bits);
 }
 
+Z3_ast _sym_build_bool_to_bits(Z3_ast expr, uint8_t bits) {
+  return Z3_mk_ite(g_context, expr, _sym_build_integer(1, bits),
+                   _sym_build_integer(0, bits));
+}
+
 void _sym_push_path_constraint(Z3_ast constraint, int taken,
                                uintptr_t site_id [[maybe_unused]]) {
   if (!constraint)

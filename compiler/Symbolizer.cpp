@@ -676,12 +676,14 @@ void Symbolizer::visitCastInst(CastInst &I) {
 
   // LLVM bitcode represents Boolean values as i1. In Z3, those are a not a
   // bit-vector sort, so trying to cast one into a bit vector of any length
-  // raises an error. For now, we follow the heuristic that i1 is always a
-  // Boolean and thus does not need extension on the Z3 side.
+  // raises an error. The run-time library provides a dedicated conversion
+  // function for this case.
   if (I.getSrcTy()->getIntegerBitWidth() == 1) {
-    if (auto expr = getSymbolicExpression(I.getOperand(0))) {
-      symbolicExpressions[&I] = expr;
-    }
+    auto boolToBitConversion = buildRuntimeCall(
+        IRB, runtime.buildBoolToBits,
+        {{I.getOperand(0), true},
+         {IRB.getInt8(I.getDestTy()->getIntegerBitWidth()), false}});
+    registerSymbolicComputation(boolToBitConversion, &I);
   } else {
     Value *target;
 

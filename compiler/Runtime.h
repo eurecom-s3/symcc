@@ -29,6 +29,7 @@ struct Runtime {
   llvm::Value *buildBoolAnd{};
   llvm::Value *buildBoolOr{};
   llvm::Value *buildBoolXor{};
+  llvm::Value *buildBoolToBits{};
   llvm::Value *pushPathConstraint{};
   llvm::Value *getParameterExpression{};
   llvm::Value *setParameterExpression{};
