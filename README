@@ -70,7 +70,10 @@ $ git submodule init
 $ git submodule update
 
 Then build as described above, but add the option "-DQSYM_BACKEND=ON" to the
-CMake invocation.
+CMake invocation. (Note that rerunning CMake in a build directory that was
+previously used with our simple backend won't change the value of the option;
+you can create a fresh build directory, change the option with "ccmake
+/path/to/source", or edit "CMakeCache.txt" manually.)
 
 
                                  Documentation
