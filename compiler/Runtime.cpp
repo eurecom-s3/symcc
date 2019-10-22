@@ -1,9 +1,24 @@
 #include "Runtime.h"
 
 #include <llvm/ADT/StringSet.h>
+#include <llvm/Config/llvm-config.h>
 #include <llvm/IR/IRBuilder.h>
 
 using namespace llvm;
+
+namespace {
+
+template <typename... ArgsTy>
+llvm::Value *import(llvm::Module &M, llvm::StringRef name, llvm::Type *ret,
+                    ArgsTy... args) {
+#if LLVM_VERSION_MAJOR >= 9
+  return M.getOrInsertFunction(name, ret, args...).getCallee();
+#else
+  return M.getOrInsertFunction(name, ret, args...);
+#endif
+}
+
+} // namespace
 
 Runtime::Runtime(Module &M) {
   IRBuilder<> IRB(M.getContext());
@@ -12,53 +27,47 @@ Runtime::Runtime(Module &M) {
   auto int8T = IRB.getInt8Ty();
   auto voidT = IRB.getVoidTy();
 
-  buildInteger = M.getOrInsertFunction("_sym_build_integer", ptrT,
-                                       IRB.getInt64Ty(), int8T);
-  buildInteger128 =
-      M.getOrInsertFunction("_sym_build_integer128", ptrT, IRB.getInt128Ty());
-  buildFloat = M.getOrInsertFunction("_sym_build_float", ptrT,
-                                     IRB.getDoubleTy(), IRB.getInt1Ty());
-  buildNullPointer = M.getOrInsertFunction("_sym_build_null_pointer", ptrT);
-  buildTrue = M.getOrInsertFunction("_sym_build_true", ptrT);
-  buildFalse = M.getOrInsertFunction("_sym_build_false", ptrT);
-  buildBool = M.getOrInsertFunction("_sym_build_bool", ptrT, IRB.getInt1Ty());
-  buildNeg = M.getOrInsertFunction("_sym_build_neg", ptrT, ptrT);
-  buildSExt = M.getOrInsertFunction("_sym_build_sext", ptrT, ptrT, int8T);
-  buildZExt = M.getOrInsertFunction("_sym_build_zext", ptrT, ptrT, int8T);
-  buildTrunc = M.getOrInsertFunction("_sym_build_trunc", ptrT, ptrT, int8T);
-  buildIntToFloat = M.getOrInsertFunction("_sym_build_int_to_float", ptrT, ptrT,
-                                          IRB.getInt1Ty(), IRB.getInt1Ty());
-  buildFloatToFloat = M.getOrInsertFunction("_sym_build_float_to_float", ptrT,
-                                            ptrT, IRB.getInt1Ty());
-  buildBitsToFloat = M.getOrInsertFunction("_sym_build_bits_to_float", ptrT,
-                                           ptrT, IRB.getInt1Ty());
-  buildFloatToBits =
-      M.getOrInsertFunction("_sym_build_float_to_bits", ptrT, ptrT);
-  buildFloatToSignedInt = M.getOrInsertFunction(
-      "_sym_build_float_to_signed_integer", ptrT, ptrT, int8T);
-  buildFloatToUnsignedInt = M.getOrInsertFunction(
-      "_sym_build_float_to_unsigned_integer", ptrT, ptrT, int8T);
-  buildFloatAbs = M.getOrInsertFunction("_sym_build_fp_abs", ptrT, ptrT);
-  buildBoolAnd = M.getOrInsertFunction("_sym_build_bool_and", ptrT, ptrT, ptrT);
-  buildBoolOr = M.getOrInsertFunction("_sym_build_bool_or", ptrT, ptrT, ptrT);
-  buildBoolXor = M.getOrInsertFunction("_sym_build_bool_xor", ptrT, ptrT, ptrT);
-  buildBoolToBits =
-      M.getOrInsertFunction("_sym_build_bool_to_bits", ptrT, ptrT, int8T);
-  pushPathConstraint = M.getOrInsertFunction("_sym_push_path_constraint", voidT,
-                                             ptrT, IRB.getInt1Ty(), intPtrType);
+  buildInteger = import(M, "_sym_build_integer", ptrT, IRB.getInt64Ty(), int8T);
+  buildInteger128 = import(M, "_sym_build_integer128", ptrT, IRB.getInt128Ty());
+  buildFloat =
+      import(M, "_sym_build_float", ptrT, IRB.getDoubleTy(), IRB.getInt1Ty());
+  buildNullPointer = import(M, "_sym_build_null_pointer", ptrT);
+  buildTrue = import(M, "_sym_build_true", ptrT);
+  buildFalse = import(M, "_sym_build_false", ptrT);
+  buildBool = import(M, "_sym_build_bool", ptrT, IRB.getInt1Ty());
+  buildNeg = import(M, "_sym_build_neg", ptrT, ptrT);
+  buildSExt = import(M, "_sym_build_sext", ptrT, ptrT, int8T);
+  buildZExt = import(M, "_sym_build_zext", ptrT, ptrT, int8T);
+  buildTrunc = import(M, "_sym_build_trunc", ptrT, ptrT, int8T);
+  buildIntToFloat = import(M, "_sym_build_int_to_float", ptrT, ptrT,
+                           IRB.getInt1Ty(), IRB.getInt1Ty());
+  buildFloatToFloat =
+      import(M, "_sym_build_float_to_float", ptrT, ptrT, IRB.getInt1Ty());
+  buildBitsToFloat =
+      import(M, "_sym_build_bits_to_float", ptrT, ptrT, IRB.getInt1Ty());
+  buildFloatToBits = import(M, "_sym_build_float_to_bits", ptrT, ptrT);
+  buildFloatToSignedInt =
+      import(M, "_sym_build_float_to_signed_integer", ptrT, ptrT, int8T);
+  buildFloatToUnsignedInt =
+      import(M, "_sym_build_float_to_unsigned_integer", ptrT, ptrT, int8T);
+  buildFloatAbs = import(M, "_sym_build_fp_abs", ptrT, ptrT);
+  buildBoolAnd = import(M, "_sym_build_bool_and", ptrT, ptrT, ptrT);
+  buildBoolOr = import(M, "_sym_build_bool_or", ptrT, ptrT, ptrT);
+  buildBoolXor = import(M, "_sym_build_bool_xor", ptrT, ptrT, ptrT);
+  buildBoolToBits = import(M, "_sym_build_bool_to_bits", ptrT, ptrT, int8T);
+  pushPathConstraint = import(M, "_sym_push_path_constraint", voidT, ptrT,
+                              IRB.getInt1Ty(), intPtrType);
 
-  setParameterExpression = M.getOrInsertFunction(
-      "_sym_set_parameter_expression", voidT, int8T, ptrT);
+  setParameterExpression =
+      import(M, "_sym_set_parameter_expression", voidT, int8T, ptrT);
   getParameterExpression =
-      M.getOrInsertFunction("_sym_get_parameter_expression", ptrT, int8T);
-  setReturnExpression =
-      M.getOrInsertFunction("_sym_set_return_expression", voidT, ptrT);
-  getReturnExpression =
-      M.getOrInsertFunction("_sym_get_return_expression", ptrT);
+      import(M, "_sym_get_parameter_expression", ptrT, int8T);
+  setReturnExpression = import(M, "_sym_set_return_expression", voidT, ptrT);
+  getReturnExpression = import(M, "_sym_get_return_expression", ptrT);
 
 #define LOAD_BINARY_OPERATOR_HANDLER(constant, name)                           \
   binaryOperatorHandlers[Instruction::constant] =                              \
-      M.getOrInsertFunction("_sym_build_" #name, ptrT, ptrT, ptrT);
+      import(M, "_sym_build_" #name, ptrT, ptrT, ptrT);
 
   LOAD_BINARY_OPERATOR_HANDLER(Add, add)
   LOAD_BINARY_OPERATOR_HANDLER(Sub, sub)
@@ -85,7 +94,7 @@ Runtime::Runtime(Module &M) {
 
 #define LOAD_COMPARISON_HANDLER(constant, name)                                \
   comparisonHandlers[CmpInst::constant] =                                      \
-      M.getOrInsertFunction("_sym_build_" #name, ptrT, ptrT, ptrT);
+      import(M, "_sym_build_" #name, ptrT, ptrT, ptrT);
 
   LOAD_COMPARISON_HANDLER(ICMP_EQ, equal)
   LOAD_COMPARISON_HANDLER(ICMP_NE, not_equal)
@@ -116,18 +125,15 @@ Runtime::Runtime(Module &M) {
 
 #undef LOAD_COMPARISON_HANDLER
 
-  memcpy = M.getOrInsertFunction("_sym_memcpy", voidT, ptrT, ptrT, intPtrType);
-  memset =
-      M.getOrInsertFunction("_sym_memset", voidT, ptrT, ptrT, IRB.getInt64Ty());
-  memmove =
-      M.getOrInsertFunction("_sym_memmove", voidT, ptrT, ptrT, intPtrType);
-  readMemory = M.getOrInsertFunction("_sym_read_memory", ptrT, intPtrType,
-                                     intPtrType, int8T);
-  writeMemory = M.getOrInsertFunction("_sym_write_memory", voidT, intPtrType,
-                                      intPtrType, ptrT, int8T);
-  buildExtract =
-      M.getOrInsertFunction("_sym_build_extract", ptrT, ptrT, IRB.getInt64Ty(),
-                            IRB.getInt64Ty(), int8T);
+  memcpy = import(M, "_sym_memcpy", voidT, ptrT, ptrT, intPtrType);
+  memset = import(M, "_sym_memset", voidT, ptrT, ptrT, IRB.getInt64Ty());
+  memmove = import(M, "_sym_memmove", voidT, ptrT, ptrT, intPtrType);
+  readMemory =
+      import(M, "_sym_read_memory", ptrT, intPtrType, intPtrType, int8T);
+  writeMemory = import(M, "_sym_write_memory", voidT, intPtrType, intPtrType,
+                       ptrT, int8T);
+  buildExtract = import(M, "_sym_build_extract", ptrT, ptrT, IRB.getInt64Ty(),
+                        IRB.getInt64Ty(), int8T);
 }
 
 /// Decide whether a function is called symbolically.

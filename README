@@ -8,7 +8,7 @@ compilation. In essence, it inserts code that computes symbolic expressions for
 each value in the program. The actual computation happens through calls to a
 support library at run time.
 
-To build the pass and the support library, make sure that LLVM 8 and Z3 are
+To build the pass and the support library, make sure that LLVM 8 or 9 and Z3 are
 installed. Then create a build directory somewhere, and execute the following
 commands inside it:
 
