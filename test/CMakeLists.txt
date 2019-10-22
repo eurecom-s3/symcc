@@ -7,7 +7,7 @@ endif()
 
 configure_file("lit.site.cfg.in" "lit.site.cfg")
 
-add_custom_target(test
+add_custom_target(check
   lit
   --verbose
   --path=${LLVM_TOOLS_BINARY_DIR}
@@ -15,4 +15,4 @@ add_custom_target(test
   COMMENT "Testing the system..."
   USES_TERMINAL)
 
-add_dependencies(test SymRuntime Symbolize)
+add_dependencies(check SymRuntime Symbolize)

@@ -5,7 +5,7 @@
 
 The short version:
 
-$ ninja test
+$ ninja check
 
 
 The slightly longer version:
@@ -26,7 +26,10 @@ the LLVM source code), here is an overview of the setup:
    containing site-specific configuration such as the output directory of the
    build. The template is "test/lit.site.cfg.in".
 
-4. CMake adds the "test" target, which invokes lit on the test suite.
+4. CMake adds the "check" target, which invokes lit on the test suite. (It would
+   be nice to call the target "test", but this is a reserved name in some
+   versions of CMake, and the built-in test mechanism that it is reserved for
+   doesn't track dependencies the way we need.)
 
 Test files can use the following patterns:
 

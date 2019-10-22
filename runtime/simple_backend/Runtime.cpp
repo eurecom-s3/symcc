@@ -5,6 +5,7 @@
 #include <cassert>
 #include <cstring>
 #include <iostream>
+#include <vector>
 
 #include "Config.h"
 #include "Shadow.h"
@@ -113,13 +114,8 @@ Z3_ast _sym_build_integer(uint64_t value, uint8_t bits) {
 }
 
 Z3_ast _sym_build_integer128(unsigned __int128 value) {
-  bool bits[128];
-
-  for (int i = 0; i < 128; i++) {
-    bits[i] = (value & ((unsigned __int128)1 << i));
-  }
-
-  return Z3_mk_bv_numeral(g_context, 128, bits);
+  return Z3_mk_concat(g_context, _sym_build_integer((value >> 64), 64),
+                      _sym_build_integer(value, 64));
 }
 
 Z3_ast _sym_build_float(double value, int is_double) {

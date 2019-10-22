@@ -11,6 +11,8 @@
 #ifndef RUNTIMECOMMON_H
 #define RUNTIMECOMMON_H
 
+#include <cstdint>
+
 extern "C" {
 /*
  * Initialization
