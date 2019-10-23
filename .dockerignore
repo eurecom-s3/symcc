@@ -1,0 +1,8 @@
+# Ignore the third-party software that's shipped with Qsym; we don't use it anyway.
+runtime/qsym_backend/qsym/third_party
+# Similarly, we don't run its tests.
+runtime/qsym_backend/qsym/tests
+
+# Some build utilities that we can ignore
+TAGS
+compile_commands.json
