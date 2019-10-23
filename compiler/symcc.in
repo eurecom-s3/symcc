@@ -1,9 +1,9 @@
-#!/bin/sh
+#!/bin/bash
 
 runtime_dir="@SYM_RUNTIME_DIR@"
 pass="@CMAKE_CURRENT_BINARY_DIR@/libSymbolize.so"
 
-exec clang                                      \
+exec @CLANG_BINARY@                             \
      -Xclang -load -Xclang "$pass"              \
      "$@"                                       \
      -L"$runtime_dir"                           \

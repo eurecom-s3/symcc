@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 runtime_dir="@SYM_RUNTIME_DIR@"
 pass="@CMAKE_CURRENT_BINARY_DIR@/libSymbolize.so"
@@ -7,7 +7,7 @@ if [[ -v SYMCC_REGULAR_LIBCXX ]]; then
     stdlib_cflags=
     stdlib_ldflags=
 elif [[ ! -v SYMCC_LIBCXX_PATH ]]; then
-    >&2 echo "Please set SYMCC_LIBCXX_PATH to the build directory of libc++!"
+    >&2 echo "Please set SYMCC_LIBCXX_PATH to the build directory of libc++ or confirm usage of the system library by setting SYMCC_REGULAR_LIBCXX!"
     exit 255
 else
     # It is important that the resulting binaries load libstdc++ before libc++;
@@ -17,7 +17,7 @@ else
     stdlib_ldflags="-L$SYMCC_LIBCXX_PATH/lib -Wl,-rpath,$SYMCC_LIBCXX_PATH/lib -lstdc++ -lc++ -stdlib=libc++"
 fi
 
-exec clang++                                    \
+exec @CLANGPP_BINARY@                           \
      -Xclang -load -Xclang "$pass"              \
      $stdlib_cflags                             \
      "$@"                                       \

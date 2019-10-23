@@ -41,6 +41,12 @@ else()
   add_subdirectory(runtime/simple_backend)
 endif()
 
+find_program(CLANG_BINARY "clang"
+  HINTS ${LLVM_TOOLS_BINARY_DIR}
+  DOC "The clang binary to use in the symcc wrapper script.")
+find_program(CLANGPP_BINARY "clang++"
+  HINTS ${LLVM_TOOLS_BINARY_DIR}
+  DOC "The clang binary to use in the sym++ wrapper script.")
 get_target_property(SYM_RUNTIME_DIR SymRuntime BINARY_DIR)
 configure_file("compiler/symcc.in" "symcc")
 configure_file("compiler/sym++.in" "sym++")
