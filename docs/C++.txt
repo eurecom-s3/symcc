@@ -37,8 +37,8 @@ such as std::vector.
 
 
 Building an instrumented C++ standard library is a one-time effort; the library
-can then be used in all subsequent C++ compilations. We use "libc++", the LLVM's
-implementation of the standard library. First, get the source code:
+can then be used in all subsequent C++ compilations. We use "libc++", the LLVM
+project's implementation of the standard library. First, get the source code:
 
 $ git clone https://github.com/llvm/llvm-project.git
 

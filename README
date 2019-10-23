@@ -9,11 +9,12 @@ each value in the program. The actual computation happens through calls to a
 support library at run time.
 
 To build the pass and the support library, make sure that LLVM 8 or 9 and Z3 are
-installed. Then create a build directory somewhere, and execute the following
-commands inside it:
+installed. (Alternatively, see below for using the provided Dockerfile.) Then
+create a build directory somewhere, and execute the following commands inside
+it:
 
 $ cmake -G Ninja /path/to/compiler/sources
-$ ninja
+$ ninja check
 
 If LLVM is installed in a non-standard location, add the CMake parameter
 "-DLLVM_DIR=/path/to/llvm/cmake/module". The results of the build process are
@@ -73,7 +74,25 @@ Then build as described above, but add the option "-DQSYM_BACKEND=ON" to the
 CMake invocation. (Note that rerunning CMake in a build directory that was
 previously used with our simple backend won't change the value of the option;
 you can create a fresh build directory, change the option with "ccmake
-/path/to/source", or edit "CMakeCache.txt" manually.)
+/path/to/source", or edit "CMakeCache.txt" manually.) Qsym requires Z3 version
+4.5 or later.
+
+
+                            Building a Docker image
+
+If you prefer a Docker container over building SymCC natively, just call Docker
+after pulling the Qsym code as above:
+
+$ git submodule init
+$ git submodule update
+$ docker build -t symcc .
+$ docker run -it --rm symcc
+
+This will build a Docker image and run an ephemeral container to try out SymCC.
+Inside the container, "symcc" is available as a drop-in replacement for "clang",
+using the Qsym backend. If you want to try modifications to SymCC, you will find
+the source code in "/symcc_source" and the build files in "/symcc_build";
+recompile SymCC by running "ninja -C /symcc_build check".
 
 
                                  Documentation
