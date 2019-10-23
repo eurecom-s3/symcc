@@ -2,8 +2,8 @@
 
 set(QSYM_SOURCE_DIR "qsym/qsym/pintool")
 
-add_custom_command(OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/${QSYM_SOURCE_DIR}/expr__gen.cpp
-  COMMAND python gen_expr.py
+add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/expr__gen.cpp
+  COMMAND python gen_expr.py ${CMAKE_CURRENT_BINARY_DIR}
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${QSYM_SOURCE_DIR}/codegen
   COMMENT "Generating Qsym's expr__gen.cpp"
   VERBATIM
@@ -11,8 +11,8 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/${QSYM_SOURCE_DIR}/expr__g
   ${QSYM_SOURCE_DIR}/codegen/expr.cpp
   ${QSYM_SOURCE_DIR}/codegen/gen_expr.py)
 
-add_custom_command(OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/${QSYM_SOURCE_DIR}/expr_builder__gen.cpp
-  COMMAND python gen_expr_builder.py
+add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/expr_builder__gen.cpp
+  COMMAND python gen_expr_builder.py ${CMAKE_CURRENT_BINARY_DIR}
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${QSYM_SOURCE_DIR}/codegen
   COMMENT "Generating Qsym's expr__gen.cpp"
   VERBATIM
@@ -21,8 +21,8 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/${QSYM_SOURCE_DIR}/expr_bu
   ${QSYM_SOURCE_DIR}/codegen/gen_expr_builder.py)
 
 add_library(SymRuntime SHARED
-  ${QSYM_SOURCE_DIR}/expr__gen.cpp
-  ${QSYM_SOURCE_DIR}/expr_builder__gen.cpp
+  ${CMAKE_CURRENT_BINARY_DIR}/expr__gen.cpp
+  ${CMAKE_CURRENT_BINARY_DIR}/expr_builder__gen.cpp
   ${QSYM_SOURCE_DIR}/expr_cache.cpp
   ${QSYM_SOURCE_DIR}/expr_evaluate.cpp
   ${QSYM_SOURCE_DIR}/solver.cpp
