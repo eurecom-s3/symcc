@@ -1,5 +1,7 @@
 #include "Pass.h"
 
+#include <llvm/ADT/SmallVector.h>
+#include <llvm/IR/InstIterator.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/Transforms/Utils/ModuleUtils.h>
@@ -48,10 +50,15 @@ bool SymbolizePass::runOnFunction(Function &F) {
   DEBUG(errs() << "Symbolizing function ");
   DEBUG(errs().write_escaped(functionName) << '\n');
 
+  SmallVector<Instruction*, 0> allInstructions;
+  for (auto& I: instructions(F))
+    allInstructions.push_back(&I);
+
   Symbolizer symbolizer(*F.getParent());
   // DEBUG(errs() << F << '\n');
   symbolizer.symbolizeFunctionArguments(F);
-  symbolizer.visit(F);
+  for (auto instPtr: allInstructions)
+    symbolizer.visit(instPtr);
   symbolizer.finalizeSwitchInstructions();
   symbolizer.finalizePHINodes();
   symbolizer.shortCircuitExpressionUses();
