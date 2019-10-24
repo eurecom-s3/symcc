@@ -393,7 +393,15 @@ void Symbolizer::visitCallInst(CallInst &I) {
 }
 
 void Symbolizer::visitInvokeInst(InvokeInst &I) {
-  handleFunctionCall(I, I.getNormalDest()->getFirstNonPHI());
+  // Invoke is like a call but additionally establishes an exception handler. We
+  // can obtain the return expression only in the success case, but the target
+  // block may have multiple incoming edges (i.e., our edge may be critical). In
+  // this case, we split the edge and query the return expression in the new
+  // block that is specific to our edge.
+  auto newBlock = SplitCriticalEdge(I.getParent(), I.getNormalDest());
+  handleFunctionCall(I, newBlock != nullptr
+                            ? newBlock->getFirstNonPHI()
+                            : I.getNormalDest()->getFirstNonPHI());
 }
 
 void Symbolizer::visitAllocaInst(AllocaInst &) {
