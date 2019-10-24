@@ -304,9 +304,6 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
   auto targetName = callee ? callee->getName() : StringRef{};
   bool isMakeSymbolic = (targetName == "sym_make_symbolic");
 
-  if (targetName.startswith("_sym_") && !isMakeSymbolic)
-    return;
-
   if (!isMakeSymbolic) {
     for (Use &arg : I.args())
       IRB.CreateCall(runtime.setParameterExpression,
