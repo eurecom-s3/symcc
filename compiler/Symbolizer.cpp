@@ -728,11 +728,7 @@ void Symbolizer::visitExtractValueInst(ExtractValueInst &I) {
 void Symbolizer::visitSwitchInst(SwitchInst &I) {
   // Switch compares a value against a set of integer constants; duplicate
   // constants are not allowed
-  // (https://llvm.org/docs/LangRef.html#switch-instruction). We can't just
-  // push the new path constraint at the jump destinations, because the
-  // destination blocks may be the targets of other jumps as well. Therefore,
-  // we insert a series of new blocks that construct and push the respective
-  // path constraint before jumping to the original target.
+  // (https://llvm.org/docs/LangRef.html#switch-instruction).
 
   IRBuilder<> IRB(&I);
   auto condition = I.getCondition();
