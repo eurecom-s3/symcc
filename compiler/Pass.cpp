@@ -59,7 +59,6 @@ bool SymbolizePass::runOnFunction(Function &F) {
   symbolizer.symbolizeFunctionArguments(F);
   for (auto instPtr: allInstructions)
     symbolizer.visit(instPtr);
-  symbolizer.finalizeSwitchInstructions();
   symbolizer.finalizePHINodes();
   symbolizer.shortCircuitExpressionUses();
   assert(!verifyFunction(F, &errs()) &&

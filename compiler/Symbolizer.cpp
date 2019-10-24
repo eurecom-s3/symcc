@@ -22,35 +22,6 @@ void Symbolizer::symbolizeFunctionArguments(Function &F) {
   }
 }
 
-void Symbolizer::finalizeSwitchInstructions() {
-  for (auto switchInst : switchInstructions) {
-    IRBuilder<> IRB(switchInst);
-    auto condition = switchInst->getCondition();
-    auto conditionExpr = getSymbolicExpression(condition);
-    if (!conditionExpr)
-      continue;
-
-    // Build a check whether we have a symbolic condition, to be used later.
-    auto haveSymbolicCondition = IRB.CreateICmpNE(
-        conditionExpr, ConstantPointerNull::get(IRB.getInt8PtrTy()));
-    auto constraintBlock = SplitBlockAndInsertIfThen(
-        haveSymbolicCondition, switchInst, /* unreachable */ false);
-
-    // In the constraint block, we push one path constraint per case.
-    IRB.SetInsertPoint(constraintBlock);
-    for (auto &caseHandle : switchInst->cases()) {
-      auto caseTaken = IRB.CreateICmpEQ(condition, caseHandle.getCaseValue());
-      auto caseConstraint = IRB.CreateCall(
-          runtime.comparisonHandlers[CmpInst::ICMP_EQ],
-          {conditionExpr,
-           createValueExpression(caseHandle.getCaseValue(), IRB)});
-      IRB.CreateCall(runtime.pushPathConstraint,
-                     {caseConstraint, caseTaken,
-                      IRB.getInt64(reinterpret_cast<uintptr_t>(switchInst))});
-    }
-  }
-}
-
 void Symbolizer::finalizePHINodes() {
   SmallPtrSet<PHINode *, 32> nodesToErase;
 
@@ -753,11 +724,31 @@ void Symbolizer::visitSwitchInst(SwitchInst &I) {
   // push the new path constraint at the jump destinations, because the
   // destination blocks may be the targets of other jumps as well. Therefore,
   // we insert a series of new blocks that construct and push the respective
-  // path constraint before jumping to the original target. Since inserting
-  // new basic blocks confuses InstVisitor, we have to defer processing of the
-  // instruction.
+  // path constraint before jumping to the original target.
 
-  switchInstructions.push_back(&I);
+  IRBuilder<> IRB(&I);
+  auto condition = I.getCondition();
+  auto conditionExpr = getSymbolicExpression(condition);
+  if (!conditionExpr)
+    return;
+
+  // Build a check whether we have a symbolic condition, to be used later.
+  auto haveSymbolicCondition = IRB.CreateICmpNE(
+      conditionExpr, ConstantPointerNull::get(IRB.getInt8PtrTy()));
+  auto constraintBlock = SplitBlockAndInsertIfThen(haveSymbolicCondition, &I,
+                                                   /* unreachable */ false);
+
+  // In the constraint block, we push one path constraint per case.
+  IRB.SetInsertPoint(constraintBlock);
+  for (auto &caseHandle : I.cases()) {
+    auto caseTaken = IRB.CreateICmpEQ(condition, caseHandle.getCaseValue());
+    auto caseConstraint = IRB.CreateCall(
+        runtime.comparisonHandlers[CmpInst::ICMP_EQ],
+        {conditionExpr, createValueExpression(caseHandle.getCaseValue(), IRB)});
+    IRB.CreateCall(runtime.pushPathConstraint,
+                   {caseConstraint, caseTaken,
+                    IRB.getInt64(reinterpret_cast<uintptr_t>(&I))});
+  }
 }
 
 void Symbolizer::visitUnreachableInst(UnreachableInst &) {

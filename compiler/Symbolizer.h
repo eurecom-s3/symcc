@@ -17,14 +17,6 @@ public:
   /// Insert code to obtain the symbolic expressions for the function arguments.
   void symbolizeFunctionArguments(llvm::Function &F);
 
-  /// Finish the processing of switch instructions.
-  ///
-  /// Handling switch instructions requires the insertion of new basic blocks.
-  /// We can't create new blocks during the main pass (due to a limitation of
-  /// InstVisitor), so switch instructions are recorded in the member variable
-  /// switchInstructions and processed in this function.
-  void finalizeSwitchInstructions();
-
   /// Finish the processing of PHI nodes.
   ///
   /// This assumes that there is a dummy PHI node for each such instruction in
@@ -276,14 +268,6 @@ private:
   /// finalizePHINodes invalidates it. We may want to pass the map around
   /// explicitly.
   llvm::ValueMap<llvm::Value *, llvm::Value *> symbolicExpressions;
-
-  /// A record of switch instructions in this function.
-  ///
-  /// The way we currently handle switch statements requires inserting new basic
-  /// blocks, which would confuse InstVisitor if we did it while iterating over
-  /// the function for the first time. Therefore, we just collect all switch
-  /// instructions and finish them later in finalizeSwitchInstructions.
-  llvm::SmallVector<llvm::SwitchInst *, 8> switchInstructions;
 
   /// A record of all PHI nodes in this function.
   ///
