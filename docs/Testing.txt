@@ -52,3 +52,12 @@ FileCheck that activates the right prefixes for the current build configuration.
 
 Note that we run the tests only with the backend selected at configuration time,
 so a full test requires building the project in multiple configurations.
+
+
+                                Regression tests
+
+In addition to the hand-written tests that exercise compiler functionality via C
+code, we have a directory "test/regression" where we can collect LLVM bitcode
+files that triggered bugs in real SymCC use. Generate the bitcode by running the
+crashing compiler command with additional arguments "-emit-llvm -S -o
+/path/to/output.ll" and add a comment at the top to tell lit how to compile it.

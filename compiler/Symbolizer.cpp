@@ -39,9 +39,9 @@ void Symbolizer::finalizePHINodes() {
 
     for (unsigned incoming = 0, totalIncoming = phi->getNumIncomingValues();
          incoming < totalIncoming; incoming++) {
-      symbolicPHI->addIncoming(
-          getSymbolicExpressionOrNull(phi->getIncomingValue(incoming)),
-          phi->getIncomingBlock(incoming));
+      symbolicPHI->setIncomingValue(
+          incoming,
+          getSymbolicExpressionOrNull(phi->getIncomingValue(incoming)));
     }
   }
 
@@ -693,6 +693,13 @@ void Symbolizer::visitPHINode(PHINode &I) {
   IRBuilder<> IRB(&I);
   unsigned numIncomingValues = I.getNumIncomingValues();
   auto exprPHI = IRB.CreatePHI(IRB.getInt8PtrTy(), numIncomingValues);
+  for (unsigned incoming = 0; incoming < numIncomingValues; incoming++) {
+    exprPHI->addIncoming(
+        // The null pointer will be replaced in finalizePHINodes.
+        ConstantPointerNull::get(cast<PointerType>(IRB.getInt8PtrTy())),
+        I.getIncomingBlock(incoming));
+  }
+
   symbolicExpressions[&I] = exprPHI;
 }
 
