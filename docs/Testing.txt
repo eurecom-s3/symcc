@@ -59,5 +59,8 @@ so a full test requires building the project in multiple configurations.
 In addition to the hand-written tests that exercise compiler functionality via C
 code, we have a directory "test/regression" where we can collect LLVM bitcode
 files that triggered bugs in real SymCC use. Generate the bitcode by running the
-crashing compiler command with additional arguments "-emit-llvm -S -o
-/path/to/output.ll" and add a comment at the top to tell lit how to compile it.
+crashing compiler command with additional arguments "-emit-llvm -S -o-", pipe
+the result through "opt -S -instnamer", and add a comment at the top to tell lit
+how to compile it. The instruction naming is necessary because different LLVM
+versions treat numbered (i.e., unnamed) instructions differently and may
+complain if the numbering sequence doesn't match expectations.
