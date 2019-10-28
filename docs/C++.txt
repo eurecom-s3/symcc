@@ -84,7 +84,7 @@ because it doesn't depend on the system installation of LLVM.
 Once the library is ready, tell SymCC where to find it and compile C++ code as
 usual:
 
-$ export SYMCC_LIBCXX_PATH=/path-to-libcxx-build-directory
+$ export SYMCC_LIBCXX_PATH=/path-to-libcxx-build-directory/lib
 $ sym++ -o myprogram mysource.cpp
 $ ./myprogram
 

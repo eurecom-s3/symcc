@@ -7,14 +7,14 @@ if [[ -v SYMCC_REGULAR_LIBCXX ]]; then
     stdlib_cflags=
     stdlib_ldflags=
 elif [[ ! -v SYMCC_LIBCXX_PATH ]]; then
-    >&2 echo "Please set SYMCC_LIBCXX_PATH to the build directory of libc++ or confirm usage of the system library by setting SYMCC_REGULAR_LIBCXX!"
+    >&2 echo "Please set SYMCC_LIBCXX_PATH to the directory containing libc++ or confirm usage of the system library by setting SYMCC_REGULAR_LIBCXX!"
     exit 255
 else
     # It is important that the resulting binaries load libstdc++ before libc++;
     # otherwise our backend calls the instrumented library in cases where
     # exported names collide.
     stdlib_cflags="-isystem $SYMCC_LIBCXX_PATH/include/c++/v1 -nostdlib++"
-    stdlib_ldflags="-L$SYMCC_LIBCXX_PATH/lib -Wl,-rpath,$SYMCC_LIBCXX_PATH/lib -lstdc++ -lc++ -stdlib=libc++"
+    stdlib_ldflags="-L$SYMCC_LIBCXX_PATH -Wl,-rpath,$SYMCC_LIBCXX_PATH -lstdc++ -lc++ -stdlib=libc++"
 fi
 
 exec @CLANGPP_BINARY@                           \
