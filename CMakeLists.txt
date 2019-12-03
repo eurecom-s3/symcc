@@ -47,6 +47,10 @@ find_program(CLANG_BINARY "clang"
 find_program(CLANGPP_BINARY "clang++"
   HINTS ${LLVM_TOOLS_BINARY_DIR}
   DOC "The clang binary to use in the sym++ wrapper script.")
+if (NOT CLANG_BINARY)
+  message(FATAL_ERROR "Clang not found; please make sure that the version corresponding to your LLVM installation is available.")
+endif()
+
 get_target_property(SYM_RUNTIME_DIR SymRuntime BINARY_DIR)
 configure_file("compiler/symcc.in" "symcc")
 configure_file("compiler/sym++.in" "sym++")
