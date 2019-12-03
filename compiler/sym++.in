@@ -14,7 +14,7 @@ else
     # otherwise our backend calls the instrumented library in cases where
     # exported names collide.
     stdlib_cflags="-isystem $SYMCC_LIBCXX_PATH/include/c++/v1 -nostdlib++"
-    stdlib_ldflags="-L$SYMCC_LIBCXX_PATH -Wl,-rpath,$SYMCC_LIBCXX_PATH -lstdc++ -lc++ -stdlib=libc++"
+    stdlib_ldflags="-L$SYMCC_LIBCXX_PATH/lib -Wl,-rpath,$SYMCC_LIBCXX_PATH/lib -lstdc++ -lc++ -stdlib=libc++"
 fi
 
 exec @CLANGPP_BINARY@                           \
