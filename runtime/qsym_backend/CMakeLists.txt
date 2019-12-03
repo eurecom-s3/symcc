@@ -20,6 +20,9 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/expr_builder__gen.cpp
   ${QSYM_SOURCE_DIR}/codegen/expr_builder.cpp
   ${QSYM_SOURCE_DIR}/codegen/gen_expr_builder.py)
 
+# Qsym doesn't work with old versions of Z3
+find_package(Z3 4.5 REQUIRED config)
+
 add_library(SymRuntime SHARED
   ${CMAKE_CURRENT_BINARY_DIR}/expr__gen.cpp
   ${CMAKE_CURRENT_BINARY_DIR}/expr_builder__gen.cpp
@@ -45,9 +48,10 @@ set_target_properties(SymRuntime PROPERTIES COMPILE_FLAGS
 target_include_directories(SymRuntime PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}    # for our fake pin.H and Runtime.h
   ${CMAKE_CURRENT_SOURCE_DIR}/.. # for common runtime components
+  ${Z3_CXX_INCLUDE_DIRS}         # for Z3 support
   ${QSYM_SOURCE_DIR})
 
 # We need to get the LLVM support component for llvm::APInt.
 llvm_map_components_to_libnames(QSYM_LLVM_DEPS support)
 
-target_link_libraries(SymRuntime "z3" ${QSYM_LLVM_DEPS})
+target_link_libraries(SymRuntime ${Z3_LIBRARIES} ${QSYM_LLVM_DEPS})

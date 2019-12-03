@@ -17,7 +17,9 @@ $ cmake -G Ninja /path/to/compiler/sources
 $ ninja check
 
 If LLVM is installed in a non-standard location, add the CMake parameter
-"-DLLVM_DIR=/path/to/llvm/cmake/module". The results of the build process are
+"-DLLVM_DIR=/path/to/llvm/cmake/module". Similarly, you can point to a
+non-standard Z3 installation with "-DZ3_DIR=/path/to/z3/cmake/module" (which
+requires Z3 to be built with CMake). The results of the build process are
 libSymbolize.so, a pass that can be loaded into clang or opt; libSymRuntime.so,
 the support library that is linked with the target programs; and symcc, a
 wrapper script around clang that sets the right options to load our pass and
