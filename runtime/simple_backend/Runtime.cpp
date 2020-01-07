@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "Config.h"
+#include "LibcWrappers.h"
 #include "Shadow.h"
 
 #ifdef DEBUG_RUNTIME
@@ -72,6 +73,7 @@ void _sym_initialize(void) {
 #endif
 
   loadConfig();
+  initLibcWrappers();
 
   Z3_config cfg;
 

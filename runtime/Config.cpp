@@ -31,4 +31,8 @@ void loadConfig() {
   auto outputDir = getenv("SYMCC_OUTPUT_DIR");
   if (outputDir != nullptr)
     g_config.outputDir = outputDir;
+
+  auto inputFile = getenv("SYMCC_INPUT_FILE");
+  if (inputFile != nullptr)
+    g_config.inputFile = inputFile;
 }

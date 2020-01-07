@@ -59,7 +59,9 @@ $ ./test
 The program will execute the same computations as the uninstrumented version,
 but additionally the injected code will track computations symbolically and
 attempt to compute diverging inputs at each branch point. All data that the
-program reads from standard input is treated as symbolic.
+program reads from standard input is treated as symbolic; alternatively, you can
+set the environment variable SYMCC_INPUT_FILE to the name of a file whose
+contents will be treated as symbolic when read.
 
 
                              Using the Qsym backend

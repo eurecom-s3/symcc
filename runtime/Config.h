@@ -9,6 +9,9 @@ struct Config {
 
   /// The directory for storing new outputs.
   std::string outputDir = "/tmp/output";
+
+  /// The input file, if any.
+  std::string inputFile;
 };
 
 /// The global configuration object.

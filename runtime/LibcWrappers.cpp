@@ -1,10 +1,13 @@
 #include <cassert>
 #include <cstdlib>
 #include <cstring>
+#include <iostream>
 #include <string>
 #include <vector>
 
+#include <fcntl.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "Config.h"
@@ -19,6 +22,9 @@
 #endif
 
 namespace {
+
+/// The file descriptor referring to the symbolic input.
+static int inputFileDescriptor = -1;
 
 /// The current position in the (symbolic) input.
 static size_t inputOffset = 0;
@@ -40,6 +46,16 @@ void tryAlternative(E *value, SymExpr valueExpr, F caller) {
   tryAlternative(reinterpret_cast<intptr_t>(value), valueExpr, caller);
 }
 } // namespace
+
+void initLibcWrappers() {
+  if (g_config.fullyConcrete)
+    return;
+
+  if (g_config.inputFile.empty()) {
+    // Symbolic data comes from standard input.
+    inputFileDescriptor = 0;
+  }
+}
 
 extern "C" {
 
@@ -72,6 +88,21 @@ void *SYM(mmap)(void *addr, size_t len, int prot, int flags, int fildes,
   return result;
 }
 
+int SYM(open)(const char *path, int oflag, mode_t mode) {
+  auto result = open(path, oflag, mode);
+  _sym_set_return_expression(nullptr);
+
+  if (result >= 0 && strstr(path, g_config.inputFile.c_str()) != nullptr) {
+    if (inputFileDescriptor != -1)
+      std::cerr << "Warning: input file opened multiple times; this is not yet "
+                   "supported"
+                << std::endl;
+    inputFileDescriptor = result;
+  }
+
+  return result;
+}
+
 ssize_t SYM(read)(int fildes, void *buf, size_t nbyte) {
   tryAlternative(buf, _sym_get_parameter_expression(1), SYM(read));
   tryAlternative(nbyte, _sym_get_parameter_expression(2), SYM(read));
@@ -82,15 +113,30 @@ ssize_t SYM(read)(int fildes, void *buf, size_t nbyte) {
   if (result < 0)
     return result;
 
-  if (fildes == 0 && !g_config.fullyConcrete) {
-    // Reading from standard input. We treat everything as unconstrained
-    // symbolic data.
+  if (fildes == inputFileDescriptor) {
+    // Reading symbolic input.
     ReadWriteShadow shadow(buf, nbyte);
     std::generate(shadow.begin(), shadow.end(),
                   []() { return _sym_get_input_byte(inputOffset++); });
   } else if (!isConcrete(buf, nbyte)) {
     ReadWriteShadow shadow(buf, nbyte);
     std::fill(shadow.begin(), shadow.end(), nullptr);
+  }
+
+  return result;
+}
+
+FILE *SYM(fopen)(const char *pathname, const char *mode) {
+  auto result = fopen(pathname, mode);
+  _sym_set_return_expression(nullptr);
+
+  if (result != nullptr &&
+      strstr(pathname, g_config.inputFile.c_str()) != nullptr) {
+    if (inputFileDescriptor != -1)
+      std::cerr << "Warning: input file opened multiple times; this is not yet "
+                   "supported"
+                << std::endl;
+    inputFileDescriptor = fileno(result);
   }
 
   return result;
@@ -104,9 +150,8 @@ size_t SYM(fread)(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   auto result = fread(ptr, size, nmemb, stream);
   _sym_set_return_expression(nullptr);
 
-  if (stream == stdin && !g_config.fullyConcrete) {
-    // Reading from standard input. We treat everything as unconstrained
-    // symbolic data.
+  if (fileno(stream) == inputFileDescriptor) {
+    // Reading symbolic input.
     ReadWriteShadow shadow(ptr, result * size);
     std::generate(shadow.begin(), shadow.end(),
                   []() { return _sym_get_input_byte(inputOffset++); });
@@ -125,7 +170,7 @@ int SYM(getc)(FILE *stream) {
     return result;
   }
 
-  if (fileno(stream) == 0 && !g_config.fullyConcrete)
+  if (fileno(stream) == inputFileDescriptor)
     _sym_set_return_expression(_sym_build_zext(
         _sym_get_input_byte(inputOffset++), sizeof(int) * 8 - 8));
   else
@@ -138,7 +183,7 @@ int SYM(ungetc)(int c, FILE *stream) {
   auto result = ungetc(c, stream);
   _sym_set_return_expression(_sym_get_parameter_expression(0));
 
-  if (fileno(stream) == 0 && !g_config.fullyConcrete && result != EOF)
+  if (fileno(stream) == inputFileDescriptor && result != EOF)
     inputOffset--;
 
   return result;

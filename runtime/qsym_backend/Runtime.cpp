@@ -24,6 +24,7 @@
 
 // Runtime
 #include <Config.h>
+#include <LibcWrappers.h>
 #include <Shadow.h>
 
 // A macro to create SymExpr from ExprRef. Basically, we move the shared pointer
@@ -58,32 +59,37 @@ void _sym_initialize(void) {
     return;
 
   loadConfig();
+  initLibcWrappers();
   if (g_config.fullyConcrete)
     return;
 
   // Qsym requires the full input in a file
-  std::istreambuf_iterator<char> in_begin(std::cin), in_end;
-  std::vector<char> inputData(in_begin, in_end);
-  inputFileName = std::tmpnam(nullptr);
-  std::ofstream inputFile(inputFileName, std::ios::trunc);
-  std::copy(inputData.begin(), inputData.end(),
-            std::ostreambuf_iterator<char>(inputFile));
-  inputFile.close();
+  if (g_config.inputFile.empty()) {
+    std::istreambuf_iterator<char> in_begin(std::cin), in_end;
+    std::vector<char> inputData(in_begin, in_end);
+    inputFileName = std::tmpnam(nullptr);
+    std::ofstream inputFile(inputFileName, std::ios::trunc);
+    std::copy(inputData.begin(), inputData.end(),
+              std::ostreambuf_iterator<char>(inputFile));
+    inputFile.close();
 
 #ifdef DEBUG_RUNTIME
-  std::cout << "Loaded input:" << std::endl;
-  std::copy(inputData.begin(), inputData.end(),
-            std::ostreambuf_iterator<char>(std::cout));
-  std::cout << std::endl;
+    std::cout << "Loaded input:" << std::endl;
+    std::copy(inputData.begin(), inputData.end(),
+              std::ostreambuf_iterator<char>(std::cout));
+    std::cout << std::endl;
 #endif
 
-  atexit(deleteInputFile);
+    atexit(deleteInputFile);
 
-  // Restore some semblance of standard input
-  auto newStdin = freopen(inputFileName.c_str(), "r", stdin);
-  if (newStdin == nullptr) {
-    perror("Failed to reopen stdin");
-    exit(-1);
+    // Restore some semblance of standard input
+    auto newStdin = freopen(inputFileName.c_str(), "r", stdin);
+    if (newStdin == nullptr) {
+      perror("Failed to reopen stdin");
+      exit(-1);
+    }
+  } else {
+    inputFileName = g_config.inputFile;
   }
 
   g_solver = new Solver(inputFileName, g_config.outputDir, ""s);
