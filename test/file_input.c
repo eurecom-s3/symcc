@@ -8,9 +8,10 @@
 #include <unistd.h>
 
 int main(int argc, char* argv[]) {
+  // ANY-NOT: Warning
   int fd = open(argv[1], O_RDONLY);
   if (fd < 0) {
-    perror("failed to open input file");
+    perror("failed to open the input file");
     return -1;
   }
 
@@ -23,11 +24,25 @@ int main(int argc, char* argv[]) {
   // SIMPLE: Trying to solve
   // QSYM-COUNT-2: SMT
   // ANY: Not sure
-  // ANY-NOT: Warning
   if (input == 42)
-    printf("This is the answer.");
+    printf("This is the answer.\n");
   else
-    printf("Not sure this is correct...");
+    printf("Not sure this is correct...\n");
+
+  // ANY: Warning
+  FILE *file = fopen(argv[1], "r");
+  if (file == NULL) {
+    perror("failed to open the input file");
+    return -1;
+  }
+
+  // SIMPLE: Trying to solve
+  // QSYM-COUNT-2: SMT
+  // ANY: Yep
+  if (input == 5)
+    printf("Yep, it's the test input.\n");
+  else
+    printf("Not the test input!\n");
 
   return 0;
 }
