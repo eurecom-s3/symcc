@@ -1,5 +1,5 @@
 // RUN: %symcc -O2 %s -o %t
-// RUN: /usr/bin/echo -ne "\x05\x00\x00\x00aaaa" > %T/%basename_t.input
+// RUN: /bin/echo -ne "\x05\x00\x00\x00aaaa" > %T/%basename_t.input
 // RUN: env SYMCC_INPUT_FILE=%T/%basename_t.input %t %T/%basename_t.input 2>&1 | %filecheck %s
 
 #include <fcntl.h>
