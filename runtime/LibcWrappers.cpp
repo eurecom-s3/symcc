@@ -93,7 +93,8 @@ int SYM(open)(const char *path, int oflag, mode_t mode) {
   auto result = open(path, oflag, mode);
   _sym_set_return_expression(nullptr);
 
-  if (result >= 0 && strstr(path, g_config.inputFile.c_str()) != nullptr) {
+  if (result >= 0 && !g_config.fullyConcrete && !g_config.inputFile.empty() &&
+      strstr(path, g_config.inputFile.c_str()) != nullptr) {
     if (inputFileDescriptor != -1)
       std::cerr << "Warning: input file opened multiple times; this is not yet "
                    "supported"
@@ -147,7 +148,8 @@ FILE *SYM(fopen)(const char *pathname, const char *mode) {
   auto result = fopen(pathname, mode);
   _sym_set_return_expression(nullptr);
 
-  if (result != nullptr &&
+  if (result != nullptr && !g_config.fullyConcrete &&
+      !g_config.inputFile.empty() &&
       strstr(pathname, g_config.inputFile.c_str()) != nullptr) {
     if (inputFileDescriptor != -1)
       std::cerr << "Warning: input file opened multiple times; this is not yet "
