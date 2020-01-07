@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -98,6 +99,7 @@ int SYM(open)(const char *path, int oflag, mode_t mode) {
                    "supported"
                 << std::endl;
     inputFileDescriptor = result;
+    inputOffset = 0;
   }
 
   return result;
@@ -126,6 +128,21 @@ ssize_t SYM(read)(int fildes, void *buf, size_t nbyte) {
   return result;
 }
 
+off_t SYM(lseek)(int fd, off_t offset, int whence) {
+  auto result = lseek(fd, offset, whence);
+  _sym_set_return_expression(nullptr);
+  if (result == (off_t)-1)
+    return result;
+
+  if (whence == SEEK_SET)
+    _sym_set_return_expression(_sym_get_parameter_expression(1));
+
+  if (fd == inputFileDescriptor)
+    inputOffset = result;
+
+  return result;
+}
+
 FILE *SYM(fopen)(const char *pathname, const char *mode) {
   auto result = fopen(pathname, mode);
   _sym_set_return_expression(nullptr);
@@ -137,6 +154,7 @@ FILE *SYM(fopen)(const char *pathname, const char *mode) {
                    "supported"
                 << std::endl;
     inputFileDescriptor = fileno(result);
+    inputOffset = 0;
   }
 
   return result;
@@ -159,6 +177,21 @@ size_t SYM(fread)(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     ReadWriteShadow shadow(ptr, result * size);
     std::fill(shadow.begin(), shadow.end(), nullptr);
   }
+
+  return result;
+}
+
+int SYM(fseek)(FILE *stream, long offset, int whence) {
+  auto result = fseek(stream, offset, whence);
+  _sym_set_return_expression(nullptr);
+  if (result == -1)
+    return result;
+
+  if (whence == SEEK_SET)
+    _sym_set_return_expression(_sym_get_parameter_expression(1));
+
+  if (fileno(stream) == inputFileDescriptor)
+    inputOffset = result;
 
   return result;
 }
