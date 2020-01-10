@@ -2,6 +2,7 @@
 
 #include <llvm/ADT/SmallPtrSet.h>
 #include <llvm/IR/GetElementPtrTypeIterator.h>
+#include <llvm/IR/Intrinsics.h>
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
 
 #include "Runtime.h"
@@ -242,6 +243,14 @@ void Symbolizer::handleIntrinsicCall(CallBase &I) {
     // on the stack. We just concretize.
 
     errs() << "Warning: using concrete value for return address\n";
+    break;
+  }
+  case Intrinsic::bswap: {
+    // Bswap changes the endian-ness of integer values.
+
+    IRBuilder<> IRB(&I);
+    auto swapped = buildRuntimeCall(IRB, runtime.buildBswap, I.getOperand(0));
+    registerSymbolicComputation(swapped, &I);
     break;
   }
   default:

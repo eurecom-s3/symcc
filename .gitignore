@@ -39,3 +39,4 @@ TAGS
 
 # Clang tooling
 compile_commands.json
+.clangd

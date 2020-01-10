@@ -3,6 +3,7 @@
 #include <cassert>
 #include <numeric>
 
+#include "RuntimeCommon.h"
 #include "Shadow.h"
 
 namespace {
@@ -138,4 +139,10 @@ SymExpr _sym_build_extract(SymExpr expr, uint64_t offset, uint64_t length,
   }
 
   return result;
+}
+
+SymExpr _sym_build_bswap(SymExpr expr) {
+  size_t bits = _sym_bits_helper(expr);
+  assert((bits % 16 == 0) && "bswap is not applicable");
+  return _sym_build_extract(expr, 0, bits / 8, true);
 }

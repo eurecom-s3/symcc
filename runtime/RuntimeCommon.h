@@ -36,7 +36,7 @@ SymExpr _sym_build_false();
 SymExpr _sym_build_bool(bool value);
 
 /*
- * Arithmetic
+ * Arithmetic and shifts
  */
 SymExpr _sym_build_add(SymExpr a, SymExpr b);
 SymExpr _sym_build_sub(SymExpr a, SymExpr b);
@@ -98,6 +98,7 @@ SymExpr _sym_build_float_unordered_not_equal(SymExpr a, SymExpr b);
 SymExpr _sym_build_sext(SymExpr expr, uint8_t bits);
 SymExpr _sym_build_zext(SymExpr expr, uint8_t bits);
 SymExpr _sym_build_trunc(SymExpr expr, uint8_t bits);
+SymExpr _sym_build_bswap(SymExpr expr);
 SymExpr _sym_build_int_to_float(SymExpr value, int is_double, int is_signed);
 SymExpr _sym_build_float_to_float(SymExpr expr, int to_double);
 SymExpr _sym_build_bits_to_float(SymExpr expr, int to_double);

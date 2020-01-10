@@ -19,6 +19,7 @@ struct Runtime {
   llvm::Value *buildSExt{};
   llvm::Value *buildZExt{};
   llvm::Value *buildTrunc{};
+  llvm::Value *buildBswap{};
   llvm::Value *buildIntToFloat{};
   llvm::Value *buildFloatToFloat{};
   llvm::Value *buildBitsToFloat{};

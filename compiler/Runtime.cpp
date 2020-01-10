@@ -39,6 +39,7 @@ Runtime::Runtime(Module &M) {
   buildSExt = import(M, "_sym_build_sext", ptrT, ptrT, int8T);
   buildZExt = import(M, "_sym_build_zext", ptrT, ptrT, int8T);
   buildTrunc = import(M, "_sym_build_trunc", ptrT, ptrT, int8T);
+  buildBswap = import(M, "_sym_build_bswap", ptrT, ptrT);
   buildIntToFloat = import(M, "_sym_build_int_to_float", ptrT, ptrT,
                            IRB.getInt1Ty(), IRB.getInt1Ty());
   buildFloatToFloat =
