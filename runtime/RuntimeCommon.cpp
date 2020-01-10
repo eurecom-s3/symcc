@@ -128,8 +128,9 @@ SymExpr _sym_build_extract(SymExpr expr, uint64_t offset, uint64_t length,
                                  totalBits - offset * 8 - 8);
     for (size_t i = 1; i < length; i++) {
       result = _sym_concat_helper(
-          result, _sym_extract_helper(expr, totalBits - (offset + i) * 8 - 1,
-                                      totalBits - (offset + i + 1) * 8));
+          _sym_extract_helper(expr, totalBits - (offset + i) * 8 - 1,
+                              totalBits - (offset + i + 1) * 8),
+          result);
     }
   } else {
     result = _sym_extract_helper(expr, totalBits - offset * 8 - 1,
