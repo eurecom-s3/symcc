@@ -20,11 +20,6 @@ extern "C" {
 void _sym_initialize(void);
 
 /*
- * Interface for programs
- */
-uint32_t sym_make_symbolic(const char *name, uint32_t value, uint8_t bits);
-
-/*
  * Construction of simple values
  */
 SymExpr _sym_build_integer(uint64_t value, uint8_t bits);

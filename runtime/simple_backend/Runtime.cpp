@@ -98,19 +98,6 @@ void _sym_initialize(void) {
   g_false = Z3_mk_false(g_context);
 }
 
-uint32_t sym_make_symbolic(const char *name, uint32_t value, uint8_t bits) {
-  /* TODO find a way to make this more generic, not just for uint32_t */
-
-  /* This function is the connection between the target program and our
-     instrumentation; it serves as a way to mark variables as symbolic. We just
-     return the concrete value but also set the expression for the return value;
-     the instrumentation knows to treat this function specially and check the
-     returned expression even though it's an external call. */
-
-  _sym_set_return_expression(build_variable(name, bits));
-  return value;
-}
-
 Z3_ast _sym_build_integer(uint64_t value, uint8_t bits) {
   return Z3_mk_int(g_context, value, Z3_mk_bv_sort(g_context, bits));
 }

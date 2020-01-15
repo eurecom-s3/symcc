@@ -293,15 +293,10 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
   if (!callee)
     tryAlternative(IRB, I.getCalledValue());
 
-  auto targetName = callee ? callee->getName() : StringRef{};
-  bool isMakeSymbolic = (targetName == "sym_make_symbolic");
-
-  if (!isMakeSymbolic) {
-    for (Use &arg : I.args())
-      IRB.CreateCall(runtime.setParameterExpression,
-                     {ConstantInt::get(IRB.getInt8Ty(), arg.getOperandNo()),
-                      getSymbolicExpressionOrNull(arg)});
-  }
+  for (Use &arg : I.args())
+    IRB.CreateCall(runtime.setParameterExpression,
+                   {ConstantInt::get(IRB.getInt8Ty(), arg.getOperandNo()),
+                    getSymbolicExpressionOrNull(arg)});
 
   if (!I.user_empty()) {
     IRB.CreateCall(runtime.setReturnExpression,
