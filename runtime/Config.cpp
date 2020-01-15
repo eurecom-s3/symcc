@@ -35,4 +35,8 @@ void loadConfig() {
   auto inputFile = getenv("SYMCC_INPUT_FILE");
   if (inputFile != nullptr)
     g_config.inputFile = inputFile;
+
+  auto pruning = getenv("SYMCC_ENABLE_LINEARIZATION");
+  if (pruning != nullptr)
+    g_config.pruning = checkFlagString(pruning);
 }

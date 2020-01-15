@@ -93,7 +93,8 @@ void _sym_initialize(void) {
   }
 
   g_solver = new Solver(inputFileName, g_config.outputDir, ""s);
-  g_expr_builder = SymbolicExprBuilder::create();
+  g_expr_builder = g_config.pruning ? PruneExprBuilder::create()
+                                    : SymbolicExprBuilder::create();
 }
 
 SymExpr _sym_build_integer(uint64_t value, uint8_t bits) {
@@ -308,3 +309,19 @@ UNSUPPORTED(SymExpr _sym_build_float_to_unsigned_integer(SymExpr expr,
 
 #undef UNSUPPORTED
 #undef H
+
+//
+// Call-stack tracing
+//
+
+void _sym_notify_call(uintptr_t site_id) {
+  g_call_stack_manager.visitCall(site_id);
+}
+
+void _sym_notify_ret(uintptr_t site_id) {
+  g_call_stack_manager.visitRet(site_id);
+}
+
+void _sym_notify_basic_block(uintptr_t site_id) {
+  g_call_stack_manager.visitBasicBlock(site_id);
+}

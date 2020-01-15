@@ -50,21 +50,24 @@ bool SymbolizePass::runOnFunction(Function &F) {
   DEBUG(errs() << "Symbolizing function ");
   DEBUG(errs().write_escaped(functionName) << '\n');
 
-  SmallVector<Instruction*, 0> allInstructions;
+  SmallVector<Instruction *, 0> allInstructions;
   allInstructions.reserve(F.getInstructionCount());
-  for (auto& I: instructions(F))
+  for (auto &I : instructions(F))
     allInstructions.push_back(&I);
 
   Symbolizer symbolizer(*F.getParent());
-  // DEBUG(errs() << F << '\n');
   symbolizer.symbolizeFunctionArguments(F);
 
-  for (auto instPtr: allInstructions)
+  for (auto &basicBlock : F)
+    symbolizer.insertBasicBlockNotification(basicBlock);
+
+  for (auto instPtr : allInstructions)
     symbolizer.visit(instPtr);
 
   symbolizer.finalizePHINodes();
   symbolizer.shortCircuitExpressionUses();
 
+  // DEBUG(errs() << F << '\n');
   assert(!verifyFunction(F, &errs()) &&
          "SymbolizePass produced invalid bitcode");
 

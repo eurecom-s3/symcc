@@ -42,6 +42,9 @@ struct Runtime {
   llvm::Value *readMemory{};
   llvm::Value *writeMemory{};
   llvm::Value *buildExtract{};
+  llvm::Value *notifyCall{};
+  llvm::Value *notifyRet{};
+  llvm::Value *notifyBasicBlock{};
 
   /// Mapping from icmp predicates to the functions that build the corresponding
   /// symbolic expressions.

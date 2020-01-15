@@ -140,6 +140,13 @@ void _sym_memset(uint8_t *memory, SymExpr value, size_t length);
 void _sym_memmove(uint8_t *dest, const uint8_t *src, size_t length);
 SymExpr _sym_build_extract(SymExpr expr, uint64_t offset, uint64_t length,
                            bool little_endian);
+
+/*
+ * Call-stack tracing
+ */
+void _sym_notify_call(uintptr_t site_id);
+void _sym_notify_ret(uintptr_t site_id);
+void _sym_notify_basic_block(uintptr_t site_id);
 }
 
 #endif

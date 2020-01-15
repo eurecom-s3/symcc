@@ -468,3 +468,8 @@ SymExpr _sym_extract_helper(SymExpr expr, size_t first_bit, size_t last_bit) {
 size_t _sym_bits_helper(SymExpr expr) {
   return Z3_get_bv_sort_size(g_context, Z3_get_sort(g_context, expr));
 }
+
+/* No call-stack tracing */
+void _sym_notify_call(uintptr_t) {}
+void _sym_notify_ret(uintptr_t) {}
+void _sym_notify_basic_block(uintptr_t) {}

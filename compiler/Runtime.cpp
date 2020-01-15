@@ -135,6 +135,10 @@ Runtime::Runtime(Module &M) {
                        ptrT, int8T);
   buildExtract = import(M, "_sym_build_extract", ptrT, ptrT, IRB.getInt64Ty(),
                         IRB.getInt64Ty(), int8T);
+
+  notifyCall = import(M, "_sym_notify_call", voidT, intPtrType);
+  notifyRet = import(M, "_sym_notify_ret", voidT, intPtrType);
+  notifyBasicBlock = import(M, "_sym_notify_basic_block", voidT, intPtrType);
 }
 
 /// Decide whether a function is called symbolically.

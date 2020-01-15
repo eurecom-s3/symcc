@@ -12,6 +12,9 @@ struct Config {
 
   /// The input file, if any.
   std::string inputFile;
+
+  /// Do we prune expressions on hot paths?
+  bool pruning = false;
 };
 
 /// The global configuration object.

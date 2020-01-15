@@ -1,5 +1,6 @@
 #include "Symbolizer.h"
 
+#include <cstdint>
 #include <llvm/ADT/SmallPtrSet.h>
 #include <llvm/IR/GetElementPtrTypeIterator.h>
 #include <llvm/IR/Intrinsics.h>
@@ -21,6 +22,12 @@ void Symbolizer::symbolizeFunctionArguments(Function &F) {
       symbolicExpressions[&arg] = IRB.CreateCall(runtime.getParameterExpression,
                                                  IRB.getInt8(arg.getArgNo()));
   }
+}
+
+void Symbolizer::insertBasicBlockNotification(llvm::BasicBlock &B) {
+  IRBuilder<> IRB(&*B.getFirstInsertionPt());
+  IRB.CreateCall(runtime.notifyBasicBlock,
+                 IRB.getInt64(reinterpret_cast<uintptr_t>(&B)));
 }
 
 void Symbolizer::finalizePHINodes() {
@@ -270,13 +277,18 @@ void Symbolizer::handleInlineAssembly(CallInst &I) {
 }
 
 void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
+  IRBuilder<> IRB(returnPoint);
+  IRB.CreateCall(runtime.notifyRet,
+                 IRB.getInt64(reinterpret_cast<uintptr_t>(&I)));
+  IRB.SetInsertPoint(&I);
+  IRB.CreateCall(runtime.notifyCall,
+                 IRB.getInt64(reinterpret_cast<uintptr_t>(&I)));
+
   auto callee = I.getCalledFunction();
   if (callee && callee->isIntrinsic()) {
     handleIntrinsicCall(I);
     return;
   }
-
-  IRBuilder<> IRB(&I);
 
   if (!callee)
     tryAlternative(IRB, I.getCalledValue());

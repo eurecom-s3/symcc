@@ -1,6 +1,7 @@
 #ifndef SYMBOLIZE_H
 #define SYMBOLIZE_H
 
+#include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/InstVisitor.h>
 #include <llvm/IR/ValueMap.h>
@@ -16,6 +17,9 @@ public:
 
   /// Insert code to obtain the symbolic expressions for the function arguments.
   void symbolizeFunctionArguments(llvm::Function &F);
+
+  /// Insert a call to the run-time library to notify it of the basic block entry.
+  void insertBasicBlockNotification(llvm::BasicBlock &B);
 
   /// Finish the processing of PHI nodes.
   ///
