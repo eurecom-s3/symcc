@@ -92,7 +92,8 @@ void _sym_initialize(void) {
     inputFileName = g_config.inputFile;
   }
 
-  g_solver = new Solver(inputFileName, g_config.outputDir, ""s);
+  g_solver =
+      new Solver(inputFileName, g_config.outputDir, g_config.aflCoverageMap);
   g_expr_builder = g_config.pruning ? PruneExprBuilder::create()
                                     : SymbolicExprBuilder::create();
 }

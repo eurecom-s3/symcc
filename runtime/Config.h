@@ -15,6 +15,12 @@ struct Config {
 
   /// Do we prune expressions on hot paths?
   bool pruning = false;
+
+  /// The AFL coverage map to initialize with.
+  ///
+  /// Specifying a file name here allows us to track already covered program
+  /// locations across multiple program executions.
+  std::string aflCoverageMap = "";
 };
 
 /// The global configuration object.

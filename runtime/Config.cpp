@@ -39,4 +39,8 @@ void loadConfig() {
   auto pruning = getenv("SYMCC_ENABLE_LINEARIZATION");
   if (pruning != nullptr)
     g_config.pruning = checkFlagString(pruning);
+
+  auto aflCoverageMap = getenv("SYMCC_AFL_COVERAGE_MAP");
+  if (aflCoverageMap != nullptr)
+    g_config.aflCoverageMap = aflCoverageMap;
 }
