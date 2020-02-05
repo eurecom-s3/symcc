@@ -36,7 +36,7 @@ struct CLI {
 fn main() -> Result<()> {
     let options = CLI::from_args();
     if !options.output_dir.is_dir() {
-        println!(
+        eprintln!(
             "The directory {} does not exist!",
             options.output_dir.display()
         );
@@ -45,221 +45,74 @@ fn main() -> Result<()> {
 
     let afl_queue = options.output_dir.join(&options.fuzzer_name).join("queue");
     if !afl_queue.is_dir() {
-        println!("The AFL queue {} does not exist!", afl_queue.display());
+        eprintln!("The AFL queue {} does not exist!", afl_queue.display());
         return Ok(());
     }
 
     let symcc_dir = options.output_dir.join(&options.name);
-    fs::create_dir(&symcc_dir)
-        .with_context(|| format!("Failed to create SymCC's directory {}", symcc_dir.display()))?;
-    let symcc_queue = TestcaseDir {
-        path: symcc_dir.join("queue"),
-        current_id: 0,
-    };
-    fs::create_dir(&symcc_queue.path).with_context(|| {
-        format!(
-            "Failed to create SymCC's queue {}",
-            symcc_queue.path.display()
-        )
-    })?;
-    let symcc_hangs = TestcaseDir {
-        path: symcc_dir.join("hangs"),
-        current_id: 0,
-    };
-    fs::create_dir(&symcc_hangs.path)
-        .with_context(|| format!("Failed to create {}", symcc_hangs.path.display()))?;
-    let symcc_crashes = TestcaseDir {
-        path: symcc_dir.join("crashes"),
-        current_id: 0,
-    };
-    fs::create_dir(&symcc_crashes.path)
-        .with_context(|| format!("Failed to create {}", symcc_crashes.path.display()))?;
-
-    let current_input = symcc_dir.join(".cur_input");
-    let use_standard_input = !options.command.contains(&String::from("@@"));
-    let fixed_command = insert_input_file(&options.command, &current_input);
-
-    let mut analysis_command = Command::new("timeout");
-    analysis_command
-        .args(&["-k", "5", &TIMEOUT.to_string()])
-        .args(&fixed_command)
-        .env("SYMCC_ENABLE_LINEARIZATION", "1")
-        .env("SYMCC_AFL_COVERAGE_MAP", symcc_dir.join("bitmap"));
-    if use_standard_input {
-        analysis_command.stdin(Stdio::piped());
-    } else {
-        analysis_command.stdin(Stdio::null());
-        analysis_command.env("SYMCC_INPUT_FILE", &current_input);
+    if symcc_dir.is_dir() {
+        eprintln!(
+            "{} already exists; we do not currently support resuming",
+            symcc_dir.display()
+        );
+        return Ok(());
     }
 
-    let afl_stats_file_path = options
-        .output_dir
-        .join(&options.fuzzer_name)
-        .join("fuzzer_stats");
-    let mut afl_stats_file = File::open(&afl_stats_file_path).with_context(|| {
-        format!(
-            "Failed to open the fuzzer's stats at {}",
-            afl_stats_file_path.display()
-        )
-    })?;
-    let mut afl_stats = String::new();
-    afl_stats_file
-        .read_to_string(&mut afl_stats)
-        .with_context(|| {
-            format!(
-                "Failed to read the fuzzer's stats at {}",
-                afl_stats_file_path.display()
-            )
-        })?;
-    let afl_command: Vec<_> = afl_stats
-        .lines()
-        .find(|&l| l.starts_with("command_line"))
-        .expect("The fuzzer stats don't contain the command line")
-        .splitn(2, ':')
-        .skip(1)
-        .next()
-        .expect("The fuzzer stats follow an unknown format")
-        .trim()
-        .split_whitespace()
-        .collect();
-    let afl_target_command: Vec<_> = afl_command
-        .iter()
-        .skip_while(|s| **s != "--")
-        .map(|s| OsString::from(s))
-        .collect();
-    let afl_binary_dir = Path::new(
-        afl_command
-            .get(0)
-            .expect("The AFL command is unexpectedly short"),
-    )
-    .parent()
-    .unwrap();
+    let symcc = SymCC::new(symcc_dir.clone(), &options.command);
+    let afl_config = AflConfig::from(options.output_dir.join(&options.fuzzer_name))?;
+    let mut state = State::initialize(symcc_dir)?;
 
-    let env = Environment {
-        afl_show_map: afl_binary_dir.join("afl-showmap"),
-        afl_target_command: afl_target_command,
-        use_standard_input: use_standard_input,
-    };
-
-    let mut state = State {
-        current_bitmap: [0u8; 65536],
-        queue: symcc_queue,
-        hangs: symcc_hangs,
-        crashes: symcc_crashes,
-    };
-
-    let mut processed_files = HashSet::new();
     loop {
-        let mut test_files: Vec<_> = fs::read_dir(&afl_queue)
-            .with_context(|| {
-                format!(
-                    "Failed to open the fuzzer's queue at {}",
-                    afl_queue.display()
-                )
-            })?
-            .map(|entry| entry.map(|e| e.path()))
-            .collect::<io::Result<Vec<_>>>()
-            .with_context(|| {
-                format!(
-                    "Failed to read the fuzzer's queue at {}",
-                    afl_queue.display()
-                )
-            })?
-            .into_iter()
-            .filter(|path| path.is_file() && !processed_files.contains(path))
-            .collect();
-
-        test_files.sort_by_cached_key(|path| TestcaseScore::new(path));
-        test_files.reverse();
-
+        let test_files = afl_config
+            .new_testcases(&state.processed_files)
+            .context("Failed to check for new test cases")?;
         if test_files.is_empty() {
             println!("Waiting for new test cases...");
             thread::sleep(Duration::from_secs(5));
-        } else {
-            for input in test_files {
-                println!("Running on input {}", input.display());
-                fs::copy(&input, &current_input).with_context(|| {
+            continue;
+        }
+
+        for input in test_files {
+            println!("Running on input {}", input.display());
+
+            let tmp_dir = tempdir()
+                .context("Failed to create a temporary directory for this execution of SymCC")?;
+
+            let output_dir = symcc
+                .run(&input, tmp_dir.path())
+                .context("Failed to run SymCC")?;
+
+            for maybe_new_test in fs::read_dir(&output_dir).with_context(|| {
+                format!(
+                    "Failed to read the generated test cases at {}",
+                    output_dir.display()
+                )
+            })? {
+                let new_test = maybe_new_test.with_context(|| {
                     format!(
-                        "Failed to copy the test case {} to our workbench at {}",
-                        input.display(),
-                        current_input.display()
+                        "Failed to read all test cases from {}",
+                        output_dir.display()
                     )
                 })?;
 
-                let tmp_dir = tempdir().context(
-                    "Failed to create a temporary directory for this execution of SymCC",
+                process_new_testcase(
+                    new_test.path(),
+                    &input,
+                    &tmp_dir,
+                    symcc.use_standard_input,
+                    &afl_config,
+                    &mut state,
                 )?;
-                let output_dir = tmp_dir.path().join("output");
-                fs::create_dir(&output_dir).with_context(|| {
-                    format!(
-                        "Failed to create the output directory {} for SymCC",
-                        output_dir.display()
-                    )
-                })?;
 
-                let log_file_path = tmp_dir.path().join("symcc.log");
-                let log_file = File::create(&log_file_path).with_context(|| {
-                    format!(
-                        "Failed to create SymCC's log file at {}",
-                        log_file_path.display()
-                    )
-                })?;
-                let mut child = analysis_command
-                    .env("SYMCC_OUTPUT_DIR", &output_dir)
-                    .stdout(
-                        log_file
-                            .try_clone()
-                            .context("Failed to open SymCC's log file a second time")?,
-                    )
-                    .stderr(log_file)
-                    .spawn()
-                    .context("Failed to run SymCC")?;
-
-                if use_standard_input {
-                    io::copy(
-                        &mut File::open(&current_input).with_context(|| {
-                            format!(
-                                "Failed to read the test input at {}",
-                                current_input.display()
-                            )
-                        })?,
-                        child
-                            .stdin
-                            .as_mut()
-                            .expect("Failed to pipe to the child's standard input"),
-                    )
-                    .context("Failed to pipe the test input to SymCC")?;
-                }
-
-                let result = child.wait().context("Failed to wait for SymCC")?;
-                if let Some(code) = result.code() {
-                    println!("SymCC returned code {}", code);
-                }
-
-                for maybe_new_test in fs::read_dir(&output_dir).with_context(|| {
-                    format!(
-                        "Failed to read the generated test cases at {}",
-                        output_dir.display()
-                    )
-                })? {
-                    let new_test = maybe_new_test.with_context(|| {
-                        format!(
-                            "Failed to read all test cases from {}",
-                            output_dir.display()
-                        )
-                    })?;
-
-                    process_new_testcase(new_test.path(), &input, &tmp_dir, &env, &mut state)?;
-
-                    // TODO log copy operation and total number of copied tests
-                }
-
-                processed_files.insert(input);
+                // TODO log copy operation and total number of copied tests
             }
+
+            state.processed_files.insert(input);
         }
     }
 }
 
+/// Replace the first '@@' in the given command line with the input file.
 fn insert_input_file<S: AsRef<OsStr>, P: AsRef<Path>>(
     command: &[S],
     input_file: P,
@@ -295,7 +148,7 @@ impl TestcaseScore {
     /// Score a test case.
     ///
     /// If anything goes wrong, return the minimum score.
-    fn new<P: AsRef<Path>>(t: P) -> TestcaseScore {
+    fn new<P: AsRef<Path>>(t: P) -> Self {
         let size = match fs::metadata(&t) {
             Err(e) => {
                 // Has the file disappeared?
@@ -385,15 +238,93 @@ fn copy_testcase<P: AsRef<Path>, Q: AsRef<Path>>(
 /// Information on the run-time environment.
 ///
 /// This should not change during execution.
-struct Environment {
+struct AflConfig {
     /// The location of the afl-showmap program.
-    afl_show_map: PathBuf,
+    show_map: PathBuf,
 
     /// The command that AFL uses to invoke the target program.
-    afl_target_command: Vec<OsString>,
+    target_command: Vec<OsString>,
 
-    /// Does the target program read from standard input?
-    use_standard_input: bool,
+    /// The fuzzer instance's queue of test cases.
+    queue: PathBuf,
+}
+
+impl AflConfig {
+    /// Read the AFL configuration from a fuzzer instance's output directory.
+    fn from<P: AsRef<Path>>(fuzzer_output: P) -> Result<Self> {
+        let afl_stats_file_path = fuzzer_output.as_ref().join("fuzzer_stats");
+        let mut afl_stats_file = File::open(&afl_stats_file_path).with_context(|| {
+            format!(
+                "Failed to open the fuzzer's stats at {}",
+                afl_stats_file_path.display()
+            )
+        })?;
+        let mut afl_stats = String::new();
+        afl_stats_file
+            .read_to_string(&mut afl_stats)
+            .with_context(|| {
+                format!(
+                    "Failed to read the fuzzer's stats at {}",
+                    afl_stats_file_path.display()
+                )
+            })?;
+        let afl_command: Vec<_> = afl_stats
+            .lines()
+            .find(|&l| l.starts_with("command_line"))
+            .expect("The fuzzer stats don't contain the command line")
+            .splitn(2, ':')
+            .skip(1)
+            .next()
+            .expect("The fuzzer stats follow an unknown format")
+            .trim()
+            .split_whitespace()
+            .collect();
+        let afl_target_command: Vec<_> = afl_command
+            .iter()
+            .skip_while(|s| **s != "--")
+            .map(|s| OsString::from(s))
+            .collect();
+        let afl_binary_dir = Path::new(
+            afl_command
+                .get(0)
+                .expect("The AFL command is unexpectedly short"),
+        )
+        .parent()
+        .unwrap();
+
+        Ok(AflConfig {
+            show_map: afl_binary_dir.join("afl-showmap"),
+            target_command: afl_target_command,
+            queue: fuzzer_output.as_ref().join("queue"),
+        })
+    }
+
+    /// Return the unseen test cases of this fuzzer, ordered by descending
+    /// relevance.
+    fn new_testcases(&self, seen: &HashSet<PathBuf>) -> Result<Vec<PathBuf>> {
+        let mut test_files: Vec<_> = fs::read_dir(&self.queue)
+            .with_context(|| {
+                format!(
+                    "Failed to open the fuzzer's queue at {}",
+                    self.queue.display()
+                )
+            })?
+            .map(|entry| entry.map(|e| e.path()))
+            .collect::<io::Result<Vec<_>>>()
+            .with_context(|| {
+                format!(
+                    "Failed to read the fuzzer's queue at {}",
+                    self.queue.display()
+                )
+            })?
+            .into_iter()
+            .filter(|path| path.is_file() && !seen.contains(path))
+            .collect();
+
+        test_files.sort_by_cached_key(|path| TestcaseScore::new(path));
+        test_files.reverse();
+        Ok(test_files)
+    }
 }
 
 /// Mutable run-time state.
@@ -402,6 +333,9 @@ struct Environment {
 struct State {
     /// The cumulative coverage of all test cases generated so far.
     current_bitmap: AflMap,
+
+    /// The AFL test cases that have been analyzed so far.
+    processed_files: HashSet<PathBuf>,
 
     /// The place to put new and useful test cases.
     queue: TestcaseDir,
@@ -413,23 +347,171 @@ struct State {
     crashes: TestcaseDir,
 }
 
+impl State {
+    /// Initialize the run-time environment in the given output directory.
+    ///
+    /// This involves creating the output directory and all required
+    /// subdirectories.
+    fn initialize<P: AsRef<Path>>(output_dir: P) -> Result<Self> {
+        let symcc_dir = output_dir.as_ref();
+
+        fs::create_dir(&symcc_dir).with_context(|| {
+            format!("Failed to create SymCC's directory {}", symcc_dir.display())
+        })?;
+        let symcc_queue = TestcaseDir {
+            path: symcc_dir.join("queue"),
+            current_id: 0,
+        };
+        fs::create_dir(&symcc_queue.path).with_context(|| {
+            format!(
+                "Failed to create SymCC's queue {}",
+                symcc_queue.path.display()
+            )
+        })?;
+        let symcc_hangs = TestcaseDir {
+            path: symcc_dir.join("hangs"),
+            current_id: 0,
+        };
+        fs::create_dir(&symcc_hangs.path)
+            .with_context(|| format!("Failed to create {}", symcc_hangs.path.display()))?;
+        let symcc_crashes = TestcaseDir {
+            path: symcc_dir.join("crashes"),
+            current_id: 0,
+        };
+        fs::create_dir(&symcc_crashes.path)
+            .with_context(|| format!("Failed to create {}", symcc_crashes.path.display()))?;
+
+        Ok(State {
+            current_bitmap: [0u8; 65536],
+            processed_files: HashSet::new(),
+            queue: symcc_queue,
+            hangs: symcc_hangs,
+            crashes: symcc_crashes,
+        })
+    }
+}
+
+/// The run-time configuration of SymCC.
+struct SymCC {
+    /// Do we pass data to standard input?
+    use_standard_input: bool,
+
+    /// The cumulative bitmap for branch pruning.
+    bitmap: PathBuf,
+
+    /// The place to store the current input.
+    input_file: PathBuf,
+
+    /// The command to run.
+    command: Vec<OsString>,
+}
+
+impl SymCC {
+    /// Create a new SymCC configuration.
+    fn new(output_dir: PathBuf, command: &Vec<String>) -> Self {
+        let input_file = output_dir.join(".cur_input");
+
+        SymCC {
+            use_standard_input: command.contains(&String::from("@@")),
+            bitmap: output_dir.join("bitmap"),
+            command: insert_input_file(command, &input_file),
+            input_file: input_file,
+        }
+    }
+
+    /// Run SymCC on the given input, writing results to the provided temporary
+    /// directory.
+    fn run<P: AsRef<Path>, Q: AsRef<Path>>(&self, input: P, tmp_dir: Q) -> Result<PathBuf> {
+        fs::copy(&input, &self.input_file).with_context(|| {
+            format!(
+                "Failed to copy the test case {} to our workbench at {}",
+                input.as_ref().display(),
+                self.input_file.display()
+            )
+        })?;
+
+        let output_dir = tmp_dir.as_ref().join("output");
+        fs::create_dir(&output_dir).with_context(|| {
+            format!(
+                "Failed to create the output directory {} for SymCC",
+                output_dir.display()
+            )
+        })?;
+
+        let log_file_path = tmp_dir.as_ref().join("symcc.log");
+        let log_file = File::create(&log_file_path).with_context(|| {
+            format!(
+                "Failed to create SymCC's log file at {}",
+                log_file_path.display()
+            )
+        })?;
+
+        let mut analysis_command = Command::new("timeout");
+        analysis_command
+            .args(&["-k", "5", &TIMEOUT.to_string()])
+            .args(&self.command)
+            .env("SYMCC_ENABLE_LINEARIZATION", "1")
+            .env("SYMCC_AFL_COVERAGE_MAP", &self.bitmap)
+            .env("SYMCC_OUTPUT_DIR", &output_dir)
+            .stdout(
+                log_file
+                    .try_clone()
+                    .context("Failed to open SymCC's log file a second time")?,
+            )
+            .stderr(log_file);
+
+        if self.use_standard_input {
+            analysis_command.stdin(Stdio::piped());
+        } else {
+            analysis_command.stdin(Stdio::null());
+            analysis_command.env("SYMCC_INPUT_FILE", &self.input_file);
+        }
+
+        let mut child = analysis_command.spawn().context("Failed to run SymCC")?;
+
+        if self.use_standard_input {
+            io::copy(
+                &mut File::open(&self.input_file).with_context(|| {
+                    format!(
+                        "Failed to read the test input at {}",
+                        self.input_file.display()
+                    )
+                })?,
+                child
+                    .stdin
+                    .as_mut()
+                    .expect("Failed to pipe to the child's standard input"),
+            )
+            .context("Failed to pipe the test input to SymCC")?;
+        }
+
+        let result = child.wait().context("Failed to wait for SymCC")?;
+        if let Some(code) = result.code() {
+            println!("SymCC returned code {}", code);
+        }
+
+        Ok(output_dir)
+    }
+}
+
 /// Check if the given test case provides new coverage, crashes, or times out;
 /// copy it to the corresponding location.
 fn process_new_testcase<P: AsRef<Path>, Q: AsRef<Path>, R: AsRef<Path>>(
     testcase: P,
     parent: Q,
     tmp_dir: R,
-    env: &Environment,
+    use_standard_input: bool,
+    afl_config: &AflConfig,
     state: &mut State,
 ) -> Result<()> {
     let testcase_bitmap = tmp_dir.as_ref().join("testcase_bitmap");
-    let mut afl_show_map_child = Command::new(&env.afl_show_map)
+    let mut afl_show_map_child = Command::new(&afl_config.show_map)
         .args(&["-t", "5000", "-m", "none", "-b", "-o"])
         .arg(&testcase_bitmap)
-        .args(insert_input_file(&env.afl_target_command, &testcase))
+        .args(insert_input_file(&afl_config.target_command, &testcase))
         .stdout(Stdio::null())
         .stderr(Stdio::null())
-        .stdin(if env.use_standard_input {
+        .stdin(if use_standard_input {
             Stdio::piped()
         } else {
             Stdio::null()
@@ -437,7 +519,7 @@ fn process_new_testcase<P: AsRef<Path>, Q: AsRef<Path>, R: AsRef<Path>>(
         .spawn()
         .context("Failed to run afl-showmap")?;
 
-    if env.use_standard_input {
+    if use_standard_input {
         io::copy(
             &mut File::open(&testcase)?,
             afl_show_map_child
@@ -479,7 +561,12 @@ fn process_new_testcase<P: AsRef<Path>, Q: AsRef<Path>, R: AsRef<Path>>(
             }
 
             if interesting {
-                copy_testcase(testcase, &mut state.queue, parent)?;
+                copy_testcase(&testcase, &mut state.queue, parent).with_context(|| {
+                    format!(
+                        "Failed to enqueue the new test case {}",
+                        testcase.as_ref().display()
+                    )
+                })?;
             }
         }
         1 => {
