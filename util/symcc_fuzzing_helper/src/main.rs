@@ -1,4 +1,4 @@
-use anyhow::{ensure, Context, Result};
+use anyhow::{bail, ensure, Context, Result};
 use std::collections::HashSet;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File};
@@ -212,11 +212,6 @@ fn main() -> Result<()> {
                     println!("SymCC returned code {}", code);
                 }
 
-                let orig_id = input
-                    .file_name()
-                    .expect("The input file does not have a name")
-                    .to_string_lossy();
-
                 for maybe_new_test in fs::read_dir(&output_dir).with_context(|| {
                     format!(
                         "Failed to read the generated test cases at {}",
@@ -286,19 +281,38 @@ fn main() -> Result<()> {
                             }
 
                             if interesting {
-                                let new_name =
-                                    format!("id:{:06},src:{}", current_test_id, &orig_id);
-                                fs::copy(new_test.path(), symcc_queue.join(new_name))
-                                    .with_context(|| {
-                                        format!(
+                                let orig_name = input
+                                    .file_name()
+                                    .expect("The input file does not have a name")
+                                    .to_string_lossy();
+                                ensure!(
+                                    orig_name.starts_with("id:"),
+                                    "The name of test case {} does not start with an ID",
+                                    input.display()
+                                );
+
+                                if let Some(orig_id) = orig_name.get(3..9) {
+                                    let new_name =
+                                        format!("id:{:06},src:{}", current_test_id, &orig_id);
+                                    fs::copy(new_test.path(), symcc_queue.join(new_name))
+                                        .with_context(|| {
+                                            format!(
                                             "Failed to copy the test case {} to our queue at {}",
                                             new_test.path().display(),
                                             symcc_queue.display()
                                         )
-                                    })?;
-                                current_test_id += 1;
+                                        })?;
+
+                                    current_test_id += 1;
+                                } else {
+                                    bail!(
+                                        "Test case {} does not contain a proper ID",
+                                        input.display()
+                                    );
+                                }
                             }
                         }
+                        // TODO use proper IDs for crashes and hangs
                         1 => {
                             // The target timed out or failed to execute.
                             fs::copy(new_test.path(), symcc_hangs.join(new_test.file_name()))
