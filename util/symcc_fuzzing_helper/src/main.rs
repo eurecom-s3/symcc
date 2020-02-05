@@ -10,6 +10,8 @@ use std::time::Duration;
 use structopt::StructOpt;
 use tempfile::tempdir;
 
+type AflMap = [u8; 65536];
+
 const TIMEOUT: u32 = 90;
 
 #[derive(Debug, StructOpt)]
@@ -50,17 +52,30 @@ fn main() -> Result<()> {
     let symcc_dir = options.output_dir.join(&options.name);
     fs::create_dir(&symcc_dir)
         .with_context(|| format!("Failed to create SymCC's directory {}", symcc_dir.display()))?;
-    let symcc_queue = symcc_dir.join("queue");
-    fs::create_dir(&symcc_queue)
-        .with_context(|| format!("Failed to create SymCC's queue {}", symcc_queue.display()))?;
-    let symcc_hangs = symcc_dir.join("hangs");
-    fs::create_dir(&symcc_hangs)
-        .with_context(|| format!("Failed to create {}", symcc_hangs.display()))?;
-    let symcc_crashes = symcc_dir.join("crashes");
-    fs::create_dir(&symcc_crashes)
-        .with_context(|| format!("Failed to create {}", symcc_crashes.display()))?;
-    let current_input = symcc_dir.join(".cur_input");
+    let symcc_queue = TestcaseDir {
+        path: symcc_dir.join("queue"),
+        current_id: 0,
+    };
+    fs::create_dir(&symcc_queue.path).with_context(|| {
+        format!(
+            "Failed to create SymCC's queue {}",
+            symcc_queue.path.display()
+        )
+    })?;
+    let symcc_hangs = TestcaseDir {
+        path: symcc_dir.join("hangs"),
+        current_id: 0,
+    };
+    fs::create_dir(&symcc_hangs.path)
+        .with_context(|| format!("Failed to create {}", symcc_hangs.path.display()))?;
+    let symcc_crashes = TestcaseDir {
+        path: symcc_dir.join("crashes"),
+        current_id: 0,
+    };
+    fs::create_dir(&symcc_crashes.path)
+        .with_context(|| format!("Failed to create {}", symcc_crashes.path.display()))?;
 
+    let current_input = symcc_dir.join(".cur_input");
     let use_standard_input = !options.command.contains(&String::from("@@"));
     let fixed_command = insert_input_file(&options.command, &current_input);
 
@@ -119,11 +134,21 @@ fn main() -> Result<()> {
     )
     .parent()
     .unwrap();
-    let afl_show_map = afl_binary_dir.join("afl-showmap");
+
+    let env = Environment {
+        afl_show_map: afl_binary_dir.join("afl-showmap"),
+        afl_target_command: afl_target_command,
+        use_standard_input: use_standard_input,
+    };
+
+    let mut state = State {
+        current_bitmap: [0u8; 65536],
+        queue: symcc_queue,
+        hangs: symcc_hangs,
+        crashes: symcc_crashes,
+    };
 
     let mut processed_files = HashSet::new();
-    let mut current_test_id = 0u64;
-    let mut bitmap = [0u8; 65536];
     loop {
         let mut test_files: Vec<_> = fs::read_dir(&afl_queue)
             .with_context(|| {
@@ -171,7 +196,6 @@ fn main() -> Result<()> {
                         output_dir.display()
                     )
                 })?;
-                let testcase_bitmap_file = tmp_dir.path().join("testcase_bitmap");
 
                 let log_file_path = tmp_dir.path().join("symcc.log");
                 let log_file = File::create(&log_file_path).with_context(|| {
@@ -224,123 +248,8 @@ fn main() -> Result<()> {
                             output_dir.display()
                         )
                     })?;
-                    let mut afl_show_map_child = Command::new(&afl_show_map)
-                        .args(&["-t", "5000", "-m", "none", "-b", "-o"])
-                        .arg(&testcase_bitmap_file)
-                        .args(insert_input_file(&afl_target_command, new_test.path()))
-                        .stdout(Stdio::null())
-                        .stderr(Stdio::null())
-                        .stdin(if use_standard_input {
-                            Stdio::piped()
-                        } else {
-                            Stdio::null()
-                        })
-                        .spawn()
-                        .context("Failed to run afl-showmap")?;
 
-                    if use_standard_input {
-                        io::copy(
-                            &mut File::open(new_test.path())?,
-                            afl_show_map_child
-                                .stdin
-                                .as_mut()
-                                .expect("Failed to open the stardard input of afl-showmap"),
-                        )
-                        .context("Failed to pipe the test input to afl-showmap")?;
-                    }
-
-                    let afl_show_map_status = afl_show_map_child
-                        .wait()
-                        .context("Failed to wait for afl-showmap")?;
-                    match afl_show_map_status
-                        .code()
-                        .expect("No exit code available for afl-showmap")
-                    {
-                        0 => {
-                            // Successfully generated the map.
-                            let testcase_bitmap =
-                                fs::read(&testcase_bitmap_file).with_context(|| {
-                                    format!(
-                                        "Failed to read the AFL bitmap that \
-                                         afl-showmap should have generated at {}",
-                                        testcase_bitmap_file.display()
-                                    )
-                                })?;
-                            ensure!(
-                                testcase_bitmap.len() == bitmap.len(),
-                                "The map generated by afl-showmap has the wrong size ({})",
-                                testcase_bitmap.len()
-                            );
-
-                            let mut interesting = false;
-                            for (known, new) in bitmap.iter_mut().zip(testcase_bitmap) {
-                                if *known != (*known | new) {
-                                    *known |= new;
-                                    interesting = true;
-                                }
-                            }
-
-                            if interesting {
-                                let orig_name = input
-                                    .file_name()
-                                    .expect("The input file does not have a name")
-                                    .to_string_lossy();
-                                ensure!(
-                                    orig_name.starts_with("id:"),
-                                    "The name of test case {} does not start with an ID",
-                                    input.display()
-                                );
-
-                                if let Some(orig_id) = orig_name.get(3..9) {
-                                    let new_name =
-                                        format!("id:{:06},src:{}", current_test_id, &orig_id);
-                                    fs::copy(new_test.path(), symcc_queue.join(new_name))
-                                        .with_context(|| {
-                                            format!(
-                                            "Failed to copy the test case {} to our queue at {}",
-                                            new_test.path().display(),
-                                            symcc_queue.display()
-                                        )
-                                        })?;
-
-                                    current_test_id += 1;
-                                } else {
-                                    bail!(
-                                        "Test case {} does not contain a proper ID",
-                                        input.display()
-                                    );
-                                }
-                            }
-                        }
-                        // TODO use proper IDs for crashes and hangs
-                        1 => {
-                            // The target timed out or failed to execute.
-                            fs::copy(new_test.path(), symcc_hangs.join(new_test.file_name()))
-                                .with_context(|| {
-                                    format!(
-                                        "Failed to copy the test case {} to the \
-                                         'hangs' directory at {}",
-                                        new_test.path().display(),
-                                        symcc_hangs.display()
-                                    )
-                                })?;
-                        }
-                        2 => {
-                            // The target crashed.
-                            fs::copy(new_test.path(), symcc_crashes.join(new_test.file_name()))
-                                .with_context(|| {
-                                    format!(
-                                        "Failed to copy the test case {} to the \
-                                         'crashes' directory at {}",
-                                        new_test.path().display(),
-                                        symcc_crashes.display()
-                                    )
-                                })?;
-                        }
-                        unexpected => {
-                            panic!("Unexpected return code {} from afl-showmap", unexpected)
-                        }
-                    }
+                    process_new_testcase(new_test.path(), &input, &tmp_dir, &env, &mut state)?;
 
                     // TODO log copy operation and total number of copied tests
                 }
@@ -424,6 +333,167 @@ impl TestcaseScore {
             base_name: OsString::from(""),
         }
     }
+}
+
+/// A directory that we can write test cases to.
+struct TestcaseDir {
+    /// The path to the (existing) directory.
+    path: PathBuf,
+    /// The next free ID in this directory.
+    current_id: u64,
+}
+
+/// Copy a test case to a directory, using the parent test case's name to derive
+/// the new name.
+fn copy_testcase<P: AsRef<Path>, Q: AsRef<Path>>(
+    testcase: P,
+    target_dir: &mut TestcaseDir,
+    parent: Q,
+) -> Result<()> {
+    let orig_name = parent
+        .as_ref()
+        .file_name()
+        .expect("The input file does not have a name")
+        .to_string_lossy();
+    ensure!(
+        orig_name.starts_with("id:"),
+        "The name of test case {} does not start with an ID",
+        parent.as_ref().display()
+    );
+
+    if let Some(orig_id) = orig_name.get(3..9) {
+        let new_name = format!("id:{:06},src:{}", target_dir.current_id, &orig_id);
+        fs::copy(testcase.as_ref(), target_dir.path.join(new_name)).with_context(|| {
+            format!(
+                "Failed to copy the test case {} to {}",
+                testcase.as_ref().display(),
+                target_dir.path.display()
+            )
+        })?;
+
+        target_dir.current_id += 1;
+    } else {
+        bail!(
+            "Test case {} does not contain a proper ID",
+            parent.as_ref().display()
+        );
+    }
+
+    Ok(())
+}
+
+/// Information on the run-time environment.
+///
+/// This should not change during execution.
+struct Environment {
+    /// The location of the afl-showmap program.
+    afl_show_map: PathBuf,
+
+    /// The command that AFL uses to invoke the target program.
+    afl_target_command: Vec<OsString>,
+
+    /// Does the target program read from standard input?
+    use_standard_input: bool,
+}
+
+/// Mutable run-time state.
+///
+/// This is a collection of the state we update during execution.
+struct State {
+    /// The cumulative coverage of all test cases generated so far.
+    current_bitmap: AflMap,
+
+    /// The place to put new and useful test cases.
+    queue: TestcaseDir,
+
+    /// The place for new test cases that time out.
+    hangs: TestcaseDir,
+
+    /// The place for new test cases that crash.
+    crashes: TestcaseDir,
+}
+
+/// Check if the given test case provides new coverage, crashes, or times out;
+/// copy it to the corresponding location.
+fn process_new_testcase<P: AsRef<Path>, Q: AsRef<Path>, R: AsRef<Path>>(
+    testcase: P,
+    parent: Q,
+    tmp_dir: R,
+    env: &Environment,
+    state: &mut State,
+) -> Result<()> {
+    let testcase_bitmap = tmp_dir.as_ref().join("testcase_bitmap");
+    let mut afl_show_map_child = Command::new(&env.afl_show_map)
+        .args(&["-t", "5000", "-m", "none", "-b", "-o"])
+        .arg(&testcase_bitmap)
+        .args(insert_input_file(&env.afl_target_command, &testcase))
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .stdin(if env.use_standard_input {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
+        .spawn()
+        .context("Failed to run afl-showmap")?;
+
+    if env.use_standard_input {
+        io::copy(
+            &mut File::open(&testcase)?,
+            afl_show_map_child
+                .stdin
+                .as_mut()
+                .expect("Failed to open the stardard input of afl-showmap"),
+        )
+        .context("Failed to pipe the test input to afl-showmap")?;
+    }
+
+    let afl_show_map_status = afl_show_map_child
+        .wait()
+        .context("Failed to wait for afl-showmap")?;
+    match afl_show_map_status
+        .code()
+        .expect("No exit code available for afl-showmap")
+    {
+        0 => {
+            // Successfully generated the map.
+            let testcase_bitmap = fs::read(&testcase_bitmap).with_context(|| {
+                format!(
+                    "Failed to read the AFL bitmap that \
+                     afl-showmap should have generated at {}",
+                    testcase_bitmap.display()
+                )
+            })?;
+            ensure!(
+                testcase_bitmap.len() == state.current_bitmap.len(),
+                "The map generated by afl-showmap has the wrong size ({})",
+                testcase_bitmap.len()
+            );
+
+            let mut interesting = false;
+            for (known, new) in state.current_bitmap.iter_mut().zip(testcase_bitmap) {
+                if *known != (*known | new) {
+                    *known |= new;
+                    interesting = true;
+                }
+            }
+
+            if interesting {
+                copy_testcase(testcase, &mut state.queue, parent)?;
+            }
+        }
+        1 => {
+            // The target timed out or failed to execute.
+            copy_testcase(testcase, &mut state.hangs, parent)?;
+        }
+        2 => {
+            // The target crashed.
+            copy_testcase(testcase, &mut state.crashes, parent)?;
+        }
+        unexpected => panic!("Unexpected return code {} from afl-showmap", unexpected),
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
