@@ -29,14 +29,26 @@ struct CLI {
     #[structopt(short = "n")]
     name: String,
 
+    /// Enable verbose logging
+    #[structopt(short = "v")]
+    verbose: bool,
+
     /// Program under test
     command: Vec<String>,
 }
 
 fn main() -> Result<()> {
     let options = CLI::from_args();
+    env_logger::builder()
+        .filter_level(if options.verbose {
+            log::LevelFilter::Debug
+        } else {
+            log::LevelFilter::Info
+        })
+        .init();
+
     if !options.output_dir.is_dir() {
-        eprintln!(
+        log::error!(
             "The directory {} does not exist!",
             options.output_dir.display()
         );
@@ -45,13 +57,13 @@ fn main() -> Result<()> {
 
     let afl_queue = options.output_dir.join(&options.fuzzer_name).join("queue");
     if !afl_queue.is_dir() {
-        eprintln!("The AFL queue {} does not exist!", afl_queue.display());
+        log::error!("The AFL queue {} does not exist!", afl_queue.display());
         return Ok(());
     }
 
     let symcc_dir = options.output_dir.join(&options.name);
     if symcc_dir.is_dir() {
-        eprintln!(
+        log::error!(
             "{} already exists; we do not currently support resuming",
             symcc_dir.display()
         );
@@ -59,7 +71,9 @@ fn main() -> Result<()> {
     }
 
     let symcc = SymCC::new(symcc_dir.clone(), &options.command);
+    log::debug!("SymCC configuration: {:?}", &symcc);
     let afl_config = AflConfig::load(options.output_dir.join(&options.fuzzer_name))?;
+    log::debug!("AFL configuration: {:?}", &afl_config);
     let mut state = State::initialize(symcc_dir)?;
 
     loop {
@@ -67,13 +81,13 @@ fn main() -> Result<()> {
             .new_testcases(&state.processed_files)
             .context("Failed to check for new test cases")?;
         if test_files.is_empty() {
-            println!("Waiting for new test cases...");
+            log::info!("Waiting for new test cases...");
             thread::sleep(Duration::from_secs(5));
             continue;
         }
 
         for input in test_files {
-            println!("Running on input {}", input.display());
+            log::info!("Running on input {}", input.display());
 
             let tmp_dir = tempdir()
                 .context("Failed to create a temporary directory for this execution of SymCC")?;
@@ -107,13 +121,15 @@ fn main() -> Result<()> {
 
                 num_total += 1;
                 if res == TestcaseResult::New {
+                    log::debug!("Test case is interesting");
                     num_interesting += 1;
                 }
             }
 
-            println!(
+            log::info!(
                 "Generated {} test cases ({} new)",
-                num_total, num_interesting
+                num_total,
+                num_interesting
             );
             state.processed_files.insert(input);
         }
@@ -160,7 +176,7 @@ impl TestcaseScore {
         let size = match fs::metadata(&t) {
             Err(e) => {
                 // Has the file disappeared?
-                eprintln!(
+                log::warn!(
                     "Warning: failed to score test case {}: {}",
                     t.as_ref().display(),
                     e
@@ -225,7 +241,7 @@ fn copy_testcase<P: AsRef<Path>, Q: AsRef<Path>>(
     if let Some(orig_id) = orig_name.get(3..9) {
         let new_name = format!("id:{:06},src:{}", target_dir.current_id, &orig_id);
         let target = target_dir.path.join(new_name);
-        println!("Creating test case {}", target.display());
+        log::info!("Creating test case {}", target.display());
         fs::copy(testcase.as_ref(), target).with_context(|| {
             format!(
                 "Failed to copy the test case {} to {}",
@@ -248,6 +264,7 @@ fn copy_testcase<P: AsRef<Path>, Q: AsRef<Path>>(
 /// Information on the run-time environment.
 ///
 /// This should not change during execution.
+#[derive(Debug)]
 struct AflConfig {
     /// The location of the afl-showmap program.
     show_map: PathBuf,
@@ -406,6 +423,7 @@ impl State {
 }
 
 /// The run-time configuration of SymCC.
+#[derive(Debug)]
 struct SymCC {
     /// Do we pass data to standard input?
     use_standard_input: bool,
@@ -501,7 +519,7 @@ impl SymCC {
 
         let result = child.wait().context("Failed to wait for SymCC")?;
         if let Some(code) = result.code() {
-            println!("SymCC returned code {}", code);
+            log::debug!("SymCC returned code {}", code);
         }
 
         Ok(output_dir)
@@ -526,8 +544,11 @@ fn process_new_testcase<P: AsRef<Path>, Q: AsRef<Path>, R: AsRef<Path>>(
     afl_config: &AflConfig,
     state: &mut State,
 ) -> Result<TestcaseResult> {
+    log::debug!("Processing test case {}", testcase.as_ref().display());
+
     let testcase_bitmap = tmp_dir.as_ref().join("testcase_bitmap");
-    let mut afl_show_map_child = Command::new(&afl_config.show_map)
+    let mut afl_show_map = Command::new(&afl_config.show_map);
+    afl_show_map
         .args(&["-t", "5000", "-m", "none", "-b", "-o"])
         .arg(&testcase_bitmap)
         .args(insert_input_file(&afl_config.target_command, &testcase))
@@ -537,9 +558,10 @@ fn process_new_testcase<P: AsRef<Path>, Q: AsRef<Path>, R: AsRef<Path>>(
             Stdio::piped()
         } else {
             Stdio::null()
-        })
-        .spawn()
-        .context("Failed to run afl-showmap")?;
+        });
+
+    log::debug!("Running afl-showmap as follows: {:?}", &afl_show_map);
+    let mut afl_show_map_child = afl_show_map.spawn().context("Failed to run afl-showmap")?;
 
     if afl_config.use_standard_input {
         io::copy(
@@ -555,6 +577,7 @@ fn process_new_testcase<P: AsRef<Path>, Q: AsRef<Path>, R: AsRef<Path>>(
     let afl_show_map_status = afl_show_map_child
         .wait()
         .context("Failed to wait for afl-showmap")?;
+    log::debug!("afl-showmap returned {}", &afl_show_map_status);
     match afl_show_map_status
         .code()
         .expect("No exit code available for afl-showmap")
