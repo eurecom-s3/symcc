@@ -59,7 +59,7 @@ fn main() -> Result<()> {
     }
 
     let symcc = SymCC::new(symcc_dir.clone(), &options.command);
-    let afl_config = AflConfig::from(options.output_dir.join(&options.fuzzer_name))?;
+    let afl_config = AflConfig::load(options.output_dir.join(&options.fuzzer_name))?;
     let mut state = State::initialize(symcc_dir)?;
 
     loop {
@@ -82,6 +82,8 @@ fn main() -> Result<()> {
                 .run(&input, tmp_dir.path())
                 .context("Failed to run SymCC")?;
 
+            let mut num_interesting = 0u64;
+            let mut num_total = 0u64;
             for maybe_new_test in fs::read_dir(&output_dir).with_context(|| {
                 format!(
                     "Failed to read the generated test cases at {}",
@@ -95,18 +97,24 @@ fn main() -> Result<()> {
                     )
                 })?;
 
-                process_new_testcase(
+                let res = process_new_testcase(
                     new_test.path(),
                     &input,
                     &tmp_dir,
-                    symcc.use_standard_input,
                     &afl_config,
                     &mut state,
                 )?;
 
-                // TODO log copy operation and total number of copied tests
+                num_total += 1;
+                if res == TestcaseResult::New {
+                    num_interesting += 1;
+                }
             }
 
+            println!(
+                "Generated {} test cases ({} new)",
+                num_total, num_interesting
+            );
             state.processed_files.insert(input);
         }
     }
@@ -216,7 +224,9 @@ fn copy_testcase<P: AsRef<Path>, Q: AsRef<Path>>(
 
     if let Some(orig_id) = orig_name.get(3..9) {
         let new_name = format!("id:{:06},src:{}", target_dir.current_id, &orig_id);
-        fs::copy(testcase.as_ref(), target_dir.path.join(new_name)).with_context(|| {
+        let target = target_dir.path.join(new_name);
+        println!("Creating test case {}", target.display());
+        fs::copy(testcase.as_ref(), target).with_context(|| {
             format!(
                 "Failed to copy the test case {} to {}",
                 testcase.as_ref().display(),
@@ -245,13 +255,16 @@ struct AflConfig {
     /// The command that AFL uses to invoke the target program.
     target_command: Vec<OsString>,
 
+    /// Do we need to pass data to standard input?
+    use_standard_input: bool,
+
     /// The fuzzer instance's queue of test cases.
     queue: PathBuf,
 }
 
 impl AflConfig {
     /// Read the AFL configuration from a fuzzer instance's output directory.
-    fn from<P: AsRef<Path>>(fuzzer_output: P) -> Result<Self> {
+    fn load<P: AsRef<Path>>(fuzzer_output: P) -> Result<Self> {
         let afl_stats_file_path = fuzzer_output.as_ref().join("fuzzer_stats");
         let mut afl_stats_file = File::open(&afl_stats_file_path).with_context(|| {
             format!(
@@ -294,6 +307,7 @@ impl AflConfig {
 
         Ok(AflConfig {
             show_map: afl_binary_dir.join("afl-showmap"),
+            use_standard_input: !afl_target_command.contains(&"@@".into()),
             target_command: afl_target_command,
             queue: fuzzer_output.as_ref().join("queue"),
         })
@@ -494,16 +508,24 @@ impl SymCC {
     }
 }
 
+/// The possible outcomes of test-case evaluation.
+#[derive(Debug, PartialEq, Eq)]
+enum TestcaseResult {
+    Uninteresting,
+    New,
+    Hang,
+    Crash,
+}
+
 /// Check if the given test case provides new coverage, crashes, or times out;
 /// copy it to the corresponding location.
 fn process_new_testcase<P: AsRef<Path>, Q: AsRef<Path>, R: AsRef<Path>>(
     testcase: P,
     parent: Q,
     tmp_dir: R,
-    use_standard_input: bool,
     afl_config: &AflConfig,
     state: &mut State,
-) -> Result<()> {
+) -> Result<TestcaseResult> {
     let testcase_bitmap = tmp_dir.as_ref().join("testcase_bitmap");
     let mut afl_show_map_child = Command::new(&afl_config.show_map)
         .args(&["-t", "5000", "-m", "none", "-b", "-o"])
@@ -511,7 +533,7 @@ fn process_new_testcase<P: AsRef<Path>, Q: AsRef<Path>, R: AsRef<Path>>(
         .args(insert_input_file(&afl_config.target_command, &testcase))
         .stdout(Stdio::null())
         .stderr(Stdio::null())
-        .stdin(if use_standard_input {
+        .stdin(if afl_config.use_standard_input {
             Stdio::piped()
         } else {
             Stdio::null()
@@ -519,7 +541,7 @@ fn process_new_testcase<P: AsRef<Path>, Q: AsRef<Path>, R: AsRef<Path>>(
         .spawn()
         .context("Failed to run afl-showmap")?;
 
-    if use_standard_input {
+    if afl_config.use_standard_input {
         io::copy(
             &mut File::open(&testcase)?,
             afl_show_map_child
@@ -567,20 +589,24 @@ fn process_new_testcase<P: AsRef<Path>, Q: AsRef<Path>, R: AsRef<Path>>(
                         testcase.as_ref().display()
                     )
                 })?;
+
+                Ok(TestcaseResult::New)
+            } else {
+                Ok(TestcaseResult::Uninteresting)
             }
         }
         1 => {
             // The target timed out or failed to execute.
             copy_testcase(testcase, &mut state.hangs, parent)?;
+            Ok(TestcaseResult::Hang)
         }
         2 => {
             // The target crashed.
             copy_testcase(testcase, &mut state.crashes, parent)?;
+            Ok(TestcaseResult::Crash)
         }
         unexpected => panic!("Unexpected return code {} from afl-showmap", unexpected),
     }
-
-    Ok(())
 }
 
 #[cfg(test)]
