@@ -444,7 +444,7 @@ impl SymCC {
         let input_file = output_dir.join(".cur_input");
 
         SymCC {
-            use_standard_input: command.contains(&String::from("@@")),
+            use_standard_input: !command.contains(&String::from("@@")),
             bitmap: output_dir.join("bitmap"),
             command: insert_input_file(command, &input_file),
             input_file: input_file,
@@ -499,6 +499,7 @@ impl SymCC {
             analysis_command.env("SYMCC_INPUT_FILE", &self.input_file);
         }
 
+        log::debug!("Running SymCC as follows: {:?}", &analysis_command);
         let mut child = analysis_command.spawn().context("Failed to run SymCC")?;
 
         if self.use_standard_input {
