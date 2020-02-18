@@ -3,27 +3,32 @@
                              The Symbolic Compiler
 
 
-This is a compiler pass which embeds symbolic execution into the program during
-compilation. In essence, it inserts code that computes symbolic expressions for
-each value in the program. The actual computation happens through calls to a
-support library at run time.
+This is a compiler wrapper which embeds symbolic execution into the program
+during compilation. In essence, it inserts code that computes symbolic
+expressions for each value in the program. The actual computation happens
+through calls to a support library at run time.
 
-To build the pass and the support library, make sure that LLVM 8 or 9 and Z3 are
-installed. (Alternatively, see below for using the provided Dockerfile.) Then
-create a build directory somewhere, and execute the following commands inside
-it:
+To build the pass and the support library, make sure that LLVM 8 or 9 and Z3
+version 4.5 or later are installed. (Alternatively, see below for using the
+provided Dockerfile.) Make sure to pull the Qsym code:
 
-$ cmake -G Ninja /path/to/compiler/sources
+$ git submodule init
+$ git submodule update
+
+Then create a build directory somewhere, and execute the following commands
+inside it:
+
+$ cmake -G Ninja -DQSYM_BACKEND=ON /path/to/compiler/sources
 $ ninja check
 
 If LLVM is installed in a non-standard location, add the CMake parameter
 "-DLLVM_DIR=/path/to/llvm/cmake/module". Similarly, you can point to a
 non-standard Z3 installation with "-DZ3_DIR=/path/to/z3/cmake/module" (which
-requires Z3 to be built with CMake). The results of the build process are
-libSymbolize.so, a pass that can be loaded into clang or opt; libSymRuntime.so,
-the support library that is linked with the target programs; and symcc, a
-wrapper script around clang that sets the right options to load our pass and
-link against the run-time library.
+requires Z3 to be built with CMake).
+
+The main build artifact from the user's point of view is symcc, a wrapper script
+around clang that sets the right options to load our pass and link against the
+run-time library. (See below for additional C++ support.)
 
 To try the compiler, take some simple C code like the following:
 
@@ -54,32 +59,36 @@ Save the code as "test.c". To compile it with symbolic execution built in, we
 call symcc as we would normally call clang:
 
 $ ./symcc test.c -o test
-$ ./test
 
-The program will execute the same computations as the uninstrumented version,
-but additionally the injected code will track computations symbolically and
-attempt to compute diverging inputs at each branch point. All data that the
+Before starting the analysis, create a directory for the results and tell SymCC:
+
+$ mkdir results
+$ export SYMCC_OUTPUT_DIR=`pwd`/results
+
+Then run the program like any other binary, providing an arbitrary input:
+
+$ echo 'aaaa' | ./test
+
+The program will execute the same computations as an uninstrumented version
+would, but additionally the injected code will track computations symbolically
+and attempt to compute diverging inputs at each branch point. All data that the
 program reads from standard input is treated as symbolic; alternatively, you can
 set the environment variable SYMCC_INPUT_FILE to the name of a file whose
-contents will be treated as symbolic when read.
+contents will be treated as symbolic when read. Note that due how the Qsym
+backend is implemented, all input has to be available from the start. In
+particular, when providing symbolic data on standard input interactively, you
+need to terminate your input by pressing Ctrl+D before the program starts to
+execute.
+
+When execution is finished, the result directory will contain the new test cases
+generated during program execution. Try running the program again on one of
+those or combine it with a fuzzer to automate this process (see below).
 
 
-                             Using the Qsym backend
+                                 Documentation
 
-In addition to our own symbolic backend, we support running with the Qsym
-backend. In this case, symbolic expressions are handled by the corresponding
-code from Qsym rather than by our own wrapper around Z3. To build with the Qsym
-backend, first pull in the Qsym code:
-
-$ git submodule init
-$ git submodule update
-
-Then build as described above, but add the option "-DQSYM_BACKEND=ON" to the
-CMake invocation. (Note that rerunning CMake in a build directory that was
-previously used with our simple backend won't change the value of the option;
-you can create a fresh build directory, change the option with "ccmake
-/path/to/source", or edit "CMakeCache.txt" manually.) Qsym requires Z3 version
-4.5 or later.
+The directory "docs" contains documentation on several internal aspects of
+SymCC, as well as building C++ code and running SymCC with a fuzzer.
 
 
                             Building a Docker image
@@ -97,9 +106,3 @@ Inside the container, "symcc" is available as a drop-in replacement for "clang",
 using the Qsym backend. If you want to try modifications to SymCC, you will find
 the source code in "/symcc_source" and the build files in "/symcc_build";
 recompile SymCC by running "ninja -C /symcc_build check".
-
-
-                                 Documentation
-
-The directory "docs" contains documentation on several internal aspects of
-SymCC, as well as building C++ code.
