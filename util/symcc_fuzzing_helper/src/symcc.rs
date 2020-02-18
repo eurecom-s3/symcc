@@ -177,7 +177,7 @@ pub fn copy_testcase<P: AsRef<Path>, Q: AsRef<Path>>(
     if let Some(orig_id) = orig_name.get(3..9) {
         let new_name = format!("id:{:06},src:{}", target_dir.current_id, &orig_id);
         let target = target_dir.path.join(new_name);
-        log::info!("Creating test case {}", target.display());
+        log::debug!("Creating test case {}", target.display());
         fs::copy(testcase.as_ref(), target).with_context(|| {
             format!(
                 "Failed to copy the test case {} to {}",

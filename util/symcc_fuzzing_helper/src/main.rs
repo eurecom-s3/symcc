@@ -117,24 +117,13 @@ impl State {
         );
 
         if killed {
-            let dest_name = self.hangs.path.join(
-                input
-                    .as_ref()
-                    .file_name()
-                    .expect("The input cannot be a directory"),
-            );
             log::info!(
                 "The target process was killed (probably timeout or out of memory); \
                  archiving to {}",
-                dest_name.display()
+                self.hangs.path.display()
             );
-            fs::copy(&input, &dest_name).with_context(|| {
-                format!(
-                    "Failed to copy {} to {}",
-                    input.as_ref().display(),
-                    dest_name.display()
-                )
-            })?;
+            symcc::copy_testcase(&input, &mut self.hangs, &input)
+                .context("Failed to archive the test case")?;
         }
 
         self.processed_files.insert(input.as_ref().to_path_buf());
@@ -251,7 +240,13 @@ fn process_new_testcase<P: AsRef<Path>, Q: AsRef<Path>, R: AsRef<Path>>(
                 "Test case {} crashes afl-showmap; it is probably interesting",
                 testcase.as_ref().display()
             );
-            symcc::copy_testcase(testcase, &mut state.crashes, parent)?;
+            symcc::copy_testcase(&testcase, &mut state.crashes, &parent)?;
+            symcc::copy_testcase(&testcase, &mut state.queue, &parent).with_context(|| {
+                format!(
+                    "Failed to enqueue the new test case {}",
+                    testcase.as_ref().display()
+                )
+            })?;
             Ok(TestcaseResult::Crash)
         }
     }
