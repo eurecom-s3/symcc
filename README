@@ -15,8 +15,12 @@ provided Dockerfile.) Make sure to pull the Qsym code:
 $ git submodule init
 $ git submodule update
 
-Then create a build directory somewhere, and execute the following commands
-inside it:
+Note that it is not necessary or recommended to build the Qsym submodule - our
+build system will automatically extract the right source files and include them
+in the build.
+
+Create a build directory somewhere, and execute the following commands inside
+it:
 
 $ cmake -G Ninja -DQSYM_BACKEND=ON /path/to/compiler/sources
 $ ninja check
