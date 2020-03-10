@@ -11,9 +11,13 @@
 #ifndef RUNTIMECOMMON_H
 #define RUNTIMECOMMON_H
 
+#ifdef __cplusplus
 #include <cstdint>
-
 extern "C" {
+#else
+#include <stdint.h>
+#endif
+
 /*
  * Initialization
  */
@@ -25,9 +29,9 @@ void _sym_initialize(void);
 SymExpr _sym_build_integer(uint64_t value, uint8_t bits);
 SymExpr _sym_build_integer128(unsigned __int128 value);
 SymExpr _sym_build_float(double value, int is_double);
-SymExpr _sym_build_null_pointer();
-SymExpr _sym_build_true();
-SymExpr _sym_build_false();
+SymExpr _sym_build_null_pointer(void);
+SymExpr _sym_build_true(void);
+SymExpr _sym_build_false(void);
 SymExpr _sym_build_bool(bool value);
 
 /*
@@ -142,6 +146,9 @@ SymExpr _sym_build_extract(SymExpr expr, uint64_t offset, uint64_t length,
 void _sym_notify_call(uintptr_t site_id);
 void _sym_notify_ret(uintptr_t site_id);
 void _sym_notify_basic_block(uintptr_t site_id);
+
+#ifdef __cplusplus
 }
+#endif
 
 #endif
