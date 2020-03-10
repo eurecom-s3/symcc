@@ -99,7 +99,7 @@ void _sym_initialize(void) {
 }
 
 Z3_ast _sym_build_integer(uint64_t value, uint8_t bits) {
-  return Z3_mk_int(g_context, value, Z3_mk_bv_sort(g_context, bits));
+  return Z3_mk_unsigned_int64(g_context, value, Z3_mk_bv_sort(g_context, bits));
 }
 
 Z3_ast _sym_build_integer128(unsigned __int128 value) {
