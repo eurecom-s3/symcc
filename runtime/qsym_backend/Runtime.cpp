@@ -8,6 +8,7 @@
 #include <atomic>
 #include <fstream>
 #include <iterator>
+#include <iostream>
 
 // C
 #include <cstdio>
@@ -325,4 +326,12 @@ void _sym_notify_ret(uintptr_t site_id) {
 
 void _sym_notify_basic_block(uintptr_t site_id) {
   g_call_stack_manager.visitBasicBlock(site_id);
+}
+
+//
+// Debugging
+//
+
+void _sym_print(SymExpr expr) {
+  std::cout << (*expr)->toString() << std::endl;
 }

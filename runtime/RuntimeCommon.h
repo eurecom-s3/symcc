@@ -147,6 +147,11 @@ void _sym_notify_call(uintptr_t site_id);
 void _sym_notify_ret(uintptr_t site_id);
 void _sym_notify_basic_block(uintptr_t site_id);
 
+/*
+ * Debugging
+ */
+void _sym_print(SymExpr expr);
+
 #ifdef __cplusplus
 }
 #endif

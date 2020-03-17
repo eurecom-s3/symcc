@@ -460,3 +460,8 @@ size_t _sym_bits_helper(SymExpr expr) {
 void _sym_notify_call(uintptr_t) {}
 void _sym_notify_ret(uintptr_t) {}
 void _sym_notify_basic_block(uintptr_t) {}
+
+/* Debugging */
+void _sym_print(SymExpr expr) {
+  puts(Z3_ast_to_string(g_context, expr));
+}
