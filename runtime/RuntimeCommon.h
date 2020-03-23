@@ -151,6 +151,7 @@ void _sym_notify_basic_block(uintptr_t site_id);
  * Debugging
  */
 void _sym_print(SymExpr expr);
+bool _sym_feasible(SymExpr expr);
 
 #ifdef __cplusplus
 }

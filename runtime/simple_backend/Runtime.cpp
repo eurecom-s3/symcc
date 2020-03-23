@@ -465,3 +465,14 @@ void _sym_notify_basic_block(uintptr_t) {}
 void _sym_print(SymExpr expr) {
   puts(Z3_ast_to_string(g_context, expr));
 }
+
+bool _sym_feasible(SymExpr expr) {
+  expr = Z3_simplify(g_context, expr);
+
+  Z3_solver_push(g_context, g_solver);
+  Z3_solver_assert(g_context, g_solver, expr);
+  Z3_lbool feasible = Z3_solver_check(g_context, g_solver);
+  Z3_solver_pop(g_context, g_solver, 1);
+
+  return (feasible == Z3_L_TRUE);
+}

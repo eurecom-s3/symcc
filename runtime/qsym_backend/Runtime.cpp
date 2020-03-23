@@ -335,3 +335,14 @@ void _sym_notify_basic_block(uintptr_t site_id) {
 void _sym_print(SymExpr expr) {
   std::cout << (*expr)->toString() << std::endl;
 }
+
+bool _sym_feasible(SymExpr expr) {
+  (*expr)->simplify();
+
+  g_solver->push();
+  g_solver->add((*expr)->toZ3Expr());
+  bool feasible = (g_solver->check() == z3::sat);
+  g_solver->pop();
+
+  return feasible;
+}
