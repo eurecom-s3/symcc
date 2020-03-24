@@ -332,8 +332,15 @@ void _sym_notify_basic_block(uintptr_t site_id) {
 // Debugging
 //
 
-void _sym_print(SymExpr expr) {
-  std::cout << (*expr)->toString() << std::endl;
+const char *_sym_expr_to_string(SymExpr expr) {
+  static char buffer[4096];
+
+  auto expr_string = (*expr)->toString();
+  auto copied = expr_string.copy(
+      buffer, std::min(expr_string.length(), sizeof(buffer) - 1));
+  buffer[copied] = '\0';
+
+  return buffer;
 }
 
 bool _sym_feasible(SymExpr expr) {

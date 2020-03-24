@@ -150,7 +150,7 @@ void _sym_notify_basic_block(uintptr_t site_id);
 /*
  * Debugging
  */
-void _sym_print(SymExpr expr);
+const char *_sym_expr_to_string(SymExpr expr); // statically allocated
 bool _sym_feasible(SymExpr expr);
 
 #ifdef __cplusplus

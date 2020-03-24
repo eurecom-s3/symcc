@@ -462,8 +462,8 @@ void _sym_notify_ret(uintptr_t) {}
 void _sym_notify_basic_block(uintptr_t) {}
 
 /* Debugging */
-void _sym_print(SymExpr expr) {
-  puts(Z3_ast_to_string(g_context, expr));
+const char *_sym_expr_to_string(SymExpr expr) {
+  return Z3_ast_to_string(g_context, expr);
 }
 
 bool _sym_feasible(SymExpr expr) {
