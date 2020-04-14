@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File};
 use std::io::{self, Read};
+use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -447,11 +448,19 @@ impl SymCC {
         }
 
         let result = child.wait().context("Failed to wait for SymCC")?;
-        let code = result
-            .code()
-            .expect("Exit code should always be available on Linux");
-        log::debug!("SymCC returned code {}", code);
-        let killed = (code == 124) || (code == -9); // as per the man-page of timeout
+        let killed = match result.code() {
+            Some(code) => {
+                log::debug!("SymCC returned code {}", code);
+                false           // not killed
+            }
+            None => {
+                let maybe_sig = result.signal();
+                if let Some(signal) = maybe_sig {
+                    log::warn!("SymCC received signal {}", signal);
+                }
+                maybe_sig.is_some()
+            }
+        };
 
         let new_tests = fs::read_dir(&output_dir)
             .with_context(|| {
