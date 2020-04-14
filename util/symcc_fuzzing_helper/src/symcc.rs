@@ -33,7 +33,7 @@ impl AflMap {
     }
 
     /// Load a map from disk.
-    pub fn load<P: AsRef<Path>>(path: P) -> Result<AflMap> {
+    pub fn load(path: impl AsRef<Path>) -> Result<AflMap> {
         let data = fs::read(&path).with_context(|| {
             format!(
                 "Failed to read the AFL bitmap that \
@@ -92,7 +92,7 @@ impl TestcaseScore {
     /// Score a test case.
     ///
     /// If anything goes wrong, return the minimum score.
-    fn new<P: AsRef<Path>>(t: P) -> Self {
+    fn new(t: impl AsRef<Path>) -> Self {
         let size = match fs::metadata(&t) {
             Err(e) => {
                 // Has the file disappeared?
@@ -144,7 +144,7 @@ impl TestcaseDir {
     /// Create a new test-case directory in the specified location.
     ///
     /// The parent directory must exist.
-    pub fn new<P: AsRef<Path>>(path: P) -> Result<TestcaseDir> {
+    pub fn new(path: impl AsRef<Path>) -> Result<TestcaseDir> {
         let dir = TestcaseDir {
             path: path.as_ref().into(),
             current_id: 0,
@@ -158,10 +158,10 @@ impl TestcaseDir {
 
 /// Copy a test case to a directory, using the parent test case's name to derive
 /// the new name.
-pub fn copy_testcase<P: AsRef<Path>, Q: AsRef<Path>>(
-    testcase: P,
+pub fn copy_testcase(
+    testcase: impl AsRef<Path>,
     target_dir: &mut TestcaseDir,
-    parent: Q,
+    parent: impl AsRef<Path>,
 ) -> Result<()> {
     let orig_name = parent
         .as_ref()
@@ -227,7 +227,7 @@ pub enum AflShowmapResult {
 
 impl AflConfig {
     /// Read the AFL configuration from a fuzzer instance's output directory.
-    pub fn load<P: AsRef<Path>>(fuzzer_output: P) -> Result<Self> {
+    pub fn load(fuzzer_output: impl AsRef<Path>) -> Result<Self> {
         let afl_stats_file_path = fuzzer_output.as_ref().join("fuzzer_stats");
         let mut afl_stats_file = File::open(&afl_stats_file_path).with_context(|| {
             format!(
@@ -300,10 +300,10 @@ impl AflConfig {
         Ok(best)
     }
 
-    pub fn run_showmap<P: AsRef<Path>, Q: AsRef<Path>>(
+    pub fn run_showmap(
         &self,
-        testcase_bitmap: P,
-        testcase: Q,
+        testcase_bitmap: impl AsRef<Path>,
+        testcase: impl AsRef<Path>,
     ) -> Result<AflShowmapResult> {
         let mut afl_show_map = Command::new(&self.show_map);
         afl_show_map
@@ -390,10 +390,10 @@ impl SymCC {
     /// directory. Return the list of newly generated test cases and a Boolean
     /// that indicates whether the target process was killed (i.e., possibly a
     /// timeout or out-of-memory condition).
-    pub fn run<P: AsRef<Path>, Q: AsRef<Path>>(
+    pub fn run(
         &self,
-        input: P,
-        output_dir: Q,
+        input: impl AsRef<Path>,
+        output_dir: impl AsRef<Path>,
     ) -> Result<(Vec<PathBuf>, bool)> {
         fs::copy(&input, &self.input_file).with_context(|| {
             format!(
@@ -403,7 +403,7 @@ impl SymCC {
             )
         })?;
 
-         fs::create_dir(&output_dir).with_context(|| {
+        fs::create_dir(&output_dir).with_context(|| {
             format!(
                 "Failed to create the output directory {} for SymCC",
                 output_dir.as_ref().display()
@@ -447,7 +447,9 @@ impl SymCC {
         }
 
         let result = child.wait().context("Failed to wait for SymCC")?;
-        let code = result.code().expect("Exit code should always be available on Linux");
+        let code = result
+            .code()
+            .expect("Exit code should always be available on Linux");
         log::debug!("SymCC returned code {}", code);
         let killed = (code == 124) || (code == -9); // as per the man-page of timeout
 

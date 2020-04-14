@@ -61,7 +61,7 @@ impl State {
     ///
     /// This involves creating the output directory and all required
     /// subdirectories.
-    fn initialize<P: AsRef<Path>>(output_dir: P) -> Result<Self> {
+    fn initialize(output_dir: impl AsRef<Path>) -> Result<Self> {
         let symcc_dir = output_dir.as_ref();
 
         fs::create_dir(&symcc_dir).with_context(|| {
@@ -83,9 +83,9 @@ impl State {
 
     /// Run a single input through SymCC and process the new test cases it
     /// generates.
-    fn test_input<P: AsRef<Path>>(
+    fn test_input(
         &mut self,
-        input: P,
+        input: impl AsRef<Path>,
         symcc: &SymCC,
         afl_config: &AflConfig,
     ) -> Result<()> {
@@ -195,10 +195,10 @@ enum TestcaseResult {
 
 /// Check if the given test case provides new coverage, crashes, or times out;
 /// copy it to the corresponding location.
-fn process_new_testcase<P: AsRef<Path>, Q: AsRef<Path>, R: AsRef<Path>>(
-    testcase: P,
-    parent: Q,
-    tmp_dir: R,
+fn process_new_testcase(
+    testcase: impl AsRef<Path>,
+    parent: impl AsRef<Path>,
+    tmp_dir: impl AsRef<Path>,
     afl_config: &AflConfig,
     state: &mut State,
 ) -> Result<TestcaseResult> {
