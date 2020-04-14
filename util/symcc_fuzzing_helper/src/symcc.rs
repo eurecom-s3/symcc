@@ -451,7 +451,7 @@ impl SymCC {
         let killed = match result.code() {
             Some(code) => {
                 log::debug!("SymCC returned code {}", code);
-                false           // not killed
+                (code == 124) || (code == -9) // as per the man-page of timeout
             }
             None => {
                 let maybe_sig = result.signal();
