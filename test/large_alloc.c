@@ -1,5 +1,7 @@
 // RUN: %symcc %s -o %t
 // RUN: echo -ne "\x2a\x00\x00\x00" | %t 2>&1 | %filecheck %s
+// RUN: %symcc -m32 %s -o %t_32
+// RUN: echo -ne "\x2a\x00\x00\x00" | %t_32 2>&1 | %filecheck %s
 //
 // Make sure that we can handle large allocations symbolically. Also, test
 // memory-related library functions.

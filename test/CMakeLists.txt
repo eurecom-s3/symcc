@@ -16,3 +16,6 @@ add_custom_target(check
   USES_TERMINAL)
 
 add_dependencies(check SymRuntime Symbolize)
+if (TARGET SymRuntime32)
+  add_dependencies(check SymRuntime32)
+endif()

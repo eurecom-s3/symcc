@@ -1,6 +1,9 @@
 // RUN: %symcc %s -o %t
 // RUN: echo -ne "\x01\x02\x03\x04" | %t 2>&1 | %filecheck %s
+// RUN: %symcc -m32 %s -o %t_32
+// RUN: echo -ne "\x01\x02\x03\x04" | %t_32 2>&1 | %filecheck %s
 // RUN: %symcc %s -S -emit-llvm -o - | FileCheck --check-prefix=BITCODE %s
+// RUN: %symcc %s -m32 -S -emit-llvm -o - | FileCheck --check-prefix=BITCODE %s
 //
 // Here we test that the "bswap" intrinsic is handled correctly.
 #include <stdint.h>
