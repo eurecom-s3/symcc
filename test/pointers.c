@@ -1,7 +1,7 @@
 // RUN: %symcc -O2 %s -o %t
 // RUN: echo -ne "\x05\x00\x00\x00\x12\x34\x56\x78\x90\xab\xcd\xef" | %t 2>&1 | %filecheck %s
 // RUN: %symcc -m32 -O2 %s -o %t_32
-// RUN: echo -ne "\x05\x00\x00\x00\x12\x34\x56\x78\x90\xab\xcd\xef" | %t_32 2>&1 | %filecheck %s
+// RUN: echo -ne "\x05\x00\x00\x00\x12\x34\x56\x78" | %t_32 2>&1 | %filecheck %s
 #include <stdio.h>
 #include <stdint.h>
 #include <unistd.h>
@@ -47,7 +47,13 @@ int main(int argc, char* argv[]) {
     printf("%s\n", !ptr ? "null" : "not null");
     // SIMPLE: Trying to solve
     // SIMPLE: Found diverging input
-    // SIMPLE-COUNT-8: #x00
+    //
+    // We expect a null pointer, but since pointer length varies between 32 and
+    // 64-bit architectures we can't just expect N times #x00. Instead, we use a
+    // regular expression that disallows nonzero values for anything but stdin0
+    // (which is part of x, not ptr).
+    //
+    // SIMPLE-NOT: stdin{{[^0][0-9]?}} -> #x{{.?[^0].?}}
     // QSYM-COUNT-2: SMT
     // QSYM: New testcase
     // ANY: not null

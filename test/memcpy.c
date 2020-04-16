@@ -36,22 +36,21 @@ int main(int argc, char *argv[]) {
   printf("%d\n", values_copy[0]);
   // SIMPLE: Trying to solve
   // SIMPLE: Found diverging input
-  // SIMPLE: stdin3
+  // SIMPLE: stdin{{[0-3]}}
   // QSYM-COUNT-2: SMT
   // QSYM: New testcase
   // SIMPLE: Trying to solve
   // SIMPLE: Found diverging input
-  // SIMPLE-DAG: stdin3 -> #x00
-  // SIMPLE-DAG: stdin7
+  // SIMPLE-DAG: stdin{{[0-3]}} -> #x00
+  // SIMPLE-DAG: stdin{{[4-7]}} -> #x{{.?[^0].?}}
   // QSYM-COUNT-2: SMT
   // QSYM: New testcase
   // SIMPLE: Trying to solve
   // SIMPLE: Found diverging input
-  // SIMPLE-DAG: stdin3 -> #x00
-  // SIMPLE-DAG: stdin7 -> #x00
-  // SIMPLE-DAG: stdin11
+  // SIMPLE-DAG: stdin{{[0-7]}} -> #x00
   // QSYM-COUNT-2: SMT
   // QSYM: New testcase
+  // ANY: 1
 
   return 0;
 }

@@ -1,6 +1,7 @@
 #ifndef SYMBOLIZE_H
 #define SYMBOLIZE_H
 
+#include <bits/stdint-uintn.h>
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/InstVisitor.h>
@@ -18,7 +19,8 @@ public:
   /// Insert code to obtain the symbolic expressions for the function arguments.
   void symbolizeFunctionArguments(llvm::Function &F);
 
-  /// Insert a call to the run-time library to notify it of the basic block entry.
+  /// Insert a call to the run-time library to notify it of the basic block
+  /// entry.
   void insertBasicBlockNotification(llvm::BasicBlock &B);
 
   /// Finish the processing of PHI nodes.
@@ -250,6 +252,12 @@ private:
 
   /// Generate code that makes the solver try an alternative value for V.
   void tryAlternative(llvm::IRBuilder<> &IRB, llvm::Value *V);
+
+  /// Helper to use a pointer to a host object as integer.
+  llvm::ConstantInt *hostPointerToInt(void *pointer) {
+    return llvm::ConstantInt::get(intPtrType,
+                                  reinterpret_cast<uint64_t>(pointer));
+  }
 
   const Runtime runtime;
 
