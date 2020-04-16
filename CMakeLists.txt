@@ -34,11 +34,43 @@ if (NOT LLVM_ENABLE_RTTI)
 endif()
 
 option(QSYM_BACKEND "Use the Qsym backend instead of our own" OFF)
+option(TARGET_32BIT "Make the compiler work correctly with -m32" OFF)
 
-if (${QSYM_BACKEND})
-  add_subdirectory(runtime/qsym_backend)
-else()
-  add_subdirectory(runtime/simple_backend)
+# We need to build the runtime as an external project because CMake otherwise
+# doesn't allow us to build it twice with different options (one 32-bit version
+# and one 64-bit variant).
+include(ExternalProject)
+
+set(SYM_RUNTIME_BUILD_ARGS
+  -DQSYM_BACKEND=${QSYM_BACKEND}
+  -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
+
+ExternalProject_Add(SymRuntime
+  SOURCE_DIR ${CMAKE_SOURCE_DIR}/runtime
+  CMAKE_ARGS
+  ${SYM_RUNTIME_BUILD_ARGS}
+  -DZ3_DIR=${Z3_DIR}
+  -DLLVM_DIR=${LLVM_DIR}
+  INSTALL_COMMAND ""
+  BUILD_ALWAYS TRUE)
+
+ExternalProject_Get_Property(SymRuntime BINARY_DIR)
+set(SYM_RUNTIME_DIR ${BINARY_DIR})
+
+if (${TARGET_32BIT})
+  ExternalProject_Add(SymRuntime32
+    SOURCE_DIR ${CMAKE_SOURCE_DIR}/runtime
+    CMAKE_ARGS
+    ${SYM_RUNTIME_BUILD_ARGS}
+    -DCMAKE_C_FLAGS="-m32"
+    -DCMAKE_CXX_FLAGS="-m32"
+    -DZ3_DIR=${Z3_32BIT_DIR}
+    -DLLVM_DIR=${LLVM_32BIT_DIR}
+    INSTALL_COMMAND ""
+    BUILD_ALWAYS TRUE)
+
+  ExternalProject_Get_Property(SymRuntime32 BINARY_DIR)
+  set(SYM_RUNTIME_32BIT_DIR ${BINARY_DIR})
 endif()
 
 find_program(CLANG_BINARY "clang"
@@ -51,7 +83,6 @@ if (NOT CLANG_BINARY)
   message(FATAL_ERROR "Clang not found; please make sure that the version corresponding to your LLVM installation is available.")
 endif()
 
-get_target_property(SYM_RUNTIME_DIR SymRuntime BINARY_DIR)
 configure_file("compiler/symcc.in" "symcc")
 configure_file("compiler/sym++.in" "sym++")
 

@@ -1,7 +1,22 @@
 #!/bin/bash
 
-runtime_dir="@SYM_RUNTIME_DIR@"
+runtime_64bit_dir="@SYM_RUNTIME_DIR@"
+runtime_32bit_dir="@SYM_RUNTIME_32BIT_DIR@"
 pass="@CMAKE_CURRENT_BINARY_DIR@/libSymbolize.so"
+
+# Find out if we're cross-compiling for a 32-bit architecture
+runtime_dir="$runtime_64bit_dir"
+for arg in "$@"; do
+    if [[ $arg == "-m32" ]]; then
+        if [ -z "$runtime_32bit_dir" ]; then
+            echo "SymCC: 32-bit compilation requested but SymCC was not built with TARGET_32BIT=ON" >&2
+            exit 255
+        else
+            runtime_dir="$runtime_32bit_dir"
+            break
+        fi
+    fi
+done
 
 if [[ -v SYMCC_REGULAR_LIBCXX ]]; then
     stdlib_cflags=

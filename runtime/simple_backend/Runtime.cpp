@@ -102,10 +102,12 @@ Z3_ast _sym_build_integer(uint64_t value, uint8_t bits) {
   return Z3_mk_unsigned_int64(g_context, value, Z3_mk_bv_sort(g_context, bits));
 }
 
+#ifdef __SIZEOF_INT128__
 Z3_ast _sym_build_integer128(unsigned __int128 value) {
   return Z3_mk_concat(g_context, _sym_build_integer((value >> 64), 64),
                       _sym_build_integer(value, 64));
 }
+#endif
 
 Z3_ast _sym_build_float(double value, int is_double) {
   return Z3_mk_fpa_numeral_double(g_context, value,

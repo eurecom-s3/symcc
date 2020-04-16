@@ -27,7 +27,9 @@ void _sym_initialize(void);
  * Construction of simple values
  */
 SymExpr _sym_build_integer(uint64_t value, uint8_t bits);
+#ifdef __SIZEOF_INT128__
 SymExpr _sym_build_integer128(unsigned __int128 value);
+#endif
 SymExpr _sym_build_float(double value, int is_double);
 SymExpr _sym_build_null_pointer(void);
 SymExpr _sym_build_true(void);

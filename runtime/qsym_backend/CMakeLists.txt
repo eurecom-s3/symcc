@@ -20,6 +20,10 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/expr_builder__gen.cpp
   ${QSYM_SOURCE_DIR}/codegen/expr_builder.cpp
   ${QSYM_SOURCE_DIR}/codegen/gen_expr_builder.py)
 
+find_package(LLVM REQUIRED CONFIG)
+add_definitions(${LLVM_DEFINITIONS})
+include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
+
 # Qsym doesn't work with old versions of Z3
 find_package(Z3 4.5 REQUIRED config)
 
