@@ -17,18 +17,13 @@
 
 #define SYM(x) x##_symbolized
 
-// #define DEBUG_RUNTIME
-#ifdef DEBUG_RUNTIME
-#include <iostream>
-#endif
-
 namespace {
 
 /// The file descriptor referring to the symbolic input.
 static int inputFileDescriptor = -1;
 
 /// The current position in the (symbolic) input.
-static size_t inputOffset = 0;
+static uint64_t inputOffset = 0;
 
 /// Tell the solver to try an alternative value than the given one.
 template <typename V, typename F>
@@ -129,8 +124,22 @@ ssize_t SYM(read)(int fildes, void *buf, size_t nbyte) {
   return result;
 }
 
-off_t SYM(lseek)(int fd, off_t offset, int whence) {
-  auto result = lseek(fd, offset, whence);
+// lseek is a bit tricky because, depending on preprocessor macros, glibc
+// defines it to be a function operating on 32-bit values or aliases it to
+// lseek64. Therefore, we cannot know in general whether calling lseek in our
+// code takes a 32 or a 64-bit offset and whether it returns a 32 or a 64-bit
+// result. In fact, since we compile this library against LLVM which requires us
+// to compile with "-D_FILE_OFFSET_BITS=64", we happen to know that, for us,
+// lseek is an alias to lseek64, but this may change any time. More importantly,
+// client code may call one or the other, depending on its preprocessor
+// definitions.
+//
+// Therefore, we define symbolic versions of both lseek and lseek64, but
+// internally we only use lseek64 because it's the only one on whose
+// availability we can rely.
+
+uint64_t SYM(lseek64)(int fd, uint64_t offset, int whence) {
+  auto result = lseek64(fd, offset, whence);
   _sym_set_return_expression(nullptr);
   if (result == (off_t)-1)
     return result;
@@ -142,6 +151,19 @@ off_t SYM(lseek)(int fd, off_t offset, int whence) {
     inputOffset = result;
 
   return result;
+}
+
+uint32_t SYM(lseek)(int fd, uint32_t offset, int whence) {
+  uint64_t result = SYM(lseek64)(fd, offset, whence);
+
+  // Perform the same overflow check as glibc in the 32-bit version of lseek.
+
+  uint32_t result32 = (uint32_t)result;
+  if (result == result32)
+    return result32;
+
+  errno = EOVERFLOW;
+  return (uint32_t)-1;
 }
 
 FILE *SYM(fopen)(const char *pathname, const char *mode) {
