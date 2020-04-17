@@ -185,8 +185,14 @@ void Symbolizer::handleIntrinsicCall(CallBase &I) {
     tryAlternative(IRB, I.getOperand(1));
     tryAlternative(IRB, I.getOperand(2));
 
+    // The intrinsic allows both 32 and 64-bit integers to specify the length;
+    // convert to the right type if necessary. This may truncate the value on
+    // 32-bit architectures. However, what's the point of specifying a length to
+    // memcpy that is larger than your address space?
+
     IRB.CreateCall(runtime.memcpy,
-                   {I.getOperand(0), I.getOperand(1), I.getOperand(2)});
+                   {I.getOperand(0), I.getOperand(1),
+                    IRB.CreateZExtOrTrunc(I.getOperand(2), intPtrType)});
     break;
   }
   case Intrinsic::memset: {
@@ -195,10 +201,12 @@ void Symbolizer::handleIntrinsicCall(CallBase &I) {
     tryAlternative(IRB, I.getOperand(0));
     tryAlternative(IRB, I.getOperand(2));
 
+    // The comment on memcpy's length parameter applies analogously.
+
     IRB.CreateCall(runtime.memset,
                    {I.getOperand(0),
                     getSymbolicExpressionOrNull(I.getOperand(1)),
-                    IRB.CreateZExt(I.getOperand(2), IRB.getInt64Ty())});
+                    IRB.CreateZExtOrTrunc(I.getOperand(2), intPtrType)});
     break;
   }
   case Intrinsic::memmove: {
@@ -208,8 +216,11 @@ void Symbolizer::handleIntrinsicCall(CallBase &I) {
     tryAlternative(IRB, I.getOperand(1));
     tryAlternative(IRB, I.getOperand(2));
 
+    // The comment on memcpy's length parameter applies analogously.
+
     IRB.CreateCall(runtime.memmove,
-                   {I.getOperand(0), I.getOperand(1), I.getOperand(2)});
+                   {I.getOperand(0), I.getOperand(1),
+                    IRB.CreateZExtOrTrunc(I.getOperand(2), intPtrType)});
     break;
   }
   case Intrinsic::stacksave: {

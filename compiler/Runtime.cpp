@@ -127,7 +127,7 @@ Runtime::Runtime(Module &M) {
 #undef LOAD_COMPARISON_HANDLER
 
   memcpy = import(M, "_sym_memcpy", voidT, ptrT, ptrT, intPtrType);
-  memset = import(M, "_sym_memset", voidT, ptrT, ptrT, IRB.getInt64Ty());
+  memset = import(M, "_sym_memset", voidT, ptrT, ptrT, intPtrType);
   memmove = import(M, "_sym_memmove", voidT, ptrT, ptrT, intPtrType);
   readMemory =
       import(M, "_sym_read_memory", ptrT, intPtrType, intPtrType, int8T);
