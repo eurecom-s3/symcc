@@ -27,7 +27,7 @@ void Symbolizer::symbolizeFunctionArguments(Function &F) {
 
 void Symbolizer::insertBasicBlockNotification(llvm::BasicBlock &B) {
   IRBuilder<> IRB(&*B.getFirstInsertionPt());
-  IRB.CreateCall(runtime.notifyBasicBlock, hostPointerToInt(&B));
+  IRB.CreateCall(runtime.notifyBasicBlock, getTargetPreferredInt(&B));
 }
 
 void Symbolizer::finalizePHINodes() {
@@ -278,9 +278,9 @@ void Symbolizer::handleInlineAssembly(CallInst &I) {
 
 void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
   IRBuilder<> IRB(returnPoint);
-  IRB.CreateCall(runtime.notifyRet, hostPointerToInt(&I));
+  IRB.CreateCall(runtime.notifyRet, getTargetPreferredInt(&I));
   IRB.SetInsertPoint(&I);
-  IRB.CreateCall(runtime.notifyCall, hostPointerToInt(&I));
+  IRB.CreateCall(runtime.notifyCall, getTargetPreferredInt(&I));
 
   auto callee = I.getCalledFunction();
   if (callee && callee->isIntrinsic()) {
@@ -345,7 +345,7 @@ void Symbolizer::visitSelectInst(SelectInst &I) {
   auto runtimeCall = buildRuntimeCall(IRB, runtime.pushPathConstraint,
                                       {{I.getCondition(), true},
                                        {I.getCondition(), false},
-                                       {hostPointerToInt(&I), false}});
+                                       {getTargetPreferredInt(&I), false}});
   registerSymbolicComputation(runtimeCall);
 }
 
@@ -388,7 +388,7 @@ void Symbolizer::visitBranchInst(BranchInst &I) {
   auto runtimeCall = buildRuntimeCall(IRB, runtime.pushPathConstraint,
                                       {{I.getCondition(), true},
                                        {I.getCondition(), false},
-                                       {hostPointerToInt(&I), false}});
+                                       {getTargetPreferredInt(&I), false}});
   registerSymbolicComputation(runtimeCall);
 }
 
@@ -525,7 +525,8 @@ void Symbolizer::visitGetElementPtrInst(GetElementPtrInst &I) {
         symbolicComputation.merge(forceBuildRuntimeCall(
             IRB, runtime.buildZExt,
             {{index, true},
-             {ConstantInt::get(IRB.getInt8Ty(), ptrBits - indexWidth), false}}));
+             {ConstantInt::get(IRB.getInt8Ty(), ptrBits - indexWidth),
+              false}}));
         symbolicComputation.merge(forceBuildRuntimeCall(
             IRB, runtime.binaryOperatorHandlers[Instruction::Mul],
             {{symbolicComputation.lastInstruction, false},
@@ -768,7 +769,7 @@ void Symbolizer::visitSwitchInst(SwitchInst &I) {
         runtime.comparisonHandlers[CmpInst::ICMP_EQ],
         {conditionExpr, createValueExpression(caseHandle.getCaseValue(), IRB)});
     IRB.CreateCall(runtime.pushPathConstraint,
-                   {caseConstraint, caseTaken, hostPointerToInt(&I)});
+                   {caseConstraint, caseTaken, getTargetPreferredInt(&I)});
   }
 }
 
@@ -874,9 +875,9 @@ void Symbolizer::tryAlternative(IRBuilder<> &IRB, Value *V) {
     auto destAssertion =
         IRB.CreateCall(runtime.comparisonHandlers[CmpInst::ICMP_EQ],
                        {destExpr, concreteDestExpr});
-    auto pushAssertion =
-        IRB.CreateCall(runtime.pushPathConstraint,
-                       {destAssertion, IRB.getInt1(true), hostPointerToInt(V)});
+    auto pushAssertion = IRB.CreateCall(
+        runtime.pushPathConstraint,
+        {destAssertion, IRB.getInt1(true), getTargetPreferredInt(V)});
     registerSymbolicComputation(SymbolicComputation(
         concreteDestExpr, pushAssertion, {{V, 0, destAssertion}}));
   }

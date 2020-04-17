@@ -253,8 +253,23 @@ private:
   /// Generate code that makes the solver try an alternative value for V.
   void tryAlternative(llvm::IRBuilder<> &IRB, llvm::Value *V);
 
-  /// Helper to use a pointer to a host object as integer.
-  llvm::ConstantInt *hostPointerToInt(void *pointer) {
+  /// Helper to use a pointer to a host object as integer (truncating!).
+  ///
+  /// Note that the conversion will truncate the most significant bits of the
+  /// pointer if the host uses larger addresses than the target. Therefore, use
+  /// this function only when such loss is acceptable (e.g., when generating
+  /// site identifiers to be passed to the backend, where collisions of the
+  /// least significant bits are reasonably unlikely).
+  ///
+  /// Why not do a lossless conversion and make the backend accept 64-bit
+  /// integers?
+  ///
+  /// 1. Performance: 32-bit architectures will process 32-bit values faster
+  /// than 64-bit values.
+  ///
+  /// 2. Pragmatism: Changing the backend to accept and process 64-bit values
+  /// would require modifying code that we don't control (in the case of Qsym).
+  llvm::ConstantInt *getTargetPreferredInt(void *pointer) {
     return llvm::ConstantInt::get(intPtrType,
                                   reinterpret_cast<uint64_t>(pointer));
   }
