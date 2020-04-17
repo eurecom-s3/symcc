@@ -100,7 +100,21 @@ void _sym_initialize(void) {
 }
 
 SymExpr _sym_build_integer(uint64_t value, uint8_t bits) {
-  return H(g_expr_builder->createConstant(value, bits));
+  // Qsym's API takes uintptr_t, so we need to be careful when compiling for
+  // 32-bit systems: the compiler would helpfully truncate our uint64_t to fit
+  // into 32 bits.
+  if constexpr (sizeof(uint64_t) == sizeof(uintptr_t)) {
+    // 64-bit case: all good.
+    return H(g_expr_builder->createConstant(value, bits));
+  } else {
+    // 32-bit case: use the regular API if possible, otherwise create an
+    // llvm::APInt.
+    if (uintptr_t value32 = value; value32 == value) {
+      return H(g_expr_builder->createConstant(value32, bits));
+    } else {
+      return H(g_expr_builder->createConstant({64, value}, bits));
+    }
+  }
 }
 
 #ifdef __SIZEOF_INT128__
