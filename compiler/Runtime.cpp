@@ -28,7 +28,8 @@ Runtime::Runtime(Module &M) {
   auto voidT = IRB.getVoidTy();
 
   buildInteger = import(M, "_sym_build_integer", ptrT, IRB.getInt64Ty(), int8T);
-  buildInteger128 = import(M, "_sym_build_integer128", ptrT, IRB.getInt128Ty());
+  buildInteger128 = import(M, "_sym_build_integer128", ptrT, IRB.getInt64Ty(),
+                           IRB.getInt64Ty());
   buildFloat =
       import(M, "_sym_build_float", ptrT, IRB.getDoubleTy(), IRB.getInt1Ty());
   buildNullPointer = import(M, "_sym_build_null_pointer", ptrT);

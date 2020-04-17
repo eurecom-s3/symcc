@@ -7,8 +7,8 @@
 // C++
 #include <atomic>
 #include <fstream>
-#include <iterator>
 #include <iostream>
+#include <iterator>
 
 // C
 #include <cstdio>
@@ -117,13 +117,10 @@ SymExpr _sym_build_integer(uint64_t value, uint8_t bits) {
   }
 }
 
-#ifdef __SIZEOF_INT128__
-SymExpr _sym_build_integer128(unsigned __int128 value) {
-  std::array<uint64_t, 2> words = {static_cast<uint64_t>(value),
-                                   static_cast<uint64_t>(value >> 64)};
+SymExpr _sym_build_integer128(uint64_t high, uint64_t low) {
+  std::array<uint64_t, 2> words = {low, high};
   return H(g_expr_builder->createConstant({128, words}, 128));
 }
-#endif
 
 SymExpr _sym_build_null_pointer() {
   return H(g_expr_builder->createConstant(0, sizeof(uintptr_t) * 8));

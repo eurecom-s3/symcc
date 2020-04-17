@@ -814,7 +814,12 @@ CallInst *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
       // 128-bit integers are a bit tricky because the symbolic backends don't
       // support them per se. We have a special function in the run-time library
       // that handles such large integers.
-      return IRB.CreateCall(runtime.buildInteger128, V);
+      return IRB.CreateCall(
+          runtime.buildInteger128,
+          {IRB.CreateTrunc(
+               IRB.CreateLShr(V, ConstantInt::get(IRB.getInt128Ty(), 64)),
+               IRB.getInt64Ty()),
+           IRB.CreateTrunc(V, IRB.getInt64Ty())});
     default:
       return IRB.CreateCall(runtime.buildInteger,
                             {IRB.CreateZExtOrBitCast(V, IRB.getInt64Ty()),
