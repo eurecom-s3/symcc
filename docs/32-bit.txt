@@ -1,0 +1,38 @@
+
+
+                   Compiling 32-bit programs on a 64-bit host
+                       (and cross-compilation in general)
+
+
+In theory, SymCC can use clang to cross-compile programs for any architecture
+that LLVM supports. Note, however, that this requires cross-compiling the
+symbolic backend and its dependencies as well, and then linking the right
+backend into the target programs. We currently provide automatic handling only
+for the common case of compiling 32-bit libraries and programs on a 64-bit host
+machine. In all other cases, we recommend building SymCC on the target machine,
+so that cross-compilation is not needed.
+
+Let's assume that you're running SymCC on a 64-bit x86 machine, wanting to
+create 32-bit binaries from some code under test. First of all, make sure that
+32-bit versions of the backend's dependencies are available: LLVM (usually
+obtainable via packages of your Linux distribution) and Z3 (which is reasonably
+easy to build following its CMake instructions and exporting CFLAGS="-m32" and
+CXXFLAGS="-m32"). If you build Z3 yourself, note that it is sufficient to point
+SymCC to the build directory - there is no need to install the 32-bit version of
+Z3 in your system.
+
+Once the dependencies for 32-bit SymCC are available (as well as the 64-bit
+dependencies mentioned in the main README), configure and build SymCC as usual
+but add "-DTARGET_32BIT=ON" to the CMake invocation. If the build system doesn't
+find your 32-bit versions of LLVM and Z3, specify their locations with
+"-DLLVM_32BIT_DIR=/some/path" and "-DZ3_32BIT_DIR=/some/other/path",
+respectively - analogously to how you would hint at the 64-bit versions.
+
+The resulting "symcc" and "sym++" scripts work like regular SymCC, but they
+additionally understand the "-m32" switch, which tells clang to build 32-bit
+artifacts. If you build anything with "-m32", SymCC will make sure that the
+32-bit version of the symbolic backend is linked to it instead of the 64-bit
+variant that would normally be used.
+
+If your 64-bit host is equipped to run 32-bit binaries, you can simply execute
+the instrumented programs produced by SymCC like any other program.

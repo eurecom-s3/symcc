@@ -64,12 +64,13 @@ call symcc as we would normally call clang:
 
 $ ./symcc test.c -o test
 
-Before starting the analysis, create a directory for the results and tell SymCC:
+Before starting the analysis, create a directory for the results and tell SymCC
+about it:
 
 $ mkdir results
 $ export SYMCC_OUTPUT_DIR=`pwd`/results
 
-Then run the program like any other binary, providing an arbitrary input:
+Then run the program like any other binary, providing arbitrary input:
 
 $ echo 'aaaa' | ./test
 
@@ -78,11 +79,12 @@ would, but additionally the injected code will track computations symbolically
 and attempt to compute diverging inputs at each branch point. All data that the
 program reads from standard input is treated as symbolic; alternatively, you can
 set the environment variable SYMCC_INPUT_FILE to the name of a file whose
-contents will be treated as symbolic when read. Note that due how the Qsym
-backend is implemented, all input has to be available from the start. In
-particular, when providing symbolic data on standard input interactively, you
-need to terminate your input by pressing Ctrl+D before the program starts to
-execute.
+contents will be treated as symbolic when read.
+
+Note that due how the Qsym backend is implemented, all input has to be available
+from the start. In particular, when providing symbolic data on standard input
+interactively, you need to terminate your input by pressing Ctrl+D before the
+program starts to execute.
 
 When execution is finished, the result directory will contain the new test cases
 generated during program execution. Try running the program again on one of
@@ -92,13 +94,14 @@ those or combine it with a fuzzer to automate this process (see below).
                                  Documentation
 
 The directory "docs" contains documentation on several internal aspects of
-SymCC, as well as building C++ code and running SymCC with a fuzzer.
+SymCC, as well as building C++ code, compiling 32-bit binaries on a 64-bit host,
+and running SymCC with a fuzzer.
 
 
                             Building a Docker image
 
-If you prefer a Docker container over building SymCC natively, just call Docker
-after pulling the Qsym code as above:
+If you prefer a Docker container over building SymCC natively, just tell Docker
+to build the image after pulling the Qsym code as above:
 
 $ git submodule init
 $ git submodule update
@@ -108,5 +111,6 @@ $ docker run -it --rm symcc
 This will build a Docker image and run an ephemeral container to try out SymCC.
 Inside the container, "symcc" is available as a drop-in replacement for "clang",
 using the Qsym backend. If you want to try modifications to SymCC, you will find
-the source code in "/symcc_source" and the build files in "/symcc_build";
-recompile SymCC by running "ninja -C /symcc_build check".
+the source code in "/symcc_source" and the build files in "/symcc_build"; if you
+want to change the SymCC sources, recompile SymCC afterwards by running "ninja
+-C /symcc_build check".
