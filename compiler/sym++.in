@@ -3,6 +3,7 @@
 runtime_64bit_dir="@SYM_RUNTIME_DIR@"
 runtime_32bit_dir="@SYM_RUNTIME_32BIT_DIR@"
 pass="@CMAKE_CURRENT_BINARY_DIR@/libSymbolize.so"
+libcxx_var=SYMCC_LIBCXX_PATH
 
 # Find out if we're cross-compiling for a 32-bit architecture
 runtime_dir="$runtime_64bit_dir"
@@ -13,6 +14,7 @@ for arg in "$@"; do
             exit 255
         else
             runtime_dir="$runtime_32bit_dir"
+            libcxx_var=SYMCC_LIBCXX_32BIT_PATH
             break
         fi
     fi
@@ -21,15 +23,15 @@ done
 if [[ -v SYMCC_REGULAR_LIBCXX ]]; then
     stdlib_cflags=
     stdlib_ldflags=
-elif [[ ! -v SYMCC_LIBCXX_PATH ]]; then
-    >&2 echo "Please set SYMCC_LIBCXX_PATH to the directory containing libc++ or confirm usage of the system library by setting SYMCC_REGULAR_LIBCXX!"
+elif [[ ! -v $libcxx_var ]]; then
+    >&2 echo "Please set $libcxx_var to the directory containing libc++ or confirm usage of the system library by setting SYMCC_REGULAR_LIBCXX!"
     exit 255
 else
     # It is important that the resulting binaries load libstdc++ before libc++;
     # otherwise our backend calls the instrumented library in cases where
     # exported names collide.
-    stdlib_cflags="-isystem $SYMCC_LIBCXX_PATH/include/c++/v1 -nostdlib++"
-    stdlib_ldflags="-L$SYMCC_LIBCXX_PATH/lib -Wl,-rpath,$SYMCC_LIBCXX_PATH/lib -lstdc++ -lc++ -stdlib=libc++"
+    stdlib_cflags="-isystem ${!libcxx_var}/include/c++/v1 -nostdlib++"
+    stdlib_ldflags="-L${!libcxx_var}/lib -Wl,-rpath,${!libcxx_var}/lib -lstdc++ -lc++ -stdlib=libc++"
 fi
 
 exec @CLANGPP_BINARY@                           \

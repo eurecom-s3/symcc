@@ -32,7 +32,11 @@ The resulting "symcc" and "sym++" scripts work like regular SymCC, but they
 additionally understand the "-m32" switch, which tells clang to build 32-bit
 artifacts. If you build anything with "-m32", SymCC will make sure that the
 32-bit version of the symbolic backend is linked to it instead of the 64-bit
-variant that would normally be used.
+variant that would normally be used. Note that, in order to compile C++ code
+with "sym++" in 32-bit mode, you also need to build a 32-bit version of libc++
+(following the instructions for the 64-bit build from docs/C++.txt but
+additionally passing "-DLLVM_BUILD_32_BITS=ON" to CMake); communicate its
+location to SymCC via the environment variable SYMCC_LIBCXX_32BIT_PATH.
 
 If your 64-bit host is equipped to run 32-bit binaries, you can simply execute
 the instrumented programs produced by SymCC like any other program.

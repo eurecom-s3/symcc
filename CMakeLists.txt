@@ -84,7 +84,7 @@ if (NOT CLANG_BINARY)
   message(FATAL_ERROR "Clang not found; please make sure that the version corresponding to your LLVM installation is available.")
 endif()
 
-configure_file("compiler/symcc.in" "symcc")
-configure_file("compiler/sym++.in" "sym++")
+configure_file("compiler/symcc.in" "symcc" @ONLY)
+configure_file("compiler/sym++.in" "sym++" @ONLY)
 
 add_subdirectory(test)
