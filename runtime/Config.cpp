@@ -1,7 +1,10 @@
 #include "Config.h"
 
 #include <algorithm>
+#include <cstddef>
+#include <limits>
 #include <sstream>
+#include <stdexcept>
 
 namespace {
 
@@ -43,4 +46,20 @@ void loadConfig() {
   auto aflCoverageMap = getenv("SYMCC_AFL_COVERAGE_MAP");
   if (aflCoverageMap != nullptr)
     g_config.aflCoverageMap = aflCoverageMap;
+
+  auto garbageCollectionThreshold = getenv("SYMCC_GC_THRESHOLD");
+  if (garbageCollectionThreshold != nullptr) {
+    try {
+      g_config.garbageCollectionThreshold =
+          std::stoul(garbageCollectionThreshold);
+    } catch (std::invalid_argument &) {
+      std::stringstream msg;
+      msg << "Can't convert " << garbageCollectionThreshold << " to an integer";
+      throw std::runtime_error(msg.str());
+    } catch (std::out_of_range &) {
+      std::stringstream msg;
+      msg << "The GC threshold must be between 0 and " << std::numeric_limits<size_t>::max();
+      throw std::runtime_error(msg.str());
+    }
+  }
 }

@@ -13,9 +13,9 @@
 #endif
 
 #include "Config.h"
+#include "GarbageCollection.h"
 #include "LibcWrappers.h"
 #include "Shadow.h"
-#include "GarbageCollection.h"
 
 #ifdef DEBUG_RUNTIME
 // Helper to print pointers properly.
@@ -485,7 +485,7 @@ bool _sym_feasible(SymExpr expr) {
 
 /* Garbage collection */
 void _sym_collect_garbage() {
-  if (allocatedExpressions.size() < 10'000)
+  if (allocatedExpressions.size() < g_config.garbageCollectionThreshold)
     return;
 
 #ifdef DEBUG_RUNTIME

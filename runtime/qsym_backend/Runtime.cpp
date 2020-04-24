@@ -65,15 +65,6 @@ void deleteInputFile() { std::remove(inputFileName.c_str()); }
 /// workload.
 std::map<SymExpr, qsym::ExprRef> allocatedExpressions;
 
-/// The number of allocated expressions at which we start collecting garbage.
-///
-/// Collecting too often hurts performance, whereas delaying garbage collection
-/// for too long might make us run out of memory. The goal of this empirically
-/// determined constant is to keep peek memory consumption below 2 GB on most
-/// workloads because requiring that amount of memory per core participating in
-/// the analysis seems reasonable.
-constexpr size_t kGarbageCollectionThreshold = 5'000'000;
-
 /// An imitation of std::span (which is not available before C++20) for symbolic
 /// expressions.
 using ExpressionRegion = std::pair<SymExpr *, size_t>;
@@ -365,7 +356,7 @@ bool _sym_feasible(SymExpr expr) {
 //
 
 void _sym_collect_garbage() {
-  if (allocatedExpressions.size() < kGarbageCollectionThreshold)
+  if (allocatedExpressions.size() < g_config.garbageCollectionThreshold)
     return;
 
 #ifdef DEBUG_RUNTIME

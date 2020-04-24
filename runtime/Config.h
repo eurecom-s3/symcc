@@ -21,6 +21,18 @@ struct Config {
   /// Specifying a file name here allows us to track already covered program
   /// locations across multiple program executions.
   std::string aflCoverageMap = "";
+
+  /// The garbage collection threshold.
+  ///
+  /// We will start collecting unused symbolic expressions if the total number
+  /// of allocated expressions in the target program exceeds this number.
+  ///
+  /// Collecting too often hurts performance, whereas delaying garbage
+  /// collection for too long might make us run out of memory. The goal of this
+  /// empirically determined constant is to keep peek memory consumption below
+  /// 2GB on most workloads because requiring that amount of memory per core
+  /// participating in the analysis seems reasonable.
+  size_t garbageCollectionThreshold = 5'000'000;
 };
 
 /// The global configuration object.
