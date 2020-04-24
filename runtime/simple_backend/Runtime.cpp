@@ -133,6 +133,10 @@ Z3_ast _sym_build_true(void) { return g_true; }
 Z3_ast _sym_build_false(void) { return g_false; }
 Z3_ast _sym_build_bool(bool value) { return value ? g_true : g_false; }
 
+Z3_ast _sym_build_neg(Z3_ast expr) {
+  return Z3_mk_bvneg(expr);
+}
+
 Z3_ast _sym_build_add(Z3_ast a, Z3_ast b) {
   return Z3_mk_bvadd(g_context, a, b);
 }
@@ -195,7 +199,7 @@ Z3_ast _sym_build_fp_rem(Z3_ast a, Z3_ast b) {
 
 Z3_ast _sym_build_fp_abs(Z3_ast a) { return Z3_mk_fpa_abs(g_context, a); }
 
-Z3_ast _sym_build_neg(Z3_ast expr) { return Z3_mk_bvnot(g_context, expr); }
+Z3_ast _sym_build_not(Z3_ast expr) { return Z3_mk_bvnot(g_context, expr); }
 
 Z3_ast _sym_build_signed_less_than(Z3_ast a, Z3_ast b) {
   return Z3_mk_bvslt(g_context, a, b);

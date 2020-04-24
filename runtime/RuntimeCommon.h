@@ -37,6 +37,7 @@ SymExpr _sym_build_bool(bool value);
 /*
  * Arithmetic and shifts
  */
+SymExpr _sym_build_neg(SymExpr expr);
 SymExpr _sym_build_add(SymExpr a, SymExpr b);
 SymExpr _sym_build_sub(SymExpr a, SymExpr b);
 SymExpr _sym_build_mul(SymExpr a, SymExpr b);
@@ -58,7 +59,7 @@ SymExpr _sym_build_fp_abs(SymExpr a);
 /*
  * Boolean operations
  */
-SymExpr _sym_build_neg(SymExpr expr);
+SymExpr _sym_build_not(SymExpr expr);
 SymExpr _sym_build_signed_less_than(SymExpr a, SymExpr b);
 SymExpr _sym_build_signed_less_equal(SymExpr a, SymExpr b);
 SymExpr _sym_build_signed_greater_than(SymExpr a, SymExpr b);

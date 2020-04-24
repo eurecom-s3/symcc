@@ -15,7 +15,6 @@ struct Runtime {
   llvm::Value *buildTrue{};
   llvm::Value *buildFalse{};
   llvm::Value *buildBool{};
-  llvm::Value *buildNeg{};
   llvm::Value *buildSExt{};
   llvm::Value *buildZExt{};
   llvm::Value *buildTrunc{};

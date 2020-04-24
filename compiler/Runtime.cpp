@@ -36,7 +36,6 @@ Runtime::Runtime(Module &M) {
   buildTrue = import(M, "_sym_build_true", ptrT);
   buildFalse = import(M, "_sym_build_false", ptrT);
   buildBool = import(M, "_sym_build_bool", ptrT, IRB.getInt1Ty());
-  buildNeg = import(M, "_sym_build_neg", ptrT, ptrT);
   buildSExt = import(M, "_sym_build_sext", ptrT, ptrT, int8T);
   buildZExt = import(M, "_sym_build_zext", ptrT, ptrT, int8T);
   buildTrunc = import(M, "_sym_build_trunc", ptrT, ptrT, int8T);
