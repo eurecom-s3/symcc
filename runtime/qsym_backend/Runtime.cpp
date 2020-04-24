@@ -9,7 +9,12 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <map>
 #include <unordered_set>
+
+#ifdef DEBUG_RUNTIME
+#include <chrono>
+#endif
 
 // C
 #include <cstdio>
@@ -48,8 +53,25 @@ std::string inputFileName;
 
 void deleteInputFile() { std::remove(inputFileName.c_str()); }
 
-/// The set of all expressions that we have ever allocated.
-std::unordered_set<SymExpr> allocatedExpessions;
+/// A mapping of all expressions that we have ever received from Qsym to the
+/// corresponding shared pointers on the heap.
+///
+/// We can't expect C clients to handle std::shared_ptr, so we maintain a single
+/// copy per expression in order to keep the expression alive. The garbage
+/// collector decides when to release our shared pointer.
+///
+/// std::map seems to perform slightly better than std::unordered_map on our
+/// workload.
+std::map<SymExpr, qsym::ExprRef> allocatedExpressions;
+
+/// The number of allocated expressions at which we start collecting garbage.
+///
+/// Collecting too often hurts performance, whereas delaying garbage collection
+/// for too long might make us run out of memory. The goal of this empirically
+/// determined constant is to keep peek memory consumption below 2 GB on most
+/// workloads because requiring that amount of memory per core participating in
+/// the analysis seems reasonable.
+constexpr size_t kGarbageCollectionThreshold = 5'000'000;
 
 /// An imitation of std::span (which is not available before C++20) for symbolic
 /// expressions.
@@ -59,9 +81,15 @@ using ExpressionRegion = std::pair<SymExpr *, size_t>;
 std::vector<ExpressionRegion> expressionRegions;
 
 SymExpr registerExpression(qsym::ExprRef expr) {
-  SymExpr heapCopy = new qsym::ExprRef(expr);
-  allocatedExpessions.insert(heapCopy);
-  return heapCopy;
+  SymExpr rawExpr = expr.get();
+
+  if (allocatedExpressions.count(rawExpr) == 0) {
+    // We don't know this expression yet. Create a copy of the shared pointer to
+    // keep the expression alive.
+    allocatedExpressions[rawExpr] = expr;
+  }
+
+  return rawExpr;
 }
 
 } // namespace
@@ -153,126 +181,67 @@ SymExpr _sym_build_bool(bool value) {
   return registerExpression(g_expr_builder->createBool(value));
 }
 
-SymExpr _sym_build_add(SymExpr a, SymExpr b) {
-  return registerExpression(g_expr_builder->createAdd(*a, *b));
-}
+#define DEF_BINARY_EXPR_BUILDER(name, qsymName)                                \
+  SymExpr _sym_build_##name(SymExpr a, SymExpr b) {                            \
+    return registerExpression(g_expr_builder->create##qsymName(                \
+        allocatedExpressions[a], allocatedExpressions[b]));                    \
+  }
 
-SymExpr _sym_build_sub(SymExpr a, SymExpr b) {
-  return registerExpression(g_expr_builder->createSub(*a, *b));
-}
+DEF_BINARY_EXPR_BUILDER(add, Add)
+DEF_BINARY_EXPR_BUILDER(sub, Sub)
+DEF_BINARY_EXPR_BUILDER(mul, Mul)
+DEF_BINARY_EXPR_BUILDER(unsigned_div, UDiv)
+DEF_BINARY_EXPR_BUILDER(signed_div, SDiv)
+DEF_BINARY_EXPR_BUILDER(unsigned_rem, URem)
+DEF_BINARY_EXPR_BUILDER(signed_rem, SRem)
 
-SymExpr _sym_build_mul(SymExpr a, SymExpr b) {
-  return registerExpression(g_expr_builder->createMul(*a, *b));
-}
+DEF_BINARY_EXPR_BUILDER(shift_left, Shl)
+DEF_BINARY_EXPR_BUILDER(logical_shift_right, LShr)
+DEF_BINARY_EXPR_BUILDER(arithmetic_shift_right, AShr)
 
-SymExpr _sym_build_unsigned_div(SymExpr a, SymExpr b) {
-  return registerExpression(g_expr_builder->createUDiv(*a, *b));
-}
+DEF_BINARY_EXPR_BUILDER(signed_less_than, Slt)
+DEF_BINARY_EXPR_BUILDER(signed_less_equal, Sle)
+DEF_BINARY_EXPR_BUILDER(signed_greater_than, Sgt)
+DEF_BINARY_EXPR_BUILDER(signed_greater_equal, Sge)
+DEF_BINARY_EXPR_BUILDER(unsigned_less_than, Ult)
+DEF_BINARY_EXPR_BUILDER(unsigned_less_equal, Ule)
+DEF_BINARY_EXPR_BUILDER(unsigned_greater_than, Ugt)
+DEF_BINARY_EXPR_BUILDER(unsigned_greater_equal, Uge)
+DEF_BINARY_EXPR_BUILDER(equal, Equal)
+DEF_BINARY_EXPR_BUILDER(not_equal, Distinct)
 
-SymExpr _sym_build_signed_div(SymExpr a, SymExpr b) {
-  return registerExpression(g_expr_builder->createSDiv(*a, *b));
-}
+DEF_BINARY_EXPR_BUILDER(bool_and, LAnd)
+DEF_BINARY_EXPR_BUILDER(and, And)
+DEF_BINARY_EXPR_BUILDER(bool_or, LOr)
+DEF_BINARY_EXPR_BUILDER(or, Or)
+DEF_BINARY_EXPR_BUILDER(bool_xor, Distinct)
+DEF_BINARY_EXPR_BUILDER(xor, Xor)
 
-SymExpr _sym_build_unsigned_rem(SymExpr a, SymExpr b) {
-  return registerExpression(g_expr_builder->createURem(*a, *b));
-}
-
-SymExpr _sym_build_signed_rem(SymExpr a, SymExpr b) {
-  return registerExpression(g_expr_builder->createSRem(*a, *b));
-}
-
-SymExpr _sym_build_shift_left(SymExpr a, SymExpr b) {
-  return registerExpression(g_expr_builder->createShl(*a, *b));
-}
-
-SymExpr _sym_build_logical_shift_right(SymExpr a, SymExpr b) {
-  return registerExpression(g_expr_builder->createLShr(*a, *b));
-}
-
-SymExpr _sym_build_arithmetic_shift_right(SymExpr a, SymExpr b) {
-  return registerExpression(g_expr_builder->createAShr(*a, *b));
-}
+#undef DEF_BINARY_EXPR_BUILDER
 
 SymExpr _sym_build_neg(SymExpr expr) {
-  return registerExpression(g_expr_builder->createNeg(*expr));
+  return registerExpression(
+      g_expr_builder->createNeg(allocatedExpressions[expr]));
 }
 
-SymExpr _sym_build_signed_less_than(SymExpr a, SymExpr b) {
-  return registerExpression(g_expr_builder->createSlt(*a, *b));
-}
-
-SymExpr _sym_build_signed_less_equal(SymExpr a, SymExpr b) {
-  return registerExpression(g_expr_builder->createSle(*a, *b));
-}
-
-SymExpr _sym_build_signed_greater_than(SymExpr a, SymExpr b) {
-  return registerExpression(g_expr_builder->createSgt(*a, *b));
-}
-
-SymExpr _sym_build_signed_greater_equal(SymExpr a, SymExpr b) {
-  return registerExpression(g_expr_builder->createSge(*a, *b));
-}
-
-SymExpr _sym_build_unsigned_less_than(SymExpr a, SymExpr b) {
-  return registerExpression(g_expr_builder->createUlt(*a, *b));
-}
-
-SymExpr _sym_build_unsigned_less_equal(SymExpr a, SymExpr b) {
-  return registerExpression(g_expr_builder->createUle(*a, *b));
-}
-
-SymExpr _sym_build_unsigned_greater_than(SymExpr a, SymExpr b) {
-  return registerExpression(g_expr_builder->createUgt(*a, *b));
-}
-
-SymExpr _sym_build_unsigned_greater_equal(SymExpr a, SymExpr b) {
-  return registerExpression(g_expr_builder->createUge(*a, *b));
-}
-
-SymExpr _sym_build_equal(SymExpr a, SymExpr b) {
-  return registerExpression(g_expr_builder->createEqual(*a, *b));
-}
-
-SymExpr _sym_build_not_equal(SymExpr a, SymExpr b) {
-  return registerExpression(g_expr_builder->createDistinct(*a, *b));
-}
-
-SymExpr _sym_build_bool_and(SymExpr a, SymExpr b) {
-  return registerExpression(g_expr_builder->createLAnd(*a, *b));
-}
-
-SymExpr _sym_build_and(SymExpr a, SymExpr b) {
-  return registerExpression(g_expr_builder->createAnd(*a, *b));
-}
-
-SymExpr _sym_build_bool_or(SymExpr a, SymExpr b) {
-  return registerExpression(g_expr_builder->createLOr(*a, *b));
-}
-
-SymExpr _sym_build_or(SymExpr a, SymExpr b) {
-  return registerExpression(g_expr_builder->createOr(*a, *b));
-}
-
-SymExpr _sym_build_bool_xor(SymExpr a, SymExpr b) {
-  return registerExpression(g_expr_builder->createLOr(*a, *b));
-}
-
-SymExpr _sym_build_xor(SymExpr a, SymExpr b) {
-  return registerExpression(g_expr_builder->createXor(*a, *b));
+SymExpr _sym_build_not(SymExpr expr) {
+  return registerExpression(
+      g_expr_builder->createNot(allocatedExpressions[expr]));
 }
 
 SymExpr _sym_build_sext(SymExpr expr, uint8_t bits) {
-  return registerExpression(
-      g_expr_builder->createSExt(*expr, bits + (*expr)->bits()));
+  return registerExpression(g_expr_builder->createSExt(
+      allocatedExpressions[expr], bits + expr->bits()));
 }
 
 SymExpr _sym_build_zext(SymExpr expr, uint8_t bits) {
-  return registerExpression(
-      g_expr_builder->createZExt(*expr, bits + (*expr)->bits()));
+  return registerExpression(g_expr_builder->createZExt(
+      allocatedExpressions[expr], bits + expr->bits()));
 }
 
 SymExpr _sym_build_trunc(SymExpr expr, uint8_t bits) {
-  return registerExpression(g_expr_builder->createTrunc(*expr, bits));
+  return registerExpression(
+      g_expr_builder->createTrunc(allocatedExpressions[expr], bits));
 }
 
 void _sym_push_path_constraint(SymExpr constraint, int taken,
@@ -280,7 +249,7 @@ void _sym_push_path_constraint(SymExpr constraint, int taken,
   if (!constraint)
     return;
 
-  g_solver->addJcc(*constraint, taken, site_id);
+  g_solver->addJcc(allocatedExpressions[constraint], taken, site_id);
 }
 
 SymExpr _sym_get_input_byte(size_t offset) {
@@ -288,18 +257,20 @@ SymExpr _sym_get_input_byte(size_t offset) {
 }
 
 SymExpr _sym_concat_helper(SymExpr a, SymExpr b) {
-  return registerExpression(g_expr_builder->createConcat(*a, *b));
+  return registerExpression(g_expr_builder->createConcat(
+      allocatedExpressions[a], allocatedExpressions[b]));
 }
 
 SymExpr _sym_extract_helper(SymExpr expr, size_t first_bit, size_t last_bit) {
-  return registerExpression(
-      g_expr_builder->createExtract(*expr, last_bit, first_bit - last_bit + 1));
+  return registerExpression(g_expr_builder->createExtract(
+      allocatedExpressions[expr], last_bit, first_bit - last_bit + 1));
 }
 
-size_t _sym_bits_helper(SymExpr expr) { return (*expr)->bits(); }
+size_t _sym_bits_helper(SymExpr expr) { return expr->bits(); }
 
 SymExpr _sym_build_bool_to_bits(SymExpr expr, uint8_t bits) {
-  return registerExpression(g_expr_builder->boolToBit(*expr, bits));
+  return registerExpression(
+      g_expr_builder->boolToBit(allocatedExpressions[expr], bits));
 }
 
 //
@@ -369,7 +340,7 @@ void _sym_notify_basic_block(uintptr_t site_id) {
 const char *_sym_expr_to_string(SymExpr expr) {
   static char buffer[4096];
 
-  auto expr_string = (*expr)->toString();
+  auto expr_string = expr->toString();
   auto copied = expr_string.copy(
       buffer, std::min(expr_string.length(), sizeof(buffer) - 1));
   buffer[copied] = '\0';
@@ -378,10 +349,10 @@ const char *_sym_expr_to_string(SymExpr expr) {
 }
 
 bool _sym_feasible(SymExpr expr) {
-  (*expr)->simplify();
+  expr->simplify();
 
   g_solver->push();
-  g_solver->add((*expr)->toZ3Expr());
+  g_solver->add(expr->toZ3Expr());
   bool feasible = (g_solver->check() == z3::sat);
   g_solver->pop();
 
@@ -397,8 +368,12 @@ void _sym_register_expression_region(SymExpr *start, size_t length) {
 }
 
 void _sym_collect_garbage() {
-  if (allocatedExpessions.size() < 1'000'000)
+  if (allocatedExpressions.size() < kGarbageCollectionThreshold)
     return;
+
+#ifdef DEBUG_RUNTIME
+  auto start = std::chrono::high_resolution_clock::now();
+#endif
 
   std::unordered_set<SymExpr> reachableExpressions;
   auto collectReachableExpressions = [&](SymExpr *start, SymExpr *end) {
@@ -417,16 +392,24 @@ void _sym_collect_garbage() {
     collectReachableExpressions(symbolic, symbolic + kPageSize);
   }
 
-  for (auto expr_it = allocatedExpessions.begin();
-       expr_it != allocatedExpessions.end();) {
-    if (reachableExpressions.count(*expr_it) == 0) {
-      delete *expr_it;
-      expr_it = allocatedExpessions.erase(expr_it);
+  for (auto expr_it = allocatedExpressions.begin();
+       expr_it != allocatedExpressions.end();) {
+    if (reachableExpressions.count(expr_it->first) == 0) {
+      expr_it = allocatedExpressions.erase(expr_it);
     } else {
       ++expr_it;
     }
   }
 
-  std::cout << "After garbage collection: " << allocatedExpessions.size()
-            << " expressions remaining" << std::endl;
+#ifdef DEBUG_RUNTIME
+  auto end = std::chrono::high_resolution_clock::now();
+
+  std::cout << "After garbage collection: " << allocatedExpressions.size()
+            << " expressions remain" << std::endl
+            << "\t(collection took "
+            << std::chrono::duration_cast<std::chrono::milliseconds>(end -
+                                                                     start)
+                   .count()
+            << " milliseconds)" << std::endl;
+#endif
 }

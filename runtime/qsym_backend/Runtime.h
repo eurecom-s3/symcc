@@ -3,7 +3,7 @@
 
 #include "expr.h"
 
-typedef qsym::ExprRef *SymExpr;
+typedef qsym::Expr *SymExpr;
 #include <RuntimeCommon.h>
 
 #endif
