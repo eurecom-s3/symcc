@@ -134,7 +134,7 @@ Z3_ast _sym_build_false(void) { return g_false; }
 Z3_ast _sym_build_bool(bool value) { return value ? g_true : g_false; }
 
 Z3_ast _sym_build_neg(Z3_ast expr) {
-  return Z3_mk_bvneg(expr);
+  return Z3_mk_bvneg(g_context, expr);
 }
 
 Z3_ast _sym_build_add(Z3_ast a, Z3_ast b) {
