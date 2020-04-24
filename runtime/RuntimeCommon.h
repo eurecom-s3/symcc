@@ -153,6 +153,12 @@ void _sym_notify_basic_block(uintptr_t site_id);
 const char *_sym_expr_to_string(SymExpr expr); // statically allocated
 bool _sym_feasible(SymExpr expr);
 
+/*
+ * Garbage collection
+ */
+void _sym_register_expression_region(SymExpr *start, size_t length);
+void _sym_collect_garbage(void);
+
 #ifdef __cplusplus
 }
 #endif

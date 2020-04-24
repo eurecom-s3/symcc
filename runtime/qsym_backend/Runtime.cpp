@@ -9,6 +9,7 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <unordered_set>
 
 // C
 #include <cstdio>
@@ -28,10 +29,6 @@
 #include <LibcWrappers.h>
 #include <Shadow.h>
 
-// A macro to create SymExpr from ExprRef. Basically, we move the shared pointer
-// to the heap.
-#define H(x) (new ExprRef(x))
-
 namespace qsym {
 
 ExprBuilder *g_expr_builder;
@@ -50,6 +47,22 @@ std::atomic_flag g_initialized = ATOMIC_FLAG_INIT;
 std::string inputFileName;
 
 void deleteInputFile() { std::remove(inputFileName.c_str()); }
+
+/// The set of all expressions that we have ever allocated.
+std::unordered_set<SymExpr> allocatedExpessions;
+
+/// An imitation of std::span (which is not available before C++20) for symbolic
+/// expressions.
+using ExpressionRegion = std::pair<SymExpr *, size_t>;
+
+/// A list of memory regions that are known to contain symbolic expressions.
+std::vector<ExpressionRegion> expressionRegions;
+
+SymExpr registerExpression(qsym::ExprRef expr) {
+  SymExpr heapCopy = new qsym::ExprRef(expr);
+  allocatedExpessions.insert(heapCopy);
+  return heapCopy;
+}
 
 } // namespace
 
@@ -105,153 +118,161 @@ SymExpr _sym_build_integer(uint64_t value, uint8_t bits) {
   // into 32 bits.
   if constexpr (sizeof(uint64_t) == sizeof(uintptr_t)) {
     // 64-bit case: all good.
-    return H(g_expr_builder->createConstant(value, bits));
+    return registerExpression(g_expr_builder->createConstant(value, bits));
   } else {
     // 32-bit case: use the regular API if possible, otherwise create an
     // llvm::APInt.
     if (uintptr_t value32 = value; value32 == value) {
-      return H(g_expr_builder->createConstant(value32, bits));
+      return registerExpression(g_expr_builder->createConstant(value32, bits));
     } else {
-      return H(g_expr_builder->createConstant({64, value}, bits));
+      return registerExpression(
+          g_expr_builder->createConstant({64, value}, bits));
     }
   }
 }
 
 SymExpr _sym_build_integer128(uint64_t high, uint64_t low) {
   std::array<uint64_t, 2> words = {low, high};
-  return H(g_expr_builder->createConstant({128, words}, 128));
+  return registerExpression(g_expr_builder->createConstant({128, words}, 128));
 }
 
 SymExpr _sym_build_null_pointer() {
-  return H(g_expr_builder->createConstant(0, sizeof(uintptr_t) * 8));
+  return registerExpression(
+      g_expr_builder->createConstant(0, sizeof(uintptr_t) * 8));
 }
 
-SymExpr _sym_build_true() { return H(g_expr_builder->createTrue()); }
+SymExpr _sym_build_true() {
+  return registerExpression(g_expr_builder->createTrue());
+}
 
-SymExpr _sym_build_false() { return H(g_expr_builder->createFalse()); }
+SymExpr _sym_build_false() {
+  return registerExpression(g_expr_builder->createFalse());
+}
 
 SymExpr _sym_build_bool(bool value) {
-  return H(g_expr_builder->createBool(value));
+  return registerExpression(g_expr_builder->createBool(value));
 }
 
 SymExpr _sym_build_add(SymExpr a, SymExpr b) {
-  return H(g_expr_builder->createAdd(*a, *b));
+  return registerExpression(g_expr_builder->createAdd(*a, *b));
 }
 
 SymExpr _sym_build_sub(SymExpr a, SymExpr b) {
-  return H(g_expr_builder->createSub(*a, *b));
+  return registerExpression(g_expr_builder->createSub(*a, *b));
 }
 
 SymExpr _sym_build_mul(SymExpr a, SymExpr b) {
-  return H(g_expr_builder->createMul(*a, *b));
+  return registerExpression(g_expr_builder->createMul(*a, *b));
 }
 
 SymExpr _sym_build_unsigned_div(SymExpr a, SymExpr b) {
-  return H(g_expr_builder->createUDiv(*a, *b));
+  return registerExpression(g_expr_builder->createUDiv(*a, *b));
 }
 
 SymExpr _sym_build_signed_div(SymExpr a, SymExpr b) {
-  return H(g_expr_builder->createSDiv(*a, *b));
+  return registerExpression(g_expr_builder->createSDiv(*a, *b));
 }
 
 SymExpr _sym_build_unsigned_rem(SymExpr a, SymExpr b) {
-  return H(g_expr_builder->createURem(*a, *b));
+  return registerExpression(g_expr_builder->createURem(*a, *b));
 }
 
 SymExpr _sym_build_signed_rem(SymExpr a, SymExpr b) {
-  return H(g_expr_builder->createSRem(*a, *b));
+  return registerExpression(g_expr_builder->createSRem(*a, *b));
 }
 
 SymExpr _sym_build_shift_left(SymExpr a, SymExpr b) {
-  return H(g_expr_builder->createShl(*a, *b));
+  return registerExpression(g_expr_builder->createShl(*a, *b));
 }
 
 SymExpr _sym_build_logical_shift_right(SymExpr a, SymExpr b) {
-  return H(g_expr_builder->createLShr(*a, *b));
+  return registerExpression(g_expr_builder->createLShr(*a, *b));
 }
 
 SymExpr _sym_build_arithmetic_shift_right(SymExpr a, SymExpr b) {
-  return H(g_expr_builder->createAShr(*a, *b));
+  return registerExpression(g_expr_builder->createAShr(*a, *b));
 }
 
 SymExpr _sym_build_neg(SymExpr expr) {
-  return H(g_expr_builder->createNeg(*expr));
+  return registerExpression(g_expr_builder->createNeg(*expr));
 }
 
 SymExpr _sym_build_signed_less_than(SymExpr a, SymExpr b) {
-  return H(g_expr_builder->createSlt(*a, *b));
+  return registerExpression(g_expr_builder->createSlt(*a, *b));
 }
 
 SymExpr _sym_build_signed_less_equal(SymExpr a, SymExpr b) {
-  return H(g_expr_builder->createSle(*a, *b));
+  return registerExpression(g_expr_builder->createSle(*a, *b));
 }
 
 SymExpr _sym_build_signed_greater_than(SymExpr a, SymExpr b) {
-  return H(g_expr_builder->createSgt(*a, *b));
+  return registerExpression(g_expr_builder->createSgt(*a, *b));
 }
 
 SymExpr _sym_build_signed_greater_equal(SymExpr a, SymExpr b) {
-  return H(g_expr_builder->createSge(*a, *b));
+  return registerExpression(g_expr_builder->createSge(*a, *b));
 }
 
 SymExpr _sym_build_unsigned_less_than(SymExpr a, SymExpr b) {
-  return H(g_expr_builder->createUlt(*a, *b));
+  return registerExpression(g_expr_builder->createUlt(*a, *b));
 }
 
 SymExpr _sym_build_unsigned_less_equal(SymExpr a, SymExpr b) {
-  return H(g_expr_builder->createUle(*a, *b));
+  return registerExpression(g_expr_builder->createUle(*a, *b));
 }
 
 SymExpr _sym_build_unsigned_greater_than(SymExpr a, SymExpr b) {
-  return H(g_expr_builder->createUgt(*a, *b));
+  return registerExpression(g_expr_builder->createUgt(*a, *b));
 }
 
 SymExpr _sym_build_unsigned_greater_equal(SymExpr a, SymExpr b) {
-  return H(g_expr_builder->createUge(*a, *b));
+  return registerExpression(g_expr_builder->createUge(*a, *b));
 }
 
 SymExpr _sym_build_equal(SymExpr a, SymExpr b) {
-  return H(g_expr_builder->createEqual(*a, *b));
+  return registerExpression(g_expr_builder->createEqual(*a, *b));
 }
 
 SymExpr _sym_build_not_equal(SymExpr a, SymExpr b) {
-  return H(g_expr_builder->createDistinct(*a, *b));
+  return registerExpression(g_expr_builder->createDistinct(*a, *b));
 }
 
 SymExpr _sym_build_bool_and(SymExpr a, SymExpr b) {
-  return H(g_expr_builder->createLAnd(*a, *b));
+  return registerExpression(g_expr_builder->createLAnd(*a, *b));
 }
 
 SymExpr _sym_build_and(SymExpr a, SymExpr b) {
-  return H(g_expr_builder->createAnd(*a, *b));
+  return registerExpression(g_expr_builder->createAnd(*a, *b));
 }
 
 SymExpr _sym_build_bool_or(SymExpr a, SymExpr b) {
-  return H(g_expr_builder->createLOr(*a, *b));
+  return registerExpression(g_expr_builder->createLOr(*a, *b));
 }
 
 SymExpr _sym_build_or(SymExpr a, SymExpr b) {
-  return H(g_expr_builder->createOr(*a, *b));
+  return registerExpression(g_expr_builder->createOr(*a, *b));
 }
 
 SymExpr _sym_build_bool_xor(SymExpr a, SymExpr b) {
-  return H(g_expr_builder->createLOr(*a, *b));
+  return registerExpression(g_expr_builder->createLOr(*a, *b));
 }
 
 SymExpr _sym_build_xor(SymExpr a, SymExpr b) {
-  return H(g_expr_builder->createXor(*a, *b));
+  return registerExpression(g_expr_builder->createXor(*a, *b));
 }
 
 SymExpr _sym_build_sext(SymExpr expr, uint8_t bits) {
-  return H(g_expr_builder->createSExt(*expr, bits + (*expr)->bits()));
+  return registerExpression(
+      g_expr_builder->createSExt(*expr, bits + (*expr)->bits()));
 }
 
 SymExpr _sym_build_zext(SymExpr expr, uint8_t bits) {
-  return H(g_expr_builder->createZExt(*expr, bits + (*expr)->bits()));
+  return registerExpression(
+      g_expr_builder->createZExt(*expr, bits + (*expr)->bits()));
 }
 
 SymExpr _sym_build_trunc(SymExpr expr, uint8_t bits) {
-  return H(g_expr_builder->createTrunc(*expr, bits));
+  return registerExpression(g_expr_builder->createTrunc(*expr, bits));
 }
 
 void _sym_push_path_constraint(SymExpr constraint, int taken,
@@ -263,22 +284,22 @@ void _sym_push_path_constraint(SymExpr constraint, int taken,
 }
 
 SymExpr _sym_get_input_byte(size_t offset) {
-  return H(g_expr_builder->createRead(offset));
+  return registerExpression(g_expr_builder->createRead(offset));
 }
 
 SymExpr _sym_concat_helper(SymExpr a, SymExpr b) {
-  return H(g_expr_builder->createConcat(*a, *b));
+  return registerExpression(g_expr_builder->createConcat(*a, *b));
 }
 
 SymExpr _sym_extract_helper(SymExpr expr, size_t first_bit, size_t last_bit) {
-  return H(
+  return registerExpression(
       g_expr_builder->createExtract(*expr, last_bit, first_bit - last_bit + 1));
 }
 
 size_t _sym_bits_helper(SymExpr expr) { return (*expr)->bits(); }
 
 SymExpr _sym_build_bool_to_bits(SymExpr expr, uint8_t bits) {
-  return H(g_expr_builder->boolToBit(*expr, bits));
+  return registerExpression(g_expr_builder->boolToBit(*expr, bits));
 }
 
 //
@@ -365,4 +386,47 @@ bool _sym_feasible(SymExpr expr) {
   g_solver->pop();
 
   return feasible;
+}
+
+//
+// Garbage collection
+//
+
+void _sym_register_expression_region(SymExpr *start, size_t length) {
+  expressionRegions.push_back({start, length});
+}
+
+void _sym_collect_garbage() {
+  if (allocatedExpessions.size() < 1'000'000)
+    return;
+
+  std::unordered_set<SymExpr> reachableExpressions;
+  auto collectReachableExpressions = [&](SymExpr *start, SymExpr *end) {
+    for (SymExpr *expr_ptr = start; expr_ptr < end; expr_ptr++) {
+      if (*expr_ptr != nullptr) {
+        reachableExpressions.insert(*expr_ptr);
+      }
+    }
+  };
+
+  for (auto &[start, length] : expressionRegions) {
+    collectReachableExpressions(start, start + length);
+  }
+
+  for (auto &[concrete, symbolic] : g_shadow_pages) {
+    collectReachableExpressions(symbolic, symbolic + kPageSize);
+  }
+
+  for (auto expr_it = allocatedExpessions.begin();
+       expr_it != allocatedExpessions.end();) {
+    if (reachableExpressions.count(*expr_it) == 0) {
+      delete *expr_it;
+      expr_it = allocatedExpessions.erase(expr_it);
+    } else {
+      ++expr_it;
+    }
+  }
+
+  std::cout << "After garbage collection: " << allocatedExpessions.size()
+            << " expressions remaining" << std::endl;
 }
