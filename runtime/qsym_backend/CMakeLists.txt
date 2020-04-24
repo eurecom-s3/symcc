@@ -40,11 +40,8 @@ add_library(SymRuntime SHARED
   ${QSYM_SOURCE_DIR}/call_stack_manager.cpp
   ${QSYM_SOURCE_DIR}/third_party/llvm/range.cpp
   ${QSYM_SOURCE_DIR}/third_party/xxhash/xxhash.cpp
-  Runtime.cpp
-  ../Config.cpp
-  ../RuntimeCommon.cpp
-  ../Shadow.cpp
-  ../LibcWrappers.cpp)
+  ${SHARED_RUNTIME_SOURCES}
+  Runtime.cpp)
 
 set_target_properties(SymRuntime PROPERTIES COMPILE_FLAGS
   "-Wno-unused-parameter -Wno-implicit-fallthrough")

@@ -3,6 +3,7 @@
 //
 
 #include "Runtime.h"
+#include "GarbageCollection.h"
 
 // C++
 #include <atomic>
@@ -363,10 +364,6 @@ bool _sym_feasible(SymExpr expr) {
 // Garbage collection
 //
 
-void _sym_register_expression_region(SymExpr *start, size_t length) {
-  expressionRegions.push_back({start, length});
-}
-
 void _sym_collect_garbage() {
   if (allocatedExpressions.size() < kGarbageCollectionThreshold)
     return;
@@ -375,23 +372,7 @@ void _sym_collect_garbage() {
   auto start = std::chrono::high_resolution_clock::now();
 #endif
 
-  std::unordered_set<SymExpr> reachableExpressions;
-  auto collectReachableExpressions = [&](SymExpr *start, SymExpr *end) {
-    for (SymExpr *expr_ptr = start; expr_ptr < end; expr_ptr++) {
-      if (*expr_ptr != nullptr) {
-        reachableExpressions.insert(*expr_ptr);
-      }
-    }
-  };
-
-  for (auto &[start, length] : expressionRegions) {
-    collectReachableExpressions(start, start + length);
-  }
-
-  for (auto &[concrete, symbolic] : g_shadow_pages) {
-    collectReachableExpressions(symbolic, symbolic + kPageSize);
-  }
-
+  auto reachableExpressions = collectReachableExpressions();
   for (auto expr_it = allocatedExpressions.begin();
        expr_it != allocatedExpressions.end();) {
     if (reachableExpressions.count(expr_it->first) == 0) {

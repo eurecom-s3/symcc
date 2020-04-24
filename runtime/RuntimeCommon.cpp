@@ -5,6 +5,7 @@
 
 #include "RuntimeCommon.h"
 #include "Shadow.h"
+#include "GarbageCollection.h"
 
 namespace {
 
@@ -145,4 +146,8 @@ SymExpr _sym_build_bswap(SymExpr expr) {
   size_t bits = _sym_bits_helper(expr);
   assert((bits % 16 == 0) && "bswap is not applicable");
   return _sym_build_extract(expr, 0, bits / 8, true);
+}
+
+void _sym_register_expression_region(SymExpr *start, size_t length) {
+  registerExpressionRegion({start, length});
 }

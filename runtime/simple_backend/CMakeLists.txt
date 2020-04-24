@@ -1,10 +1,7 @@
 find_package(Z3 4 REQUIRED config)
 
 add_library(SymRuntime SHARED
-  ../Config.cpp
-  ../RuntimeCommon.cpp
-  ../LibcWrappers.cpp
-  ../Shadow.cpp
+  ${SHARED_RUNTIME_SOURCES}
   Runtime.cpp)
 
 target_link_libraries(SymRuntime ${Z3_LIBRARIES})
