@@ -61,8 +61,9 @@ int main(int argc, char* argv[]) {
     g_increment = 18;
     printf("%d\n", increment(x));
     // SIMPLE: Trying to solve
-    // SIMPLE: (bvadd #x{{0*}}12
     // SIMPLE: Found diverging input
+    // We can't check for 0x12 here because with some versions of clang we end
+    // up in a situation where (x + 18) >= 30 is folded into x >= 12.
     // QSYM-COUNT-2: SMT
     // QSYM: New testcase
     // ANY: 23
@@ -71,7 +72,6 @@ int main(int argc, char* argv[]) {
     printf("%s\n", (x < g_uninitialized) ? "smaller" : "greater or equal");
     // SIMPLE: Trying to solve
     // SIMPLE: (bvsle #x{{0*}}65
-    // SIMPLE: Found diverging input
     // QSYM-COUNT-2: SMT
     // QSYM: New testcase
     // ANY: smaller
