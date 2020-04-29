@@ -65,13 +65,6 @@ void deleteInputFile() { std::remove(inputFileName.c_str()); }
 /// workload.
 std::map<SymExpr, qsym::ExprRef> allocatedExpressions;
 
-/// An imitation of std::span (which is not available before C++20) for symbolic
-/// expressions.
-using ExpressionRegion = std::pair<SymExpr *, size_t>;
-
-/// A list of memory regions that are known to contain symbolic expressions.
-std::vector<ExpressionRegion> expressionRegions;
-
 SymExpr registerExpression(qsym::ExprRef expr) {
   SymExpr rawExpr = expr.get();
 
