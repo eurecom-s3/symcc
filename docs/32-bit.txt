@@ -17,9 +17,11 @@ create 32-bit binaries from some code under test. First of all, make sure that
 32-bit versions of the backend's dependencies are available: LLVM (usually
 obtainable via packages of your Linux distribution) and Z3 (which is reasonably
 easy to build following its CMake instructions and exporting CFLAGS="-m32" and
-CXXFLAGS="-m32"). If you build Z3 yourself, note that it is sufficient to point
-SymCC to the build directory - there is no need to install the 32-bit version of
-Z3 in your system.
+CXXFLAGS="-m32"). Beware of Z3 version 4.8.7 - it contains a bug that breaks the
+32-bit build with an error related to "__builtin_ctz" (see
+https://github.com/Z3Prover/z3/issues/2727). If you build Z3 yourself, note that
+it is sufficient to point SymCC to the build directory - there is no need to
+install the 32-bit version of Z3 in your system.
 
 Once the dependencies for 32-bit SymCC are available (as well as the 64-bit
 dependencies mentioned in the main README), configure and build SymCC as usual
