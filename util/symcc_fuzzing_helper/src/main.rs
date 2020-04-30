@@ -106,12 +106,13 @@ impl Stats {
             )?;
 
             if self.total_time.as_secs() > 0 {
-                let solver_share = st.as_secs_f64() / self.total_time.as_secs_f64();
+                let solver_share =
+                    st.as_millis() as f64 / self.total_time.as_millis() as f64 * 100_f64;
                 writeln!(
                     out,
                     "Solver time share (successful executions): {:.2}% (-> {:.2}% in execution)",
                     solver_share,
-                    1f64 - solver_share
+                    100_f64 - solver_share
                 )?;
                 writeln!(
                     out,
