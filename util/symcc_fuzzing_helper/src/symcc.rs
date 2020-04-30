@@ -121,7 +121,7 @@ impl TestcaseScore {
         TestcaseScore {
             new_coverage: name_string.ends_with("+cov"),
             derived_from_seed: name_string.contains("orig:"),
-            file_size: i128::from(size) * -1,
+            file_size: -i128::from(size),
             base_name: name,
         }
     }
@@ -223,7 +223,7 @@ pub struct AflConfig {
 /// Possible results of afl-showmap.
 pub enum AflShowmapResult {
     /// The map was created successfully.
-    Success(AflMap),
+    Success(Box<AflMap>),
     /// The target timed out or failed to execute.
     Hang,
     /// The target crashed.
@@ -254,8 +254,7 @@ impl AflConfig {
             .find(|&l| l.starts_with("command_line"))
             .expect("The fuzzer stats don't contain the command line")
             .splitn(2, ':')
-            .skip(1)
-            .next()
+            .nth(1)
             .expect("The fuzzer stats follow an unknown format")
             .trim()
             .split_whitespace()
@@ -263,7 +262,7 @@ impl AflConfig {
         let afl_target_command: Vec<_> = afl_command
             .iter()
             .skip_while(|s| **s != "--")
-            .map(|s| OsString::from(s))
+            .map(OsString::from)
             .collect();
         let afl_binary_dir = Path::new(
             afl_command
@@ -353,7 +352,7 @@ impl AflConfig {
                         testcase_bitmap.as_ref().display()
                     )
                 })?;
-                Ok(AflShowmapResult::Success(map))
+                Ok(AflShowmapResult::Success(Box::new(map)))
             }
             1 => Ok(AflShowmapResult::Hang),
             2 => Ok(AflShowmapResult::Crash),
@@ -392,14 +391,14 @@ pub struct SymCCResult {
 
 impl SymCC {
     /// Create a new SymCC configuration.
-    pub fn new(output_dir: PathBuf, command: &Vec<String>) -> Self {
+    pub fn new(output_dir: PathBuf, command: &[String]) -> Self {
         let input_file = output_dir.join(".cur_input");
 
         SymCC {
             use_standard_input: !command.contains(&String::from("@@")),
             bitmap: output_dir.join("bitmap"),
             command: insert_input_file(command, &input_file),
-            input_file: input_file,
+            input_file,
         }
     }
 
@@ -409,7 +408,7 @@ impl SymCC {
         let re = Regex::new(r#""solving_time": (\d+)"#).unwrap();
         output
             // split into lines
-            .rsplit(|n| *n == '\n' as u8)
+            .rsplit(|n| *n == b'\n')
             // convert to string
             .filter_map(|s| str::from_utf8(s).ok())
             // check that it's an SMT log line
@@ -419,7 +418,7 @@ impl SymCC {
             // convert the time to an integer
             .filter_map(|c| c[1].parse().ok())
             // associate the integer with a unit
-            .map(|us| Duration::from_micros(us))
+            .map(Duration::from_micros)
             // get the first one
             .next()
     }
@@ -531,7 +530,7 @@ impl SymCC {
 
         Ok(SymCCResult {
             test_cases: new_tests,
-            killed: killed,
+            killed,
             time: total_time,
             solver_time: solver_time.map(|t| cmp::min(t, total_time)),
         })

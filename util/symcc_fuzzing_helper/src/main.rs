@@ -299,7 +299,7 @@ fn main() -> Result<()> {
             .context("Failed to check for new test cases")?
         {
             None => {
-                log::info!("Waiting for new test cases...");
+                log::debug!("Waiting for new test cases...");
                 thread::sleep(Duration::from_secs(5));
             }
             Some(input) => state.test_input(&input, &symcc, &afl_config)?,
