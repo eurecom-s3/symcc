@@ -1,4 +1,6 @@
 use anyhow::{bail, ensure, Context, Result};
+use regex::Regex;
+use std::cmp;
 use std::collections::HashSet;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File};
@@ -6,6 +8,8 @@ use std::io::{self, Read};
 use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::str;
+use std::time::{Duration, Instant};
 
 const TIMEOUT: u32 = 90;
 
@@ -374,6 +378,18 @@ pub struct SymCC {
     command: Vec<OsString>,
 }
 
+/// The result of executing SymCC.
+pub struct SymCCResult {
+    /// The generated test cases.
+    pub test_cases: Vec<PathBuf>,
+    /// Whether the process was killed (e.g., out of memory, timeout).
+    pub killed: bool,
+    /// The total time taken by the execution.
+    pub time: Duration,
+    /// The time spent in the solver (Qsym backend only).
+    pub solver_time: Option<Duration>,
+}
+
 impl SymCC {
     /// Create a new SymCC configuration.
     pub fn new(output_dir: PathBuf, command: &Vec<String>) -> Self {
@@ -387,15 +403,39 @@ impl SymCC {
         }
     }
 
+    /// Try to extract the solver time from the logs produced by the Qsym
+    /// backend.
+    fn parse_solver_time(output: Vec<u8>) -> Option<Duration> {
+        let re = Regex::new(r#""solving_time": (\d+)"#).unwrap();
+        output
+            // split into lines
+            .rsplit(|n| *n == '\n' as u8)
+            // convert to string
+            .filter_map(|s| str::from_utf8(s).ok())
+            // check that it's an SMT log line
+            .filter(|s| s.trim_start().starts_with("[STAT] SMT:"))
+            // find the solving_time element
+            .filter_map(|s| re.captures(s))
+            // convert the time to an integer
+            .filter_map(|c| c[1].parse().ok())
+            // associate the integer with a unit
+            .map(|us| Duration::from_micros(us))
+            // get the first one
+            .next()
+    }
+
     /// Run SymCC on the given input, writing results to the provided temporary
-    /// directory. Return the list of newly generated test cases and a Boolean
-    /// that indicates whether the target process was killed (i.e., possibly a
-    /// timeout or out-of-memory condition).
+    /// directory.
+    ///
+    /// If SymCC is run with the Qsym backend, this function attempts to
+    /// determine the time spent in the SMT solver and report it as part of the
+    /// result. However, the mechanism that the backend uses to report solver
+    /// time is somewhat brittle.
     pub fn run(
         &self,
         input: impl AsRef<Path>,
         output_dir: impl AsRef<Path>,
-    ) -> Result<(Vec<PathBuf>, bool)> {
+    ) -> Result<SymCCResult> {
         fs::copy(&input, &self.input_file).with_context(|| {
             format!(
                 "Failed to copy the test case {} to our workbench at {}",
@@ -419,7 +459,7 @@ impl SymCC {
             .env("SYMCC_AFL_COVERAGE_MAP", &self.bitmap)
             .env("SYMCC_OUTPUT_DIR", output_dir.as_ref())
             .stdout(Stdio::null())
-            .stderr(Stdio::null());
+            .stderr(Stdio::piped()); // capture SMT logs
 
         if self.use_standard_input {
             analysis_command.stdin(Stdio::piped());
@@ -429,6 +469,7 @@ impl SymCC {
         }
 
         log::debug!("Running SymCC as follows: {:?}", &analysis_command);
+        let start = Instant::now();
         let mut child = analysis_command.spawn().context("Failed to run SymCC")?;
 
         if self.use_standard_input {
@@ -447,14 +488,17 @@ impl SymCC {
             .context("Failed to pipe the test input to SymCC")?;
         }
 
-        let result = child.wait().context("Failed to wait for SymCC")?;
-        let killed = match result.code() {
+        let result = child
+            .wait_with_output()
+            .context("Failed to wait for SymCC")?;
+        let total_time = start.elapsed();
+        let killed = match result.status.code() {
             Some(code) => {
                 log::debug!("SymCC returned code {}", code);
                 (code == 124) || (code == -9) // as per the man-page of timeout
             }
             None => {
-                let maybe_sig = result.signal();
+                let maybe_sig = result.status.signal();
                 if let Some(signal) = maybe_sig {
                     log::warn!("SymCC received signal {}", signal);
                 }
@@ -480,7 +524,17 @@ impl SymCC {
             .map(|entry| entry.path())
             .collect();
 
-        Ok((new_tests, killed))
+        let solver_time = SymCC::parse_solver_time(result.stderr);
+        if solver_time.is_some() && solver_time.unwrap() > total_time {
+            log::warn!("Backend reported inaccurate solver time!");
+        }
+
+        Ok(SymCCResult {
+            test_cases: new_tests,
+            killed: killed,
+            time: total_time,
+            solver_time: solver_time.map(|t| cmp::min(t, total_time)),
+        })
     }
 }
 
@@ -514,6 +568,24 @@ mod tests {
                 base_name: OsString::from("foo"),
                 ..TestcaseScore::minimum()
             } > min_score
+        );
+    }
+
+    #[test]
+    fn test_solver_time_parsing() {
+        let output = r#"[INFO] New testcase: /tmp/output/000005
+[STAT] SMT: { "solving_time": 14539, "total_time": 185091 }
+[STAT] SMT: { "solving_time": 14869 }
+[STAT] SMT: { "solving_time": 14869, "total_time": 185742 }
+[STAT] SMT: { "solving_time": 15106 }"#;
+
+        assert_eq!(
+            SymCC::parse_solver_time(output.as_bytes().to_vec()),
+            Some(Duration::from_micros(15106))
+        );
+        assert_eq!(
+            SymCC::parse_solver_time("whatever".as_bytes().to_vec()),
+            None
         );
     }
 }

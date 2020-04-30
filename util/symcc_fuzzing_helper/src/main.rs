@@ -3,12 +3,16 @@ mod symcc;
 use anyhow::{Context, Result};
 use std::collections::HashSet;
 use std::fs;
+use std::fs::File;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use structopt::StructOpt;
 use symcc::{AflConfig, AflMap, AflShowmapResult, SymCC, TestcaseDir};
 use tempfile::tempdir;
+
+const STATS_INTERVAL_SEC: u64 = 60;
 
 // TODO extend timeout when idle? Possibly reprocess previously timed-out
 // inputs.
@@ -36,6 +40,111 @@ struct CLI {
     command: Vec<String>,
 }
 
+/// Execution statistics.
+#[derive(Debug, Default)]
+struct Stats {
+    /// Number of successful executions.
+    total_count: u32,
+
+    /// Time spent in successful executions of SymCC.
+    total_time: Duration,
+
+    /// Time spent in the solver as part of successfully running SymCC.
+    solver_time: Option<Duration>,
+
+    /// Number of failed executions.
+    failed_count: u32,
+
+    /// Time spent in failed SymCC executions.
+    failed_time: Duration,
+}
+
+impl Stats {
+    fn add_execution(&mut self, result: &symcc::SymCCResult) {
+        if result.killed {
+            self.failed_count += 1;
+            self.failed_time += result.time;
+        } else {
+            self.total_count += 1;
+            self.total_time += result.time;
+            self.solver_time = match (self.solver_time, result.solver_time) {
+                (None, None) => None,
+                (Some(t), None) => {
+                    log::warn!(
+                        "One execution failed to measure the solver time; \
+                         stats may be inaccurate"
+                    );
+                    Some(t)
+                }
+                (None, Some(t)) => Some(t),
+                (Some(a), Some(b)) => Some(a + b),
+            };
+        }
+    }
+
+    fn log(&self, out: &mut impl Write) -> Result<()> {
+        writeln!(out, "Successful executions: {}", self.total_count)?;
+        writeln!(
+            out,
+            "Time in successful executions: {}ms",
+            self.total_time.as_millis()
+        )?;
+
+        if self.total_count > 0 {
+            writeln!(
+                out,
+                "Avg time per successful execution: {}ms",
+                (self.total_time / self.total_count).as_millis()
+            )?;
+        }
+
+        if let Some(st) = self.solver_time {
+            writeln!(
+                out,
+                "Solver time (successful executions): {}ms",
+                st.as_millis()
+            )?;
+
+            if self.total_time.as_secs() > 0 {
+                let solver_share = st.as_secs_f64() / self.total_time.as_secs_f64();
+                writeln!(
+                    out,
+                    "Solver time share (successful executions): {:.2}% (-> {:.2}% in execution)",
+                    solver_share,
+                    1f64 - solver_share
+                )?;
+                writeln!(
+                    out,
+                    "Avg solver time per successful execution: {}ms",
+                    (st / self.total_count).as_millis()
+                )?;
+            }
+        }
+
+        writeln!(out, "Failed executions: {}", self.failed_count)?;
+        writeln!(
+            out,
+            "Time spent on failed executions: {}ms",
+            self.failed_time.as_millis()
+        )?;
+
+        if self.failed_count > 0 {
+            writeln!(
+                out,
+                "Avg time in failed executions: {}ms",
+                (self.failed_time / self.failed_count).as_millis()
+            )?;
+        }
+
+        writeln!(
+            out,
+            "--------------------------------------------------------------------------------"
+        )?;
+
+        Ok(())
+    }
+}
+
 /// Mutable run-time state.
 ///
 /// This is a collection of the state we update during execution.
@@ -54,6 +163,15 @@ struct State {
 
     /// The place for new test cases that crash.
     crashes: TestcaseDir,
+
+    /// Run-time statistics.
+    stats: Stats,
+
+    /// When did we last output the statistics?
+    last_stats_output: Instant,
+
+    /// Write statistics to this file.
+    stats_file: File,
 }
 
 impl State {
@@ -71,6 +189,7 @@ impl State {
             TestcaseDir::new(symcc_dir.join("queue")).context("Failed to create SymCC's queue")?;
         let symcc_hangs = TestcaseDir::new(symcc_dir.join("hangs"))?;
         let symcc_crashes = TestcaseDir::new(symcc_dir.join("crashes"))?;
+        let stats_file = File::create(symcc_dir.join("stats"))?;
 
         Ok(State {
             current_bitmap: AflMap::new(),
@@ -78,6 +197,9 @@ impl State {
             queue: symcc_queue,
             hangs: symcc_hangs,
             crashes: symcc_crashes,
+            stats: Default::default(), // Is this bad style?
+            last_stats_output: Instant::now(),
+            stats_file,
         })
     }
 
@@ -97,10 +219,10 @@ impl State {
         let mut num_interesting = 0u64;
         let mut num_total = 0u64;
 
-        let (new_tests, killed) = symcc
+        let symcc_result = symcc
             .run(&input, tmp_dir.path().join("output"))
             .context("Failed to run SymCC")?;
-        for new_test in new_tests {
+        for new_test in symcc_result.test_cases.iter() {
             let res = process_new_testcase(&new_test, &input, &tmp_dir, &afl_config, self)?;
 
             num_total += 1;
@@ -116,7 +238,7 @@ impl State {
             num_interesting
         );
 
-        if killed {
+        if symcc_result.killed {
             log::info!(
                 "The target process was killed (probably timeout or out of memory); \
                  archiving to {}",
@@ -127,6 +249,7 @@ impl State {
         }
 
         self.processed_files.insert(input.as_ref().to_path_buf());
+        self.stats.add_execution(&symcc_result);
         Ok(())
     }
 }
@@ -180,6 +303,13 @@ fn main() -> Result<()> {
                 thread::sleep(Duration::from_secs(5));
             }
             Some(input) => state.test_input(&input, &symcc, &afl_config)?,
+        }
+
+        if state.last_stats_output.elapsed().as_secs() > STATS_INTERVAL_SEC {
+            if let Err(e) = state.stats.log(&mut state.stats_file) {
+                log::error!("Failed to log run-time statistics: {}", e);
+            }
+            state.last_stats_output = Instant::now();
         }
     }
 }
