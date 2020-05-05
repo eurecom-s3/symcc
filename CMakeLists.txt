@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.5)
 project(SymbolicCompiler)
 
 find_package(LLVM REQUIRED CONFIG)
@@ -6,8 +6,7 @@ find_package(LLVM REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake from ${LLVM_DIR}")
 
-if (${LLVM_PACKAGE_VERSION} VERSION_LESS "8.0" OR
-    ${LLVM_PACKAGE_VERSION} VERSION_GREATER_EQUAL "11.0")
+if (${LLVM_VERSION_MAJOR} LESS 8 OR ${LLVM_VERSION_MAJOR} GREATER 10)
   message(WARNING "The software has been developed for LLVM 8, 9 and 10; \
 it is unlikely to work with other versions!")
 endif()
@@ -15,9 +14,8 @@ endif()
 add_definitions(${LLVM_DEFINITIONS})
 include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wredundant-decls -Wcast-align \
--Wmissing-include-dirs -Wswitch-default \
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 \
+-Wredundant-decls -Wcast-align -Wmissing-include-dirs -Wswitch-default \
 -Wextra -Wall -Winvalid-pch -Wredundant-decls -Wformat=2 \
 -Wmissing-format-attribute -Wformat-nonliteral -Werror")
 

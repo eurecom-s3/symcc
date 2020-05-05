@@ -41,10 +41,10 @@ extern std::map<uintptr_t, SymExpr *> g_shadow_pages;
 /// region. If there is no shadow for any given memory address, it just returns
 /// null.
 class ReadShadowIterator
-    : public std::iterator<std::input_iterator_tag, SymExpr> {
+    : public std::iterator<std::bidirectional_iterator_tag, SymExpr> {
 public:
   explicit ReadShadowIterator(uintptr_t address)
-      : std::iterator<std::input_iterator_tag, SymExpr>(), address_(address),
+      : std::iterator<std::bidirectional_iterator_tag, SymExpr>(), address_(address),
         shadow_(getShadow(address)) {}
 
   ReadShadowIterator &operator++() {

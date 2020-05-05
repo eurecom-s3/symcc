@@ -43,13 +43,12 @@ add_library(SymRuntime SHARED
   ${SHARED_RUNTIME_SOURCES}
   Runtime.cpp)
 
-set_target_properties(SymRuntime PROPERTIES COMPILE_FLAGS
-  "-Wno-unused-parameter -Wno-implicit-fallthrough")
-
 target_include_directories(SymRuntime PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}    # for our fake pin.H and Runtime.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/.. # for common runtime components
-  ${Z3_CXX_INCLUDE_DIRS}         # for Z3 support
+  ${CMAKE_CURRENT_SOURCE_DIR}     # for our fake pin.H and Runtime.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/..) # for common runtime components
+
+target_include_directories(SymRuntime SYSTEM PRIVATE
+  ${Z3_CXX_INCLUDE_DIRS}        # for Z3 support
   ${QSYM_SOURCE_DIR})
 
 # We need to get the LLVM support component for llvm::APInt.

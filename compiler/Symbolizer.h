@@ -1,7 +1,6 @@
 #ifndef SYMBOLIZE_H
 #define SYMBOLIZE_H
 
-#include <bits/stdint-uintn.h>
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/InstVisitor.h>
