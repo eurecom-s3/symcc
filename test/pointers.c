@@ -1,7 +1,5 @@
 // RUN: %symcc -O2 %s -o %t
 // RUN: echo -ne "\x05\x00\x00\x00\x12\x34\x56\x78\x90\xab\xcd\xef" | %t 2>&1 | %filecheck %s
-// RUN: %symcc -m32 -O2 %s -o %t_32
-// RUN: echo -ne "\x05\x00\x00\x00\x12\x34\x56\x78" | %t_32 2>&1 | %filecheck %s
 #include <stdio.h>
 #include <stdint.h>
 #include <unistd.h>

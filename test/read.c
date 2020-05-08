@@ -1,7 +1,5 @@
 // RUN: %symcc -O2 %s -o %t
 // RUN: echo b | %t 2>&1 | %filecheck %s
-// RUN: %symcc -m32 -O2 %s -o %t_32
-// RUN: echo b | %t_32 2>&1 | %filecheck %s
 //
 // Check the symbolic handling of "read"
 

@@ -1,0 +1,2 @@
+RUN: %symcc -m32 -O2 %S/if.c -o %t_32
+RUN: echo -ne "\x05\x00\x00\x00" | %t_32 2>&1 | %filecheck %S/if.c

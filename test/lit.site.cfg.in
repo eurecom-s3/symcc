@@ -22,3 +22,6 @@ lit_config.load_config(config, path.join(config.test_source_root, "lit.cfg"))
 config.substitutions += [
     ("%filecheck", "FileCheck @SYM_TEST_FILECHECK_ARGS@"),
 ]
+
+if "@TARGET_32BIT@" == "ON":
+    config.suffixes.add(".test32")

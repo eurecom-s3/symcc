@@ -1,0 +1,2 @@
+RUN: %symcc -m32 -O2 %S/read.c -o %t_32
+RUN: echo b | %t_32 2>&1 | %filecheck %S/read.c

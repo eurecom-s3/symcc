@@ -1,7 +1,5 @@
 // RUN: %symcc -O2 %s -o %t
 // RUN: echo -ne "\x05\x00\x00\x00" | %t 2>&1 | %filecheck %s
-// RUN: %symcc -m32 -O2 %s -o %t_32
-// RUN: echo -ne "\x05\x00\x00\x00" | %t_32 2>&1 | %filecheck %s
 // This test is disabled until we can move the pass behind the optimizer in the pipeline:
 // RUN-disabled: %symcc -O2 -emit-llvm -S %s -o - | FileCheck --check-prefix=BITCODE %s
 //

@@ -1,8 +1,6 @@
 // RUN: /bin/echo -ne "\x05\x00\x00\x00aaaa" > %T/%basename_t.input
 // RUN: %symcc -O2 %s -o %t
 // RUN: env SYMCC_INPUT_FILE=%T/%basename_t.input %t %T/%basename_t.input 2>&1 | %filecheck %s
-// RUN: %symcc -m32 -O2 %s -o %t_32
-// RUN: env SYMCC_INPUT_FILE=%T/%basename_t.input %t_32 %T/%basename_t.input 2>&1 | %filecheck %s
 
 #include <fcntl.h>
 #include <stdio.h>
