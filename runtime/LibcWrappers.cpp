@@ -113,11 +113,11 @@ ssize_t SYM(read)(int fildes, void *buf, size_t nbyte) {
 
   if (fildes == inputFileDescriptor) {
     // Reading symbolic input.
-    ReadWriteShadow shadow(buf, nbyte);
+    ReadWriteShadow shadow(buf, result);
     std::generate(shadow.begin(), shadow.end(),
                   []() { return _sym_get_input_byte(inputOffset++); });
-  } else if (!isConcrete(buf, nbyte)) {
-    ReadWriteShadow shadow(buf, nbyte);
+  } else if (!isConcrete(buf, result)) {
+    ReadWriteShadow shadow(buf, result);
     std::fill(shadow.begin(), shadow.end(), nullptr);
   }
 

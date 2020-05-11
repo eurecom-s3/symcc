@@ -20,10 +20,31 @@ int main(int argc, char* argv[]) {
   }
 
   int input;
-  if (read(fd, &input, sizeof(input)) < 0) {
+  if (read(fd, &input, sizeof(input)) != 4) {
     perror("failed to read from the input file");
     return -1;
   }
+
+  int four_as;
+  if (read(fd, &four_as, sizeof(four_as)) != 4) {
+    perror("failed to read from the input file");
+    return -1;
+  }
+
+  int eof = 42;
+  if (read(fd, &eof, sizeof(eof)) != 0) {
+    perror("this should be exactly the end of the file");
+    return -1;
+  }
+
+  // Make sure that we haven't created a symbolic expression
+  if (eof == 42)
+    printf("All is good.\n");
+  else
+    printf("Why was the variable overwritten?\n");
+  // SIMPLE-NOT: Trying to solve
+  // QSYM-NOT: SMT
+  // ANY: All is good.
 
   // SIMPLE: Trying to solve
   // SIMPLE: Found diverging input
