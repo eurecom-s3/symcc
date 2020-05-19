@@ -54,4 +54,4 @@ target_include_directories(SymRuntime SYSTEM PRIVATE
 # We need to get the LLVM support component for llvm::APInt.
 llvm_map_components_to_libnames(QSYM_LLVM_DEPS support)
 
-target_link_libraries(SymRuntime ${Z3_LIBRARIES} ${QSYM_LLVM_DEPS})
+target_link_libraries(SymRuntime stdc++fs ${Z3_LIBRARIES} ${QSYM_LLVM_DEPS})

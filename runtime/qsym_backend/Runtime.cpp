@@ -6,13 +6,26 @@
 #include "GarbageCollection.h"
 
 // C++
+#if __has_include(<filesystem>)
+#define HAVE_FILESYSTEM 1
+#elif __has_include(<experimental/filesystem>)
+#define HAVE_FILESYSTEM 0
+#else
+#error "We need either <filesystem> or the older <experimental/filesystem>."
+#endif
+
 #include <atomic>
-#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <iterator>
 #include <map>
 #include <unordered_set>
+
+#if HAVE_FILESYSTEM
+#include <filesystem>
+#else
+#include <experimental/filesystem>
+#endif
 
 #ifdef DEBUG_RUNTIME
 #include <chrono>
@@ -81,7 +94,12 @@ SymExpr registerExpression(qsym::ExprRef expr) {
 } // namespace
 
 using namespace qsym;
+
+#if HAVE_FILESYSTEM
 namespace fs = std::filesystem;
+#else
+namespace fs = std::experimental::filesystem;
+#endif
 
 void _sym_initialize(void) {
   if (g_initialized.test_and_set())
