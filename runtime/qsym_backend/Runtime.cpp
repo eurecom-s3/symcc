@@ -7,6 +7,7 @@
 
 // C++
 #include <atomic>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <iterator>
@@ -80,6 +81,7 @@ SymExpr registerExpression(qsym::ExprRef expr) {
 } // namespace
 
 using namespace qsym;
+namespace fs = std::filesystem;
 
 void _sym_initialize(void) {
   if (g_initialized.test_and_set())
@@ -90,8 +92,19 @@ void _sym_initialize(void) {
   if (g_config.fullyConcrete)
     return;
 
+  // Check the output directory
+  if (!fs::exists(g_config.outputDir) ||
+      !fs::is_directory(g_config.outputDir)) {
+    std::cerr << "Error: the output directory " << g_config.outputDir
+              << " (configurable via SYMCC_OUTPUT_DIR) does not exist."
+              << std::endl;
+    exit(-1);
+  }
+
   // Qsym requires the full input in a file
   if (g_config.inputFile.empty()) {
+    std::cout << "Reading program input until EOF (use Ctrl+D in a terminal)..."
+              << std::endl;
     std::istreambuf_iterator<char> in_begin(std::cin), in_end;
     std::vector<char> inputData(in_begin, in_end);
     inputFileName = std::tmpnam(nullptr);
