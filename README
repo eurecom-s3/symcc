@@ -102,7 +102,9 @@ and running SymCC with a fuzzer.
                             Building a Docker image
 
 If you prefer a Docker container over building SymCC natively, just tell Docker
-to build the image after pulling the Qsym code as above:
+to build the image after pulling the Qsym code as above. (Be warned though: the
+Docker image enables optional C++ support and builds Z3 from source, so creating
+the image can take quite some time!)
 
 $ git submodule init
 $ git submodule update
@@ -111,7 +113,19 @@ $ docker run -it --rm symcc
 
 This will build a Docker image and run an ephemeral container to try out SymCC.
 Inside the container, "symcc" is available as a drop-in replacement for "clang",
-using the Qsym backend. If you want to try modifications to SymCC, you will find
-the source code in "/symcc_source" and the build files in "/symcc_build"; if you
-want to change the SymCC sources, recompile SymCC afterwards by running "ninja
--C /symcc_build check".
+using the Qsym backend; similarly, "sym++" can be used instead of "clang++". Now
+try something like the following inside the container:
+
+container$ cat sample.cpp
+(Note that "root" is the input we're looking for.)
+container$ sym++ -o sample sample.cpp
+container$ echo test | ./sample
+...
+container$ cat /tmp/output/000008-optimistic
+root
+
+While the Docker image is very convenient for _using_ SymCC, I recommend a local
+build outside Docker for _development_. Docker will rebuild most of the image on
+every change to SymCC (which is, in principle the right thing to do), whereas in
+many cases it is sufficient to let Ninja figure out what to rebuild (and
+recompile libc++ only when necessary).

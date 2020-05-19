@@ -3,6 +3,9 @@ runtime/qsym_backend/qsym/third_party
 # Similarly, we don't run its tests.
 runtime/qsym_backend/qsym/tests
 
+# Rust stores build artifacts in the tree
+util/symcc_fuzzing_helper/target
+
 # Some build utilities that we can ignore
 TAGS
 compile_commands.json

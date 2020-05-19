@@ -40,7 +40,7 @@ Building an instrumented C++ standard library is a one-time effort; the library
 can then be used in all subsequent C++ compilations. We use "libc++", the LLVM
 project's implementation of the standard library. First, get the source code:
 
-$ git clone https://github.com/llvm/llvm-project.git
+$ git clone --depth 1 https://github.com/llvm/llvm-project.git
 
 Then build the library with SymCC:
 
@@ -51,10 +51,13 @@ $ export SYMCC_NO_SYMBOLIC_INPUT=yes
 $ cmake -G Ninja /path-to-llvm-project/llvm \
     -DLLVM_ENABLE_PROJECTS="libcxx;libcxxabi" \
     -DLLVM_TARGETS_TO_BUILD="X86" \
+    -DLLVM_DISTRIBUTION_COMPONENTS="cxx;cxxabi;cxx-headers" \
     -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_C_COMPILER=/path-to-symcc/symcc \
-    -DCMAKE_CXX_COMPILER=/path-to-symcc/sym++
-$ ninja
+    -DCMAKE_INSTALL_PREFIX=/some/convenient/location \
+    -DCMAKE_C_COMPILER=/path-to-symcc-with-simple-backend/symcc \
+    -DCMAKE_CXX_COMPILER=/path-to-symcc-with-simple-backend/sym++
+$ ninja distribution
+$ ninja install-distribution
 $ unset SYMCC_REGULAR_LIBCXX SYMCC_NO_SYMBOLIC_INPUT
 
 Note the two environment variables: SYMCC_REGULAR_LIBCXX avoids a
@@ -84,7 +87,7 @@ because it doesn't depend on the system installation of LLVM.
 Once the library is ready, tell SymCC where to find it and compile C++ code as
 usual:
 
-$ export SYMCC_LIBCXX_PATH=/path-to-libcxx-build-directory
+$ export SYMCC_LIBCXX_PATH=/path-provided-as-cmake-install-prefix-for-libcxx
 $ sym++ -o myprogram mysource.cpp
 $ ./myprogram
 
