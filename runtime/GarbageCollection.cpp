@@ -27,8 +27,8 @@ std::set<SymExpr> collectReachableExpressions() {
     collectReachableExpressions(r);
   }
 
-  for (auto &[concrete, symbolic] : g_shadow_pages) {
-    collectReachableExpressions({symbolic, kPageSize});
+  for (const auto &mapping : g_shadow_pages) {
+    collectReachableExpressions({mapping.second, kPageSize});
   }
 
   return reachableExpressions;
