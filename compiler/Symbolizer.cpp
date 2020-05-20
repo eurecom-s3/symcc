@@ -288,16 +288,16 @@ void Symbolizer::handleInlineAssembly(CallInst &I) {
 }
 
 void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
-  IRBuilder<> IRB(returnPoint);
-  IRB.CreateCall(runtime.notifyRet, getTargetPreferredInt(&I));
-  IRB.SetInsertPoint(&I);
-  IRB.CreateCall(runtime.notifyCall, getTargetPreferredInt(&I));
-
   auto callee = I.getCalledFunction();
   if (callee && callee->isIntrinsic()) {
     handleIntrinsicCall(I);
     return;
   }
+
+  IRBuilder<> IRB(returnPoint);
+  IRB.CreateCall(runtime.notifyRet, getTargetPreferredInt(&I));
+  IRB.SetInsertPoint(&I);
+  IRB.CreateCall(runtime.notifyCall, getTargetPreferredInt(&I));
 
   if (!callee)
     tryAlternative(IRB, I.getCalledValue());
