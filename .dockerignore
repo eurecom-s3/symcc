@@ -9,3 +9,6 @@ util/symcc_fuzzing_helper/target
 # Some build utilities that we can ignore
 TAGS
 compile_commands.json
+
+# The Dockerfile itself doesn't need to be copied
+Dockerfile
