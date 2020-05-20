@@ -2,10 +2,12 @@
 // RUN: echo -ne "\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00" | %t 2>&1 | %filecheck %s
 //
 // Test that we generate alternative inputs for the parameters to memcpy (which
-// should assert that the concept works for other functions as well).
+// should assert that the concept works for other functions as well). Also, make
+// sure that we handle the different parameter sizes for mmap correctly.
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <unistd.h>
 
 int main(int argc, char *argv[]) {
@@ -49,6 +51,10 @@ int main(int argc, char *argv[]) {
   // QSYM-COUNT-2: SMT
   // QSYM: New testcase
   // ANY: 1
+
+  void *pointer = mmap(NULL, 8, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  puts(pointer == MAP_FAILED ? "failed" : "succeeded");
+  // ANY: succeeded
 
   return 0;
 }

@@ -74,14 +74,22 @@ void *SYM(calloc)(size_t nmemb, size_t size) {
   return result;
 }
 
-void *SYM(mmap)(void *addr, size_t len, int prot, int flags, int fildes,
-                off_t off) {
-  auto result = mmap(addr, len, prot, flags, fildes, off);
+// See comment on lseek and lseek64 below; the same applies to the "off"
+// parameter of mmap.
 
-  tryAlternative(len, _sym_get_parameter_expression(1), SYM(mmap));
+void *SYM(mmap64)(void *addr, size_t len, int prot, int flags, int fildes,
+                  uint64_t off) {
+  auto result = mmap64(addr, len, prot, flags, fildes, off);
+
+  tryAlternative(len, _sym_get_parameter_expression(1), SYM(mmap64));
 
   _sym_set_return_expression(nullptr);
   return result;
+}
+
+void *SYM(mmap)(void *addr, size_t len, int prot, int flags, int fildes,
+                uint32_t off) {
+  return SYM(mmap64)(addr, len, prot, flags, fildes, off);
 }
 
 int SYM(open)(const char *path, int oflag, mode_t mode) {
