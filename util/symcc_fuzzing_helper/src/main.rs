@@ -69,13 +69,7 @@ impl Stats {
             self.total_time += result.time;
             self.solver_time = match (self.solver_time, result.solver_time) {
                 (None, None) => None,
-                (Some(t), None) => {
-                    log::warn!(
-                        "One execution failed to measure the solver time; \
-                         stats may be inaccurate"
-                    );
-                    Some(t)
-                }
+                (Some(t), None) => Some(t), // no queries in this execution
                 (None, Some(t)) => Some(t),
                 (Some(a), Some(b)) => Some(a + b),
             };
