@@ -27,27 +27,27 @@ bool checkFlagString(std::string value) {
 Config g_config;
 
 void loadConfig() {
-  auto fullyConcrete = getenv("SYMCC_NO_SYMBOLIC_INPUT");
+  auto *fullyConcrete = getenv("SYMCC_NO_SYMBOLIC_INPUT");
   if (fullyConcrete != nullptr)
     g_config.fullyConcrete = checkFlagString(fullyConcrete);
 
-  auto outputDir = getenv("SYMCC_OUTPUT_DIR");
+  auto *outputDir = getenv("SYMCC_OUTPUT_DIR");
   if (outputDir != nullptr)
     g_config.outputDir = outputDir;
 
-  auto inputFile = getenv("SYMCC_INPUT_FILE");
+  auto *inputFile = getenv("SYMCC_INPUT_FILE");
   if (inputFile != nullptr)
     g_config.inputFile = inputFile;
 
-  auto pruning = getenv("SYMCC_ENABLE_LINEARIZATION");
+  auto *pruning = getenv("SYMCC_ENABLE_LINEARIZATION");
   if (pruning != nullptr)
     g_config.pruning = checkFlagString(pruning);
 
-  auto aflCoverageMap = getenv("SYMCC_AFL_COVERAGE_MAP");
+  auto *aflCoverageMap = getenv("SYMCC_AFL_COVERAGE_MAP");
   if (aflCoverageMap != nullptr)
     g_config.aflCoverageMap = aflCoverageMap;
 
-  auto garbageCollectionThreshold = getenv("SYMCC_GC_THRESHOLD");
+  auto *garbageCollectionThreshold = getenv("SYMCC_GC_THRESHOLD");
   if (garbageCollectionThreshold != nullptr) {
     try {
       g_config.garbageCollectionThreshold =

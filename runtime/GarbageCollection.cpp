@@ -15,7 +15,7 @@ void registerExpressionRegion(ExpressionRegion r) {
 std::set<SymExpr> collectReachableExpressions() {
   std::set<SymExpr> reachableExpressions;
   auto collectReachableExpressions = [&](ExpressionRegion r) {
-    auto end = r.first + r.second;
+    auto *end = r.first + r.second;
     for (SymExpr *expr_ptr = r.first; expr_ptr < end; expr_ptr++) {
       if (*expr_ptr != nullptr) {
         reachableExpressions.insert(*expr_ptr);

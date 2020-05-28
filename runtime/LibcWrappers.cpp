@@ -20,10 +20,10 @@
 namespace {
 
 /// The file descriptor referring to the symbolic input.
-static int inputFileDescriptor = -1;
+int inputFileDescriptor = -1;
 
 /// The current position in the (symbolic) input.
-static uint64_t inputOffset = 0;
+uint64_t inputOffset = 0;
 
 /// Tell the solver to try an alternative value than the given one.
 template <typename V, typename F>
@@ -56,7 +56,7 @@ void initLibcWrappers() {
 extern "C" {
 
 void *SYM(malloc)(size_t size) {
-  auto result = malloc(size);
+  auto *result = malloc(size);
 
   tryAlternative(size, _sym_get_parameter_expression(0), SYM(malloc));
 
@@ -65,7 +65,7 @@ void *SYM(malloc)(size_t size) {
 }
 
 void *SYM(calloc)(size_t nmemb, size_t size) {
-  auto result = calloc(nmemb, size);
+  auto *result = calloc(nmemb, size);
 
   tryAlternative(nmemb, _sym_get_parameter_expression(0), SYM(calloc));
   tryAlternative(size, _sym_get_parameter_expression(1), SYM(calloc));
@@ -79,7 +79,7 @@ void *SYM(calloc)(size_t nmemb, size_t size) {
 
 void *SYM(mmap64)(void *addr, size_t len, int prot, int flags, int fildes,
                   uint64_t off) {
-  auto result = mmap64(addr, len, prot, flags, fildes, off);
+  auto *result = mmap64(addr, len, prot, flags, fildes, off);
 
   tryAlternative(len, _sym_get_parameter_expression(1), SYM(mmap64));
 
@@ -166,7 +166,7 @@ uint32_t SYM(lseek)(int fd, uint32_t offset, int whence) {
 
   // Perform the same overflow check as glibc in the 32-bit version of lseek.
 
-  uint32_t result32 = (uint32_t)result;
+  auto result32 = (uint32_t)result;
   if (result == result32)
     return result32;
 
@@ -175,7 +175,7 @@ uint32_t SYM(lseek)(int fd, uint32_t offset, int whence) {
 }
 
 FILE *SYM(fopen)(const char *pathname, const char *mode) {
-  auto result = fopen(pathname, mode);
+  auto *result = fopen(pathname, mode);
   _sym_set_return_expression(nullptr);
 
   if (result != nullptr && !g_config.fullyConcrete &&
@@ -255,7 +255,7 @@ int SYM(ungetc)(int c, FILE *stream) {
 }
 
 void *SYM(memcpy)(void *dest, const void *src, size_t n) {
-  auto result = memcpy(dest, src, n);
+  auto *result = memcpy(dest, src, n);
 
   tryAlternative(dest, _sym_get_parameter_expression(0), SYM(memcpy));
   tryAlternative(src, _sym_get_parameter_expression(1), SYM(memcpy));
@@ -268,7 +268,7 @@ void *SYM(memcpy)(void *dest, const void *src, size_t n) {
 }
 
 void *SYM(memset)(void *s, int c, size_t n) {
-  auto result = memset(s, c, n);
+  auto *result = memset(s, c, n);
 
   tryAlternative(s, _sym_get_parameter_expression(0), SYM(memset));
   tryAlternative(n, _sym_get_parameter_expression(2), SYM(memset));
@@ -283,7 +283,7 @@ void *SYM(memmove)(void *dest, const void *src, size_t n) {
   tryAlternative(src, _sym_get_parameter_expression(1), SYM(memmove));
   tryAlternative(n, _sym_get_parameter_expression(2), SYM(memmove));
 
-  auto result = memmove(dest, src, n);
+  auto *result = memmove(dest, src, n);
   _sym_memmove(static_cast<uint8_t *>(dest), static_cast<const uint8_t *>(src),
                n);
 
@@ -296,7 +296,7 @@ char *SYM(strncpy)(char *dest, const char *src, size_t n) {
   tryAlternative(src, _sym_get_parameter_expression(1), SYM(strncpy));
   tryAlternative(n, _sym_get_parameter_expression(2), SYM(strncpy));
 
-  auto result = strncpy(dest, src, n);
+  auto *result = strncpy(dest, src, n);
   _sym_set_return_expression(nullptr);
 
   size_t srcLen = strnlen(src, n);
@@ -320,24 +320,26 @@ const char *SYM(strchr)(const char *s, int c) {
   tryAlternative(s, _sym_get_parameter_expression(0), SYM(strchr));
   tryAlternative(c, _sym_get_parameter_expression(1), SYM(strchr));
 
-  auto result = strchr(s, c);
+  auto *result = strchr(s, c);
   _sym_set_return_expression(nullptr);
 
-  auto cExpr = _sym_get_parameter_expression(1);
-  if (isConcrete(s, result ? (result - s) : strlen(s)) && !cExpr)
+  auto *cExpr = _sym_get_parameter_expression(1);
+  if (isConcrete(s, result != nullptr ? (result - s) : strlen(s)) &&
+      cExpr == nullptr)
     return result;
 
-  if (!cExpr)
+  if (cExpr == nullptr)
     cExpr = _sym_build_integer(c, 8);
 
-  size_t length = result ? (result - s) : strlen(s);
+  size_t length = result != nullptr ? (result - s) : strlen(s);
   auto shadow = ReadOnlyShadow(s, length);
   auto shadowIt = shadow.begin();
   for (size_t i = 0; i < length; i++) {
     _sym_push_path_constraint(
         _sym_build_not_equal(
-            *shadowIt ? *shadowIt : _sym_build_integer(s[i], 8), cExpr),
-        true, reinterpret_cast<uintptr_t>(SYM(strchr)));
+            (*shadowIt != nullptr) ? *shadowIt : _sym_build_integer(s[i], 8),
+            cExpr),
+        /*taken*/ 1, reinterpret_cast<uintptr_t>(SYM(strchr)));
     ++shadowIt;
   }
 
@@ -357,7 +359,7 @@ int SYM(memcmp)(const void *a, const void *b, size_t n) {
 
   auto aShadowIt = ReadOnlyShadow(a, n).begin_non_null();
   auto bShadowIt = ReadOnlyShadow(b, n).begin_non_null();
-  auto allEqual = _sym_build_equal(*aShadowIt, *bShadowIt);
+  auto *allEqual = _sym_build_equal(*aShadowIt, *bShadowIt);
   for (size_t i = 1; i < n; i++) {
     ++aShadowIt;
     ++bShadowIt;
@@ -365,7 +367,7 @@ int SYM(memcmp)(const void *a, const void *b, size_t n) {
         _sym_build_bool_and(allEqual, _sym_build_equal(*aShadowIt, *bShadowIt));
   }
 
-  _sym_push_path_constraint(allEqual, result ? false : true,
+  _sym_push_path_constraint(allEqual, result == 0,
                             reinterpret_cast<uintptr_t>(SYM(memcmp)));
   return result;
 }

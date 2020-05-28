@@ -44,12 +44,12 @@ class ReadShadowIterator
     : public std::iterator<std::bidirectional_iterator_tag, SymExpr> {
 public:
   explicit ReadShadowIterator(uintptr_t address)
-      : std::iterator<std::bidirectional_iterator_tag, SymExpr>(), address_(address),
-        shadow_(getShadow(address)) {}
+      : std::iterator<std::bidirectional_iterator_tag, SymExpr>(),
+        address_(address), shadow_(getShadow(address)) {}
 
   ReadShadowIterator &operator++() {
     auto previousAddress = address_++;
-    if (shadow_)
+    if (shadow_ != nullptr)
       shadow_++;
     if (pageStart(address_) != pageStart(previousAddress))
       shadow_ = getShadow(address_);
@@ -58,28 +58,30 @@ public:
 
   ReadShadowIterator &operator--() {
     auto previousAddress = address_--;
-    if (shadow_)
+    if (shadow_ != nullptr)
       shadow_--;
     if (pageStart(address_) != pageStart(previousAddress))
       shadow_ = getShadow(address_);
     return *this;
   }
 
-  SymExpr operator*() { return shadow_ ? *shadow_ : nullptr; }
+  SymExpr operator*() { return shadow_ != nullptr ? *shadow_ : nullptr; }
 
-  bool operator==(const ReadShadowIterator &other) {
+  bool operator==(const ReadShadowIterator &other) const {
     return (address_ == other.address_);
   }
 
-  bool operator!=(const ReadShadowIterator &other) { return !(*this == other); }
+  bool operator!=(const ReadShadowIterator &other) const {
+    return !(*this == other);
+  }
 
 protected:
   static SymExpr *getShadow(uintptr_t address) {
     if (auto shadowPageIt = g_shadow_pages.find(pageStart(address));
         shadowPageIt != g_shadow_pages.end())
       return shadowPageIt->second + pageOffset(address);
-    else
-      return nullptr;
+
+    return nullptr;
   }
 
   uintptr_t address_;
@@ -94,7 +96,7 @@ public:
       : ReadShadowIterator(address) {}
 
   SymExpr operator*() {
-    if (auto symbolicResult = ReadShadowIterator::operator*())
+    if (auto *symbolicResult = ReadShadowIterator::operator*())
       return symbolicResult;
 
     return _sym_build_integer(*reinterpret_cast<const uint8_t *>(address_), 8);
@@ -130,10 +132,10 @@ public:
 
 protected:
   static SymExpr *getOrCreateShadow(uintptr_t address) {
-    if (auto shadow = getShadow(address))
+    if (auto *shadow = getShadow(address))
       return shadow;
 
-    auto newShadow =
+    auto *newShadow =
         static_cast<SymExpr *>(malloc(kPageSize * sizeof(SymExpr)));
     memset(newShadow, 0, kPageSize * sizeof(SymExpr));
     g_shadow_pages[pageStart(address)] = newShadow;
@@ -147,14 +149,16 @@ struct ReadOnlyShadow {
   ReadOnlyShadow(T *addr, size_t len)
       : address_(reinterpret_cast<uintptr_t>(addr)), length_(len) {}
 
-  ReadShadowIterator begin() { return ReadShadowIterator(address_); }
-  ReadShadowIterator end() { return ReadShadowIterator(address_ + length_); }
+  ReadShadowIterator begin() const { return ReadShadowIterator(address_); }
+  ReadShadowIterator end() const {
+    return ReadShadowIterator(address_ + length_);
+  }
 
-  NonNullReadShadowIterator begin_non_null() {
+  NonNullReadShadowIterator begin_non_null() const {
     return NonNullReadShadowIterator(address_);
   }
 
-  NonNullReadShadowIterator end_non_null() {
+  NonNullReadShadowIterator end_non_null() const {
     return NonNullReadShadowIterator(address_ + length_);
   }
 

@@ -1,5 +1,6 @@
 #include <Runtime.h>
 
+#include <array>
 #include <cassert>
 #include <numeric>
 
@@ -13,7 +14,7 @@ constexpr int kMaxFunctionArguments = 256;
 
 /// Global storage for function parameters and the return value.
 SymExpr g_return_value;
-SymExpr g_function_arguments[kMaxFunctionArguments];
+std::array<SymExpr, kMaxFunctionArguments> g_function_arguments;
 // TODO make thread-local
 
 } // namespace
@@ -21,7 +22,7 @@ SymExpr g_function_arguments[kMaxFunctionArguments];
 void _sym_set_return_expression(SymExpr expr) { g_return_value = expr; }
 
 SymExpr _sym_get_return_expression(void) {
-  auto result = g_return_value;
+  auto *result = g_return_value;
   // TODO this is a safeguard that can eventually be removed
   g_return_value = nullptr;
   return result;
@@ -82,7 +83,7 @@ SymExpr _sym_read_memory(uint8_t *addr, size_t length, bool little_endian) {
   return std::accumulate(shadow.begin_non_null(), shadow.end_non_null(),
                          static_cast<SymExpr>(nullptr),
                          [&](SymExpr result, SymExpr byteExpr) {
-                           if (!result)
+                           if (result == nullptr)
                              return byteExpr;
 
                            return little_endian
@@ -105,7 +106,7 @@ void _sym_write_memory(uint8_t *addr, size_t length, SymExpr expr,
     return;
 
   ReadWriteShadow shadow(addr, length);
-  if (!expr) {
+  if (expr == nullptr) {
     std::fill(shadow.begin(), shadow.end(), nullptr);
   } else {
     size_t i = 0;
