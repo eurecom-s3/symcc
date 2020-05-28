@@ -23,8 +23,8 @@
 #endif
 
 #define FSORT(is_double)                                                       \
-  (is_double ? Z3_mk_fpa_sort_double(g_context)                                \
-             : Z3_mk_fpa_sort_single(g_context))
+  ((is_double) ? Z3_mk_fpa_sort_double(g_context)                              \
+               : Z3_mk_fpa_sort_single(g_context))
 
 /* TODO Eventually we'll want to inline as much of this as possible. I'm keeping
    it in C for now because that makes it easier to experiment with new features,
@@ -65,7 +65,7 @@ void handle_z3_error(Z3_context c [[maybe_unused]], Z3_error_code e) {
 
 Z3_ast build_variable(const char *name, uint8_t bits) {
   Z3_symbol sym = Z3_mk_string_symbol(g_context, name);
-  auto sort = Z3_mk_bv_sort(g_context, bits);
+  auto *sort = Z3_mk_bv_sort(g_context, bits);
   Z3_inc_ref(g_context, (Z3_ast)sort);
   Z3_ast result = Z3_mk_const(g_context, sym, sort);
   Z3_inc_ref(g_context, result);
@@ -118,7 +118,7 @@ void _sym_initialize(void) {
   g_solver = Z3_mk_solver(g_context);
   Z3_solver_inc_ref(g_context, g_solver);
 
-  auto pointerSort = Z3_mk_bv_sort(g_context, 8 * sizeof(void *));
+  auto *pointerSort = Z3_mk_bv_sort(g_context, 8 * sizeof(void *));
   Z3_inc_ref(g_context, (Z3_ast)pointerSort);
   g_null_pointer = Z3_mk_int(g_context, 0, pointerSort);
   Z3_inc_ref(g_context, g_null_pointer);
@@ -130,9 +130,9 @@ void _sym_initialize(void) {
 }
 
 Z3_ast _sym_build_integer(uint64_t value, uint8_t bits) {
-  auto sort = Z3_mk_bv_sort(g_context, bits);
+  auto *sort = Z3_mk_bv_sort(g_context, bits);
   Z3_inc_ref(g_context, (Z3_ast)sort);
-  auto result =
+  auto *result =
       registerExpression(Z3_mk_unsigned_int64(g_context, value, sort));
   Z3_dec_ref(g_context, (Z3_ast)sort);
   return result;
@@ -144,9 +144,9 @@ Z3_ast _sym_build_integer128(uint64_t high, uint64_t low) {
 }
 
 Z3_ast _sym_build_float(double value, int is_double) {
-  auto sort = FSORT(is_double);
+  auto *sort = FSORT(is_double);
   Z3_inc_ref(g_context, (Z3_ast)sort);
-  auto result =
+  auto *result =
       registerExpression(Z3_mk_fpa_numeral_double(g_context, value, sort));
   Z3_dec_ref(g_context, (Z3_ast)sort);
   return result;
@@ -159,7 +159,7 @@ Z3_ast _sym_get_input_byte(size_t offset) {
     return stdinBytes[offset];
 
   auto varName = "stdin" + std::to_string(stdinBytes.size());
-  auto var = build_variable(varName.c_str(), 8);
+  auto *var = build_variable(varName.c_str(), 8);
 
   stdinBytes.resize(offset);
   stdinBytes.push_back(var);
@@ -335,9 +335,9 @@ Z3_ast _sym_build_trunc(Z3_ast expr, uint8_t bits) {
 }
 
 Z3_ast _sym_build_int_to_float(Z3_ast value, int is_double, int is_signed) {
-  auto sort = FSORT(is_double);
+  auto *sort = FSORT(is_double);
   Z3_inc_ref(g_context, (Z3_ast)sort);
-  auto result = registerExpression(
+  auto *result = registerExpression(
       is_signed
           ? Z3_mk_fpa_to_fp_signed(g_context, g_rounding_mode, value, sort)
           : Z3_mk_fpa_to_fp_unsigned(g_context, g_rounding_mode, value, sort));
@@ -346,9 +346,9 @@ Z3_ast _sym_build_int_to_float(Z3_ast value, int is_double, int is_signed) {
 }
 
 Z3_ast _sym_build_float_to_float(Z3_ast expr, int to_double) {
-  auto sort = FSORT(to_double);
+  auto *sort = FSORT(to_double);
   Z3_inc_ref(g_context, (Z3_ast)sort);
-  auto result = registerExpression(
+  auto *result = registerExpression(
       Z3_mk_fpa_to_fp_float(g_context, g_rounding_mode, expr, sort));
   Z3_dec_ref(g_context, (Z3_ast)sort);
   return result;
@@ -358,9 +358,9 @@ Z3_ast _sym_build_bits_to_float(Z3_ast expr, int to_double) {
   if (expr == nullptr)
     return nullptr;
 
-  auto sort = FSORT(to_double);
+  auto *sort = FSORT(to_double);
   Z3_inc_ref(g_context, (Z3_ast)sort);
-  auto result = registerExpression(Z3_mk_fpa_to_fp_bv(g_context, expr, sort));
+  auto *result = registerExpression(Z3_mk_fpa_to_fp_bv(g_context, expr, sort));
   Z3_dec_ref(g_context, (Z3_ast)sort);
   return result;
 }
@@ -389,7 +389,7 @@ Z3_ast _sym_build_bool_to_bits(Z3_ast expr, uint8_t bits) {
 
 void _sym_push_path_constraint(Z3_ast constraint, int taken,
                                uintptr_t site_id [[maybe_unused]]) {
-  if (!constraint)
+  if (constraint == nullptr)
     return;
 
   constraint = Z3_simplify(g_context, constraint);
@@ -453,7 +453,7 @@ SymExpr _sym_extract_helper(SymExpr expr, size_t first_bit, size_t last_bit) {
 }
 
 size_t _sym_bits_helper(SymExpr expr) {
-  auto sort = Z3_get_sort(g_context, expr);
+  auto *sort = Z3_get_sort(g_context, expr);
   Z3_inc_ref(g_context, (Z3_ast)sort);
   auto result = Z3_get_bv_sort_size(g_context, sort);
   Z3_dec_ref(g_context, (Z3_ast)sort);

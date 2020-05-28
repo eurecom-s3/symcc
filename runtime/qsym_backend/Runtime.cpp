@@ -79,7 +79,7 @@ void deleteInputFile() { std::remove(inputFileName.c_str()); }
 /// workload.
 std::map<SymExpr, qsym::ExprRef> allocatedExpressions;
 
-SymExpr registerExpression(qsym::ExprRef expr) {
+SymExpr registerExpression(const qsym::ExprRef &expr) {
   SymExpr rawExpr = expr.get();
 
   if (allocatedExpressions.count(rawExpr) == 0) {
@@ -141,7 +141,7 @@ void _sym_initialize(void) {
     atexit(deleteInputFile);
 
     // Restore some semblance of standard input
-    auto newStdin = freopen(inputFileName.c_str(), "r", stdin);
+    auto *newStdin = freopen(inputFileName.c_str(), "r", stdin);
     if (newStdin == nullptr) {
       perror("Failed to reopen stdin");
       exit(-1);
@@ -166,12 +166,11 @@ SymExpr _sym_build_integer(uint64_t value, uint8_t bits) {
   } else {
     // 32-bit case: use the regular API if possible, otherwise create an
     // llvm::APInt.
-    if (uintptr_t value32 = value; value32 == value) {
+    if (uintptr_t value32 = value; value32 == value)
       return registerExpression(g_expr_builder->createConstant(value32, bits));
-    } else {
-      return registerExpression(
-          g_expr_builder->createConstant({64, value}, bits));
-    }
+
+    return registerExpression(
+        g_expr_builder->createConstant({64, value}, bits));
   }
 }
 
@@ -262,10 +261,10 @@ SymExpr _sym_build_trunc(SymExpr expr, uint8_t bits) {
 
 void _sym_push_path_constraint(SymExpr constraint, int taken,
                                uintptr_t site_id) {
-  if (!constraint)
+  if (constraint == nullptr)
     return;
 
-  g_solver->addJcc(allocatedExpressions[constraint], taken, site_id);
+  g_solver->addJcc(allocatedExpressions[constraint], taken != 0, site_id);
 }
 
 SymExpr _sym_get_input_byte(size_t offset) {
