@@ -33,7 +33,7 @@ void Symbolizer::insertBasicBlockNotification(llvm::BasicBlock &B) {
 void Symbolizer::finalizePHINodes() {
   SmallPtrSet<PHINode *, 32> nodesToErase;
 
-  for (auto phi : phiNodes) {
+  for (auto *phi : phiNodes) {
     auto symbolicPHI = cast<PHINode>(symbolicExpressions[phi]);
 
     // A PHI node that receives only compile-time constants can be replaced by
@@ -53,7 +53,7 @@ void Symbolizer::finalizePHINodes() {
     }
   }
 
-  for (auto symbolicPHI : nodesToErase) {
+  for (auto *symbolicPHI : nodesToErase) {
     symbolicPHI->replaceAllUsesWith(
         ConstantPointerNull::get(cast<PointerType>(symbolicPHI->getType())));
     symbolicPHI->eraseFromParent();
@@ -75,13 +75,13 @@ void Symbolizer::shortCircuitExpressionUses() {
 
     // Build the check whether any input expression is non-null (i.e., there
     // is a symbolic input).
-    auto nullExpression = ConstantPointerNull::get(IRB.getInt8PtrTy());
+    auto *nullExpression = ConstantPointerNull::get(IRB.getInt8PtrTy());
     std::vector<Value *> nullChecks;
     for (const auto &input : symbolicComputation.inputs) {
       nullChecks.push_back(
           IRB.CreateICmpEQ(nullExpression, input.getSymbolicOperand()));
     }
-    auto allConcrete = nullChecks[0];
+    auto *allConcrete = nullChecks[0];
     for (unsigned argIndex = 1; argIndex < nullChecks.size(); argIndex++) {
       allConcrete = IRB.CreateAnd(allConcrete, nullChecks[argIndex]);
     }
@@ -89,10 +89,10 @@ void Symbolizer::shortCircuitExpressionUses() {
     // The main branch: if we don't enter here, we can short-circuit the
     // symbolic computation. Otherwise, we need to check all input expressions
     // and create an output expression.
-    auto head = symbolicComputation.firstInstruction->getParent();
-    auto slowPath = SplitBlock(head, symbolicComputation.firstInstruction);
-    auto tail = SplitBlock(slowPath,
-                           symbolicComputation.lastInstruction->getNextNode());
+    auto *head = symbolicComputation.firstInstruction->getParent();
+    auto *slowPath = SplitBlock(head, symbolicComputation.firstInstruction);
+    auto *tail = SplitBlock(slowPath,
+                            symbolicComputation.lastInstruction->getNextNode());
     ReplaceInstWithInst(head->getTerminator(),
                         BranchInst::Create(tail, slowPath, allConcrete));
 
@@ -106,9 +106,9 @@ void Symbolizer::shortCircuitExpressionUses() {
         });
     for (unsigned argIndex = 0; argIndex < symbolicComputation.inputs.size();
          argIndex++) {
-      auto &argument = symbolicComputation.inputs[argIndex];
-      auto originalArgExpression = argument.getSymbolicOperand();
-      auto argCheckBlock = symbolicComputation.firstInstruction->getParent();
+      const auto &argument = symbolicComputation.inputs[argIndex];
+      auto *originalArgExpression = argument.getSymbolicOperand();
+      auto *argCheckBlock = symbolicComputation.firstInstruction->getParent();
 
       // We only need a run-time check for concreteness if the argument isn't
       // known to be concrete at compile time already. However, there is one
@@ -121,7 +121,7 @@ void Symbolizer::shortCircuitExpressionUses() {
         continue;
 
       if (needRuntimeCheck) {
-        auto argExpressionBlock = SplitBlockAndInsertIfThen(
+        auto *argExpressionBlock = SplitBlockAndInsertIfThen(
             nullChecks[argIndex], symbolicComputation.firstInstruction,
             /* unreachable */ false);
         IRB.SetInsertPoint(argExpressionBlock);
@@ -129,13 +129,13 @@ void Symbolizer::shortCircuitExpressionUses() {
         IRB.SetInsertPoint(symbolicComputation.firstInstruction);
       }
 
-      auto newArgExpression =
+      auto *newArgExpression =
           createValueExpression(argument.concreteValue, IRB);
 
       Value *finalArgExpression;
       if (needRuntimeCheck) {
         IRB.SetInsertPoint(symbolicComputation.firstInstruction);
-        auto argPHI = IRB.CreatePHI(IRB.getInt8PtrTy(), 2);
+        auto *argPHI = IRB.CreatePHI(IRB.getInt8PtrTy(), 2);
         argPHI->addIncoming(originalArgExpression, argCheckBlock);
         argPHI->addIncoming(newArgExpression, newArgExpression->getParent());
         finalArgExpression = argPHI;
@@ -152,7 +152,7 @@ void Symbolizer::shortCircuitExpressionUses() {
     // if short-circuiting wasn't possible.
     if (!symbolicComputation.lastInstruction->use_empty()) {
       IRB.SetInsertPoint(&tail->front());
-      auto finalExpression = IRB.CreatePHI(IRB.getInt8PtrTy(), 2);
+      auto *finalExpression = IRB.CreatePHI(IRB.getInt8PtrTy(), 2);
       symbolicComputation.lastInstruction->replaceAllUsesWith(finalExpression);
       finalExpression->addIncoming(ConstantPointerNull::get(IRB.getInt8PtrTy()),
                                    head);
@@ -164,7 +164,7 @@ void Symbolizer::shortCircuitExpressionUses() {
 }
 
 void Symbolizer::handleIntrinsicCall(CallBase &I) {
-  auto callee = I.getCalledFunction();
+  auto *callee = I.getCalledFunction();
 
   switch (callee->getIntrinsicID()) {
   case Intrinsic::lifetime_start:
@@ -233,7 +233,7 @@ void Symbolizer::handleIntrinsicCall(CallBase &I) {
     break;
   case Intrinsic::expect:
     // Just a hint for the optimizer; the value is the first parameter.
-    if (auto expr = getSymbolicExpression(I.getArgOperand(0)))
+    if (auto *expr = getSymbolicExpression(I.getArgOperand(0)))
       symbolicExpressions[&I] = expr;
     break;
   case Intrinsic::fabs: {
@@ -288,8 +288,8 @@ void Symbolizer::handleInlineAssembly(CallInst &I) {
 }
 
 void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
-  auto callee = I.getCalledFunction();
-  if (callee && callee->isIntrinsic()) {
+  auto *callee = I.getCalledFunction();
+  if (callee != nullptr && callee->isIntrinsic()) {
     handleIntrinsicCall(I);
     return;
   }
@@ -299,7 +299,7 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
   IRB.SetInsertPoint(&I);
   IRB.CreateCall(runtime.notifyCall, getTargetPreferredInt(&I));
 
-  if (!callee)
+  if (callee == nullptr)
     tryAlternative(IRB, I.getCalledValue());
 
   for (Use &arg : I.args())
@@ -421,13 +421,13 @@ void Symbolizer::visitInvokeInst(InvokeInst &I) {
   // block may have multiple incoming edges (i.e., our edge may be critical). In
   // this case, we split the edge and query the return expression in the new
   // block that is specific to our edge.
-  auto newBlock = SplitCriticalEdge(I.getParent(), I.getNormalDest());
+  auto *newBlock = SplitCriticalEdge(I.getParent(), I.getNormalDest());
   handleFunctionCall(I, newBlock != nullptr
                             ? newBlock->getFirstNonPHI()
                             : I.getNormalDest()->getFirstNonPHI());
 }
 
-void Symbolizer::visitAllocaInst(AllocaInst &) {
+void Symbolizer::visitAllocaInst(AllocaInst & /*unused*/) {
   // Nothing to do: the shadow for the newly allocated memory region will be
   // created on first write; until then, the memory contents are concrete.
 }
@@ -435,11 +435,11 @@ void Symbolizer::visitAllocaInst(AllocaInst &) {
 void Symbolizer::visitLoadInst(LoadInst &I) {
   IRBuilder<> IRB(&I);
 
-  auto addr = I.getPointerOperand();
+  auto *addr = I.getPointerOperand();
   tryAlternative(IRB, addr);
 
-  auto dataType = I.getType();
-  auto data = IRB.CreateCall(
+  auto *dataType = I.getType();
+  auto *data = IRB.CreateCall(
       runtime.readMemory,
       {IRB.CreatePtrToInt(addr, intPtrType),
        ConstantInt::get(intPtrType, dataLayout.getTypeStoreSize(dataType)),
@@ -458,8 +458,8 @@ void Symbolizer::visitStoreInst(StoreInst &I) {
 
   tryAlternative(IRB, I.getPointerOperand());
 
-  auto data = getSymbolicExpressionOrNull(I.getValueOperand());
-  auto dataType = I.getValueOperand()->getType();
+  auto *data = getSymbolicExpressionOrNull(I.getValueOperand());
+  auto *dataType = I.getValueOperand()->getType();
   if (dataType->isFloatingPointTy()) {
     data = IRB.CreateCall(runtime.buildFloatToBits, data);
   }
@@ -479,7 +479,7 @@ void Symbolizer::visitGetElementPtrInst(GetElementPtrInst &I) {
   // computations at the symbolic level.
 
   // If everything is compile-time concrete, we don't need to emit code.
-  if (!getSymbolicExpression(I.getPointerOperand()) &&
+  if (getSymbolicExpression(I.getPointerOperand()) == nullptr &&
       std::all_of(I.idx_begin(), I.idx_end(), [this](Value *index) {
         return (getSymbolicExpression(index) == nullptr);
       })) {
@@ -489,8 +489,8 @@ void Symbolizer::visitGetElementPtrInst(GetElementPtrInst &I) {
   // If there are no indices or if they are all zero we can return early as
   // well.
   if (std::all_of(I.idx_begin(), I.idx_end(), [](Value *index) {
-        auto ci = dyn_cast<ConstantInt>(index);
-        return (ci && ci->isZero());
+        auto *ci = dyn_cast<ConstantInt>(index);
+        return (ci != nullptr && ci->isZero());
       })) {
     symbolicExpressions[&I] = getSymbolicExpression(I.getPointerOperand());
     return;
@@ -502,7 +502,7 @@ void Symbolizer::visitGetElementPtrInst(GetElementPtrInst &I) {
 
   for (auto type_it = gep_type_begin(I), type_end = gep_type_end(I);
        type_it != type_end; ++type_it) {
-    auto index = type_it.getOperand();
+    auto *index = type_it.getOperand();
     std::pair<Value *, bool> addressContribution;
 
     // There are two cases for the calculation:
@@ -510,7 +510,7 @@ void Symbolizer::visitGetElementPtrInst(GetElementPtrInst &I) {
     //    desired member.
     // 2. If it is an array or a pointer, compute the offset of the desired
     //    element.
-    if (auto structType = type_it.getStructTypeOrNull()) {
+    if (auto *structType = type_it.getStructTypeOrNull()) {
       // Structs can only be indexed with constants
       // (https://llvm.org/docs/LangRef.html#getelementptr-instruction).
 
@@ -519,7 +519,8 @@ void Symbolizer::visitGetElementPtrInst(GetElementPtrInst &I) {
           dataLayout.getStructLayout(structType)->getElementOffset(memberIndex);
       addressContribution = {ConstantInt::get(intPtrType, memberOffset), true};
     } else {
-      if (auto ci = dyn_cast<ConstantInt>(index); ci && ci->isZero()) {
+      if (auto *ci = dyn_cast<ConstantInt>(index);
+          ci != nullptr && ci->isZero()) {
         // Fast path: an index of zero means that no calculations are
         // performed.
         continue;
@@ -583,7 +584,7 @@ void Symbolizer::visitBitCastInst(BitCastInst &I) {
 
   assert(I.getSrcTy()->isPointerTy() && I.getDestTy()->isPointerTy() &&
          "Unhandled non-pointer bit cast");
-  if (auto expr = getSymbolicExpression(I.getOperand(0)))
+  if (auto *expr = getSymbolicExpression(I.getOperand(0)))
     symbolicExpressions[&I] = expr;
 }
 
@@ -597,13 +598,13 @@ void Symbolizer::visitTruncInst(TruncInst &I) {
 }
 
 void Symbolizer::visitIntToPtrInst(IntToPtrInst &I) {
-  if (auto expr = getSymbolicExpression(I.getOperand(0)))
+  if (auto *expr = getSymbolicExpression(I.getOperand(0)))
     symbolicExpressions[&I] = expr;
   // TODO handle truncation and zero extension
 }
 
 void Symbolizer::visitPtrToIntInst(PtrToIntInst &I) {
-  if (auto expr = getSymbolicExpression(I.getOperand(0)))
+  if (auto *expr = getSymbolicExpression(I.getOperand(0)))
     symbolicExpressions[&I] = expr;
   // TODO handle truncation and zero extension
 }
@@ -715,7 +716,7 @@ void Symbolizer::visitPHINode(PHINode &I) {
 
   IRBuilder<> IRB(&I);
   unsigned numIncomingValues = I.getNumIncomingValues();
-  auto exprPHI = IRB.CreatePHI(IRB.getInt8PtrTy(), numIncomingValues);
+  auto *exprPHI = IRB.CreatePHI(IRB.getInt8PtrTy(), numIncomingValues);
   for (unsigned incoming = 0; incoming < numIncomingValues; incoming++) {
     exprPHI->addIncoming(
         // The null pointer will be replaced in finalizePHINodes.
@@ -728,16 +729,16 @@ void Symbolizer::visitPHINode(PHINode &I) {
 
 void Symbolizer::visitExtractValueInst(ExtractValueInst &I) {
   uint64_t offset = 0;
-  auto indexedType = I.getAggregateOperand()->getType();
+  auto *indexedType = I.getAggregateOperand()->getType();
   for (auto index : I.indices()) {
     // All indices in an extractvalue instruction are constant:
     // https://llvm.org/docs/LangRef.html#extractvalue-instruction
 
-    if (auto structType = dyn_cast<StructType>(indexedType)) {
+    if (auto *structType = dyn_cast<StructType>(indexedType)) {
       offset += dataLayout.getStructLayout(structType)->getElementOffset(index);
       indexedType = structType->getElementType(index);
     } else {
-      auto arrayType = cast<ArrayType>(indexedType);
+      auto *arrayType = cast<ArrayType>(indexedType);
       unsigned elementSize =
           dataLayout.getTypeAllocSize(arrayType->getArrayElementType());
       offset += elementSize * index;
@@ -761,22 +762,22 @@ void Symbolizer::visitSwitchInst(SwitchInst &I) {
   // (https://llvm.org/docs/LangRef.html#switch-instruction).
 
   IRBuilder<> IRB(&I);
-  auto condition = I.getCondition();
-  auto conditionExpr = getSymbolicExpression(condition);
-  if (!conditionExpr)
+  auto *condition = I.getCondition();
+  auto *conditionExpr = getSymbolicExpression(condition);
+  if (conditionExpr == nullptr)
     return;
 
   // Build a check whether we have a symbolic condition, to be used later.
-  auto haveSymbolicCondition = IRB.CreateICmpNE(
+  auto *haveSymbolicCondition = IRB.CreateICmpNE(
       conditionExpr, ConstantPointerNull::get(IRB.getInt8PtrTy()));
-  auto constraintBlock = SplitBlockAndInsertIfThen(haveSymbolicCondition, &I,
-                                                   /* unreachable */ false);
+  auto *constraintBlock = SplitBlockAndInsertIfThen(haveSymbolicCondition, &I,
+                                                    /* unreachable */ false);
 
   // In the constraint block, we push one path constraint per case.
   IRB.SetInsertPoint(constraintBlock);
   for (auto &caseHandle : I.cases()) {
-    auto caseTaken = IRB.CreateICmpEQ(condition, caseHandle.getCaseValue());
-    auto caseConstraint = IRB.CreateCall(
+    auto *caseTaken = IRB.CreateICmpEQ(condition, caseHandle.getCaseValue());
+    auto *caseConstraint = IRB.CreateCall(
         runtime.comparisonHandlers[CmpInst::ICMP_EQ],
         {conditionExpr, createValueExpression(caseHandle.getCaseValue(), IRB)});
     IRB.CreateCall(runtime.pushPathConstraint,
@@ -784,7 +785,7 @@ void Symbolizer::visitSwitchInst(SwitchInst &I) {
   }
 }
 
-void Symbolizer::visitUnreachableInst(UnreachableInst &) {
+void Symbolizer::visitUnreachableInst(UnreachableInst & /*unused*/) {
   // Nothing to do here...
 }
 
@@ -798,7 +799,7 @@ void Symbolizer::visitInstruction(Instruction &I) {
 }
 
 CallInst *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
-  auto valueType = V->getType();
+  auto *valueType = V->getType();
 
   if (isa<ConstantPointerNull>(V)) {
     return IRB.CreateCall(runtime.buildNullPointer, {});
@@ -852,7 +853,7 @@ CallInst *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
     // cast instructions, because expressions would have to be converted
     // between different representations according to the type.
 
-    auto memory = IRB.CreateAlloca(V->getType());
+    auto *memory = IRB.CreateAlloca(V->getType());
     IRB.CreateStore(V, memory);
     return IRB.CreateCall(
         runtime.readMemory,
@@ -869,14 +870,14 @@ Symbolizer::SymbolicComputation
 Symbolizer::forceBuildRuntimeCall(IRBuilder<> &IRB, Value *function,
                                   ArrayRef<std::pair<Value *, bool>> args) {
   std::vector<Value *> functionArgs;
-  for (auto &[arg, symbolic] : args) {
+  for (const auto &[arg, symbolic] : args) {
     functionArgs.push_back(symbolic ? getSymbolicExpressionOrNull(arg) : arg);
   }
-  auto call = IRB.CreateCall(function, functionArgs);
+  auto *call = IRB.CreateCall(function, functionArgs);
 
   std::vector<Input> inputs;
   for (unsigned i = 0; i < args.size(); i++) {
-    auto &[arg, symbolic] = args[i];
+    const auto &[arg, symbolic] = args[i];
     if (symbolic)
       inputs.push_back({arg, i, call});
   }
@@ -885,13 +886,13 @@ Symbolizer::forceBuildRuntimeCall(IRBuilder<> &IRB, Value *function,
 }
 
 void Symbolizer::tryAlternative(IRBuilder<> &IRB, Value *V) {
-  auto destExpr = getSymbolicExpression(V);
-  if (destExpr) {
-    auto concreteDestExpr = createValueExpression(V, IRB);
-    auto destAssertion =
+  auto *destExpr = getSymbolicExpression(V);
+  if (destExpr != nullptr) {
+    auto *concreteDestExpr = createValueExpression(V, IRB);
+    auto *destAssertion =
         IRB.CreateCall(runtime.comparisonHandlers[CmpInst::ICMP_EQ],
                        {destExpr, concreteDestExpr});
-    auto pushAssertion = IRB.CreateCall(
+    auto *pushAssertion = IRB.CreateCall(
         runtime.pushPathConstraint,
         {destAssertion, IRB.getInt1(true), getTargetPreferredInt(V)});
     registerSymbolicComputation(SymbolicComputation(

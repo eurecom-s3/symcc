@@ -182,8 +182,8 @@ private:
   }
 
   llvm::Value *getSymbolicExpressionOrNull(llvm::Value *V) {
-    auto expr = getSymbolicExpression(V);
-    if (!expr)
+    auto *expr = getSymbolicExpression(V);
+    if (expr == nullptr)
       return llvm::ConstantPointerNull::get(
           llvm::IntegerType::getInt8PtrTy(V->getContext()));
     return expr;
@@ -226,7 +226,7 @@ private:
                    llvm::ArrayRef<llvm::Value *> symbolicArgs) {
     std::vector<std::pair<llvm::Value *, bool>> args;
     for (const auto &arg : symbolicArgs) {
-      args.push_back({arg, true});
+      args.emplace_back(arg, true);
     }
 
     return buildRuntimeCall(IRB, function, args);
@@ -237,7 +237,7 @@ private:
   /// short-circuiting.
   void registerSymbolicComputation(const SymbolicComputation &computation,
                                    llvm::Value *concrete = nullptr) {
-    if (concrete)
+    if (concrete != nullptr)
       symbolicExpressions[concrete] = computation.lastInstruction;
     expressionUses.push_back(computation);
   }

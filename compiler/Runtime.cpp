@@ -22,10 +22,10 @@ llvm::Value *import(llvm::Module &M, llvm::StringRef name, llvm::Type *ret,
 
 Runtime::Runtime(Module &M) {
   IRBuilder<> IRB(M.getContext());
-  auto intPtrType = M.getDataLayout().getIntPtrType(M.getContext());
-  auto ptrT = IRB.getInt8PtrTy();
-  auto int8T = IRB.getInt8Ty();
-  auto voidT = IRB.getVoidTy();
+  auto *intPtrType = M.getDataLayout().getIntPtrType(M.getContext());
+  auto *ptrT = IRB.getInt8PtrTy();
+  auto *int8T = IRB.getInt8Ty();
+  auto *voidT = IRB.getVoidTy();
 
   buildInteger = import(M, "_sym_build_integer", ptrT, IRB.getInt64Ty(), int8T);
   buildInteger128 = import(M, "_sym_build_integer128", ptrT, IRB.getInt64Ty(),

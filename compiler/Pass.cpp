@@ -61,7 +61,7 @@ bool SymbolizePass::runOnFunction(Function &F) {
   for (auto &basicBlock : F)
     symbolizer.insertBasicBlockNotification(basicBlock);
 
-  for (auto instPtr : allInstructions)
+  for (auto *instPtr : allInstructions)
     symbolizer.visit(instPtr);
 
   symbolizer.finalizePHINodes();
