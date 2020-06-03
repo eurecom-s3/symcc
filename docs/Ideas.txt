@@ -1,0 +1,59 @@
+
+
+                             Ideas for future work
+
+
+Here we collect ideas around improvements and new features that could be
+interesting to implement.
+
+
+                       Position in the optimizer pipeline
+
+Intuitively, we should run towards the end of the pipeline, so that the target
+program has been simplified as much as possible. However, SymCC currently runs
+just before the vectorizer - a position later in the pipeline would require
+supporting LLVM vector instructions, so for now we choose implementation
+simplicity over potential performance gains. Still, it would be very interesting
+to check whether moving to the end of the pipeline accelerates the system
+significantly, and how much it would cost in terms of complexity.
+
+
+                             Optimize injected code
+
+We should schedule a few optimization passes after inserting our
+instrumentation, so that the instrumentation code gets optimized as well. This
+becomes more important the further we move our pass to the end of the pipeline.
+We could take inspiration from popular sanitizers like ASan and MSan regarding
+the concrete passes to run, and their order.
+
+
+                      Free symbolic expressions in memory
+
+SymCC currently doesn't free symbolic expressions. This is fine most of the time
+because intermediate values are rarely computed without being used: typically,
+they end up being inputs to future computations, so we couldn't free the
+corresponding expressions anyway. A notable exception is the computation of
+values only for output - the expressions for such values could be freed after
+the value is output, which would reduce memory consumption especially with
+output-heavy target programs.
+
+
+                           Better fuzzer integration
+
+Our current coordination with the fuzzer is very crude: we use AFL's distributed
+mode to make it periodically pull new inputs from SymCC, and we try to
+prioritize the most interesting inputs from AFL's queue for execution in SymCC.
+However, a better integration would consider the trade-offs of symbolic
+execution: it's expensive but uses more sophisticated reasoning. As long as the
+fuzzer makes good progress (for some progress metric), CPU power should be
+allocated only to the fuzzer; the price of symbolic execution should be paid
+only when necessary. Moreover, a faster synchronization mechanism than AFL's
+file-system based approach would be nice.
+
+
+                            Work with other fuzzers
+
+Integrating with AFL is easy because its distributed mode only requires working
+with files and directories. Other fuzzers might not provide such easy
+mechanisms, but by integrating with them we would gain whatever performance
+improvements they have made over AFL (e.g., AFL++ or Honggfuzz).
