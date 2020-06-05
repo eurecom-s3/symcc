@@ -82,7 +82,7 @@ other, so that tcpdump's build system can find and statically link the
 previously built libpcap.
 
 Create a corpus of dummy files somewhere (say, in a directory called "corpus");
-for tcpdump, we just start with an empty corpus containing just a dummy file for
+for tcpdump, we just start with an empty corpus containing only a dummy file for
 AFL:
 
 $ mkdir corpus
