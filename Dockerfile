@@ -87,6 +87,8 @@ COPY --from=builder /afl /afl
 
 ENV PATH /symcc_build:$PATH
 ENV AFL_PATH /afl
+ENV AFL_CC clang-8
+ENV AFL_CXX clang++-8
 ENV SYMCC_LIBCXX_PATH=/libcxx_symcc_install
 
 USER ubuntu
