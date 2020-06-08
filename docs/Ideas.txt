@@ -24,7 +24,8 @@ We should schedule a few optimization passes after inserting our
 instrumentation, so that the instrumentation code gets optimized as well. This
 becomes more important the further we move our pass to the end of the pipeline.
 We could take inspiration from popular sanitizers like ASan and MSan regarding
-the concrete passes to run, and their order.
+the concrete passes to run, and their order. Also, we should enable link-time
+optimization to inline some simple run-time support functions.
 
 
                       Free symbolic expressions in memory
