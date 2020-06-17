@@ -136,6 +136,30 @@ many cases it is sufficient to let Ninja figure out what to rebuild (and
 recompile libc++ only when necessary).
 
 
+                                    Contact
+
+Feel free to use GitHub issues and pull requests for improvements, bug reports,
+etc. Alternatively, you can send an email to Sebastian Poeplau
+(sebastian.poeplau@eurecom.fr) and Aurélien Francillon
+(aurelien.francillon@eurecom.fr).
+
+
+                                   Reference
+
+To cite SymCC in scientific work, please use the following BibTeX:
+
+@inproceedings {poeplau2020symcc,
+  author =       {Sebastian Poeplau and Aurélien Francillon},
+  title =        {Symbolic execution with {SymCC}: Don't execute, compile!},
+  booktitle =    {29th {USENIX} Security Symposium ({USENIX} Security 20)},
+  year =         2020,
+  address =      {Boston, MA},
+  url =          {https://www.usenix.org/conference/usenixsecurity20/presentation/poeplau},
+  publisher =    {{USENIX} Association},
+  month =        August,
+}
+
+
                                     License
 
 SymCC is free software: you can redistribute it and/or modify it under the terms
