@@ -1,4 +1,4 @@
 [submodule "qsym_backend/qsym"]
 	path = runtime/qsym_backend/qsym
-	url = git@gitlab.eurecom.fr:symbolic-execution/qsym.git
+	url = https://github.com/eurecom-s3/qsym.git
 	branch = symcc
