@@ -165,7 +165,7 @@ To cite SymCC in scientific work, please use the following BibTeX:
 ``` bibtex
 @inproceedings {poeplau2020symcc,
   author =       {Sebastian Poeplau and Aurélien Francillon},
-  title =        {Symbolic execution with {SymCC}: Don't execute, compile!},
+  title =        {Symbolic execution with {SymCC}: Don't interpret, compile!},
   booktitle =    {29th {USENIX} Security Symposium ({USENIX} Security 20)},
   year =         2020,
   address =      {Boston, MA},
