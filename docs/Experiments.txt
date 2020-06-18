@@ -1,0 +1,79 @@
+
+
+                                  Experiments
+
+
+Here we document how to reproduce the experiments that we show in the paper
+"Symbolic execution with SymCC: Don't interpret, compile!" The same instructions
+are available on our website [1], which also provides our raw results. Feel free
+to reach out to us if you encounter problems with reproducing the benchmarks.
+
+In the paper, we describe two sets of experiments: we first benchmark SymCC on
+the CGC programs, then we run it on real-world software.
+
+
+                                CGC experiments
+
+We used the Linux port of the CGC programs by Trail of Bits [2]. SymCC needs to
+be built with support for 32-bit compilation (see docs/32-bit.txt; this is not
+part of the Dockerfile because it would double the build time of the container
+while providing value to just a few users). Then you can simply export
+CC=/path/to/symcc, CXX=/path/to/sym++ and SYMCC_NO_SYMBOLIC_INPUT=1, and build
+the CGC programs as usual (i.e., by invoking their build.sh script).
+
+Run the programs on the raw PoV inputs [3] with SYMCC_NO_SYMBOLIC_INPUT=1 to
+measure pure execution time, and unset the environment variable for symbolic
+execution. To assess coverage, we ran afl-showmap with the AFL-instrumented CGC
+programs on each generated input and accumulated the resulting coverage maps per
+program, resulting in a set of covered map entries for each CGC program. The
+sizes of those sets can then be fed to the scoring formula presented in the
+paper.
+
+For KLEE and QSYM, we used the setup described in our IR study [3] but with the
+regular 32-bit binaries built by cb-multios.
+
+
+                              Real-world software
+
+The analysis of real-world software always follows the same procedure. Assuming
+you have exported CC=symcc, CXX=sym++ and SYMCC_NO_SYMBOLIC_INPUT=1, first
+download the code, then build it using its own build system, finally unset
+SYMCC_NO_SYMBOLIC_INPUT and analyze the program in concert with AFL (which
+requires building a second time for AFL, see docs/Fuzzing.txt). We used AFL
+2.56b and built the targets with AFL_USE_ASAN=1. Note that the fuzzing helper is
+already installed in the Docker container.
+
+OpenJPEG [4]: we used revision 1f1e9682, built with CMake as described in the
+  project's INSTALL.md, and analyzed "bin/opj_decompress -i @@ -o
+  /tmp/image.pgm"; the corpus consisted of test files file1.jp2 and file8.jp2
+  [5].
+
+libarchive [6]: we used revision 9ebb2484, built with CMake as described in the
+  poject's INSTALL (but adding "-DCMAKE_BUILD_TYPE=Release"), and analyzed
+  "bin/bsdtar tf @@"; the corpus consisted of just a single dummy file
+  containing the character "A".
+
+tcpdump: we built both tcpdump [7] and libpcap [8]; in order to make the former
+  find the latter, just place the source directories next to each other in the
+  same folder. We used revision d615abec of libpcap and revision d57927e1 of
+  tcpdump. We built first libpcap and then tcpdump with "./configure && make",
+  and analyzed "tcpdump/tcpdump -e -r @@"; the corpus consisted of just a single
+  dummy file containing the character "A".
+
+All experiments used one AFL master process, one secondary AFL process, and one
+SymCC process. We let them run for 24 hours and repeated each of them 30 times
+to create the graphs in the paper; AFL map density was extracted from the
+secondary AFL process' "plot_data" file, column "map_size".
+
+The QSYM experiments used an analogous setup, replacing SymCC with QSYM and
+running it with AFL according to the QSYM authors' instructions [9].
+
+[1] http://www.s3.eurecom.fr/tools/symbolic_execution/symcc.html
+[2] https://github.com/trailofbits/cb-multios
+[3] http://www.s3.eurecom.fr/tools/symbolic_execution/ir_study.html
+[4] https://github.com/uclouvain/openjpeg.git
+[5] https://github.com/uclouvain/openjpeg-data/blob/master/input/conformance
+[6] https://github.com/libarchive/libarchive.git
+[7] https://github.com/the-tcpdump-group/tcpdump.git
+[8] https://github.com/the-tcpdump-group/libpcap.git
+[9] https://github.com/sslab-gatech/qsym#run-hybrid-fuzzing-with-afl
