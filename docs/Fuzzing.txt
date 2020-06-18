@@ -113,3 +113,19 @@ It is possible to run SymCC with only an AFL master or only a secondary AFL
 instance; see the AFL docs for the implications. Moreover, the number of fuzzer
 and SymCC instances can be increased - just make sure that each has a unique
 name.
+
+Note that there are currently a few gotchas with the fuzzing helper:
+
+1. It expects afl-showmap to be in the same directory as afl-fuzz (which is
+   usually the case), and it finds that directory via your afl-fuzz command. If
+   afl-fuzz is on your PATH (as we assumed in the example above), all is good
+   and you can ignore this point. Otherwise, you need to either call afl-fuzz
+   with an absolute path (e.g., /afl/afl-fuzz in the Docker image) or, if you
+   use a relative path, start afl-fuzz from the same working directory as the
+   fuzzing helper.
+
+2. The helper needs to know how to call the AFL-instrumented version of the
+   target, and it finds that information by scanning your afl-fuzz command. To
+   this end, it _requires_ the double dash that we used in the example above to
+   separate afl-fuzz options from the target command; if you omit it, you'll
+   likely get errors from the helper when it tries to run afl-showmap.
