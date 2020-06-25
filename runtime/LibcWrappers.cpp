@@ -206,6 +206,24 @@ FILE *SYM(fopen)(const char *pathname, const char *mode) {
   return result;
 }
 
+FILE *SYM(fopen64)(const char *pathname, const char *mode) {
+  auto *result = fopen64(pathname, mode);
+  _sym_set_return_expression(nullptr);
+
+  if (result != nullptr && !g_config.fullyConcrete &&
+      !g_config.inputFile.empty() &&
+      strstr(pathname, g_config.inputFile.c_str()) != nullptr) {
+    if (inputFileDescriptor != -1)
+      std::cerr << "Warning: input file opened multiple times; this is not yet "
+                   "supported"
+                << std::endl;
+    inputFileDescriptor = fileno(result);
+    inputOffset = 0;
+  }
+
+  return result;
+}
+
 size_t SYM(fread)(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   tryAlternative(ptr, _sym_get_parameter_expression(0), SYM(fread));
   tryAlternative(size, _sym_get_parameter_expression(1), SYM(fread));
