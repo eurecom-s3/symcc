@@ -343,7 +343,7 @@ const char *SYM(strchr)(const char *s, int c) {
     return result;
 
   if (cExpr == nullptr)
-    cExpr = _sym_build_integer(c, 8);
+    cExpr = _sym_build_integer(c, 32);
 
   size_t length = result != nullptr ? (result - s) : strlen(s);
   auto shadow = ReadOnlyShadow(s, length);
@@ -351,7 +351,7 @@ const char *SYM(strchr)(const char *s, int c) {
   for (size_t i = 0; i < length; i++) {
     _sym_push_path_constraint(
         _sym_build_not_equal(
-            (*shadowIt != nullptr) ? *shadowIt : _sym_build_integer(s[i], 8),
+            (*shadowIt != nullptr) ? *shadowIt : _sym_build_integer(s[i], 32),
             cExpr),
         /*taken*/ 1, reinterpret_cast<uintptr_t>(SYM(strchr)));
     ++shadowIt;
