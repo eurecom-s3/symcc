@@ -22,7 +22,7 @@
 #include <set>
 #include <vector>
 
-#ifdef DEBUG_RUNTIME
+#ifndef NDEBUG
 #include <chrono>
 #endif
 
@@ -31,7 +31,7 @@
 #include "LibcWrappers.h"
 #include "Shadow.h"
 
-#ifdef DEBUG_RUNTIME
+#ifndef NDEBUG
 // Helper to print pointers properly.
 #define P(ptr) reinterpret_cast<void *>(ptr)
 #endif
@@ -62,7 +62,7 @@ Z3_solver g_solver; // TODO make thread-local
 // Some global constants for efficiency.
 Z3_ast g_null_pointer, g_true, g_false;
 
-#ifdef DEBUG_RUNTIME
+#ifndef NDEBUG
 [[maybe_unused]] void dump_known_regions() {
   std::cout << "Known regions:" << std::endl;
   for (const auto &[page, shadow] : g_shadow_pages) {
@@ -107,7 +107,7 @@ void _sym_initialize(void) {
   if (g_initialized.test_and_set())
     return;
 
-#ifdef DEBUG_RUNTIME
+#ifndef NDEBUG
   std::cout << "Initializing symbolic runtime" << std::endl;
 #endif
 
@@ -122,7 +122,7 @@ void _sym_initialize(void) {
   g_context = Z3_mk_context_rc(cfg);
   Z3_del_config(cfg);
 
-#ifdef DEBUG_RUNTIME
+#ifndef NDEBUG
   Z3_set_error_handler(g_context, handle_z3_error);
 #endif
 
@@ -502,7 +502,7 @@ void _sym_collect_garbage() {
   if (allocatedExpressions.size() < g_config.garbageCollectionThreshold)
     return;
 
-#ifdef DEBUG_RUNTIME
+#ifndef NDEBUG
   auto start = std::chrono::high_resolution_clock::now();
   auto startSize = allocatedExpressions.size();
 #endif
@@ -517,7 +517,7 @@ void _sym_collect_garbage() {
     }
   }
 
-#ifdef DEBUG_RUNTIME
+#ifndef NDEBUG
   auto end = std::chrono::high_resolution_clock::now();
   auto endSize = allocatedExpressions.size();
 
