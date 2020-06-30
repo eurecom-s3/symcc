@@ -16,6 +16,7 @@
 #define SHADOW_H
 
 #include <algorithm>
+#include <cassert>
 #include <cstring>
 #include <iterator>
 #include <map>
@@ -33,6 +34,9 @@
 // provides iterators over shadow memory that automatically handle jumps between
 // memory pages (and thus shadow regions). They should work with the C++
 // standard library.
+//
+// We represent shadowed memory as a sequence of 8-bit expressions. The
+// iterators therefore expose the shadow in the form of byte expressions.
 //
 
 constexpr uintptr_t kPageSize = 4096;
@@ -79,7 +83,12 @@ public:
     return *this;
   }
 
-  SymExpr operator*() { return shadow_ != nullptr ? *shadow_ : nullptr; }
+  SymExpr operator*() {
+    assert((shadow_ == nullptr || *shadow_ == nullptr ||
+            _sym_bits_helper(*shadow_) == 8) &&
+           "Shadow memory always represents bytes");
+    return shadow_ != nullptr ? *shadow_ : nullptr;
+  }
 
   bool operator==(const ReadShadowIterator &other) const {
     return (address_ == other.address_);
