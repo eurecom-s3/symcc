@@ -58,3 +58,11 @@ Integrating with AFL is easy because its distributed mode only requires working
 with files and directories. Other fuzzers might not provide such easy
 mechanisms, but by integrating with them we would gain whatever performance
 improvements they have made over AFL (e.g., AFL++ or Honggfuzz).
+
+
+                                Forking version
+
+Instead of working with a fuzzer, we could also implement forking and some
+scheduling strategy ourselves. Georgia Tech has developed some OS-level
+primitives that could help to implement such a feature:
+https://github.com/sslab-gatech/perf-fuzz.
