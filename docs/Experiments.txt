@@ -44,9 +44,10 @@ requires building a second time for AFL, see docs/Fuzzing.txt). We used AFL
 already installed in the Docker container.
 
 OpenJPEG [4]: we used revision 1f1e9682, built with CMake as described in the
-  project's INSTALL.md, and analyzed "bin/opj_decompress -i @@ -o
-  /tmp/image.pgm"; the corpus consisted of test files file1.jp2 and file8.jp2
-  [5].
+  project's INSTALL.md (adding "-DBUILD_THIRDPARTY=ON" to make sure that
+  third-party libraries are compiled with SymCC as well), and analyzed
+  "bin/opj_decompress -i @@ -o /tmp/image.pgm"; the corpus consisted of test
+  files file1.jp2 and file8.jp2 [5].
 
 libarchive [6]: we used revision 9ebb2484, built with CMake as described in the
   poject's INSTALL (but adding "-DCMAKE_BUILD_TYPE=Release"), and analyzed
