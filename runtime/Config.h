@@ -27,6 +27,9 @@ struct Config {
   /// The input file, if any.
   std::string inputFile;
 
+  /// The file to log constraint solving information to.
+  std::string logFile = "";
+
   /// Do we prune expressions on hot paths?
   bool pruning = false;
 

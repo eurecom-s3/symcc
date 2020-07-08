@@ -53,6 +53,10 @@ void loadConfig() {
   if (inputFile != nullptr)
     g_config.inputFile = inputFile;
 
+  auto *logFile = getenv("SYMCC_LOG_FILE");
+  if (logFile != nullptr)
+    g_config.logFile = logFile;
+
   auto *pruning = getenv("SYMCC_ENABLE_LINEARIZATION");
   if (pruning != nullptr)
     g_config.pruning = checkFlagString(pruning);
