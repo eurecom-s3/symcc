@@ -44,7 +44,7 @@ prefix mechanism: test files use different prefixes to specify requirements on
 different backends. The following prefixes are supported:
 
 SIMPLE:   Active when we test with our own backend.
-QSYM:     Active when we test with the Qsym backend.
+QSYM:     Active when we test with the QSYM backend.
 ANY:      Always active.
 
 The build system makes sure that "%filecheck" always expands to an invocation of

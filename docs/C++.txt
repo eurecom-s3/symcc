@@ -68,17 +68,17 @@ helper programs that are subsequently run, and we do not want them to perform
 symbolic analysis.
 
 A word on the choice of backends: While the instrumented libc++ will work with
-both backends, building it currently doesn't work with the Qsym backend. Just
+both backends, building it currently doesn't work with the QSYM backend. Just
 use the simple backend for the build process - there is no problem in using the
-library with the Qsym backend later. For very interested readers, here is an
+library with the QSYM backend later. For very interested readers, here is an
 explanation of the problem: libc++ is an LLVM project and as such uses LLVM
 support code. During the build process, it builds a code-generation tool that is
 subsequently invoked (hence the recommendation to set SYMCC_NO_SYMBOLIC_INPUT).
 At run-time, the tool loads code built from the LLVM sources we obtained via git
-above. Why is this a problem for the Qsym backend? Qsym uses support code from
-LLVM as well, which means that the Qsym backend is linked against your system's
-LLVM libraries. If we build libc++ with the Qsym backend, the code-generation
-tool loads the Qsym code at run time and, via dependency resolution, also the
+above. Why is this a problem for the QSYM backend? QSYM uses support code from
+LLVM as well, which means that the QSYM backend is linked against your system's
+LLVM libraries. If we build libc++ with the QSYM backend, the code-generation
+tool loads the QSYM code at run time and, via dependency resolution, also the
 system's LLVM installation. The end result is that we have two versions of LLVM
 support code in the same process - the system version and the one built from git
 - which will most likely collide. Using the simple backend avoids the problem
