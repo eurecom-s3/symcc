@@ -1,0 +1,72 @@
+
+
+                             Configuration options
+
+
+SymCC is configured at two different stages:
+
+1. At compile time, you decide which features to enable, which mainly affects
+   compilation time and the set of dependencies. This is done via arguments to
+   CMake.
+
+2. When you run programs that have been compiled with SymCC, environment
+   variables control various aspects of the execution and analysis.
+
+We list all available options for each stage in turn.
+
+
+                              Compile-time options
+
+
+Each of these is passed to CMake with "-D" when configuring the build:
+
+- QSYM_BACKEND=ON/OFF (default OFF): Compile either the QSYM backend or our
+  simple Z3 wrapper (see docs/Backends.txt for details). Note that binaries
+  produced by the SymCC compiler are backend-agnostic; you can use
+  LD_LIBRARY_PATH to switch between backends per execution.
+
+- TARGET_32BIT=ON/OFF (default OFF): Enable support for 32-bit compilation on
+  64-bit hosts. This will essentially make the compiler switch "-m32" work as
+  expected; see docs/32-bit.txt for details.
+
+- LLVM_DIR/LLVM_32BIT_DIR (default empty): Hints for the build system to find
+  LLVM if it's in a non-standard location.
+
+- Z3_DIR/Z3_32BIT_DIR (default empty): Hints for the build system to find Z3 if
+  it's in a non-standard location.
+
+
+                                Run-time options
+
+
+"Run time" refers to the time when you run programs compiled with SymCC, not
+when you run SymCC itself. In other words, these are settings that you can
+change on every execution of an instrumented program. They are specified via
+environment variables.
+
+- SYMCC_NO_SYMBOLIC_INPUT=0/1 (default 0): When set to 1, input is never marked
+  as symbolic; in other words, instrumented programs will run just like their
+  uninstrumented counterparts.
+
+- SYMCC_OUTPUT_DIR (default "/tmp/output"): This is the directory where SymCC
+  will store new inputs (QSYM backend only).
+
+- SYMCC_INPUT_FILE (default empty): When empty, SymCC treats data read from
+  standard input as symbolic; when set to a file name, any data read from that
+  file is considered symbolic.
+
+- SYMCC_LOG_FILE (default empty): When set to a file name, SymCC creates the
+  file (or overwrites any existing file!) and uses it to log backend activity
+  including solver output (simple backend only).
+
+- SYMCC_ENABLE_LINEARIZATION=0/1 (default 0): Enable QSYM's basic-block pruning,
+  a call-stack-aware strategy to reduce solver queries when executing code
+  repeatedly (QSYM backend only). See the QSYM paper for details; highly
+  recommended for fuzzing and enabled automatically by the fuzzing helper.
+
+- SYMCC_AFL_COVERAGE_MAP (default empty): When set to the file name of an AFL
+  coverage map, load the map before executing the target program and use it to
+  skip solver queries for paths that have already been covered (QSYM backend
+  only). The map is updated in place, so beware of races when running multiple
+  instances of SymCC! The fuzzing helper uses this to remember the state of
+  exploration across multiple executions of the target program.

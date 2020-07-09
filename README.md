@@ -106,8 +106,10 @@ docs/Fuzzing.txt).
 ## Documentation
 
 The directory [docs](docs) contains documentation on several internal aspects of
-SymCC, as well as building C++ code, compiling 32-bit binaries on a 64-bit host,
-and running SymCC with a fuzzer.
+SymCC, as well as [building C++ code](docs/C++.txt), [compiling 32-bit binaries
+on a 64-bit host](docs/32-bit.txt), and [running SymCC with a
+fuzzer](docs/Fuzzing.txt). There is also a [list of all configuration
+options](docs/Configuration.txt).
 
 
 ## Building a Docker image
