@@ -112,7 +112,7 @@ fuzzer](docs/Fuzzing.txt). There is also a [list of all configuration
 options](docs/Configuration.txt).
 
 If you're interested in the research paper that we wrote about SymCC, have a
-look at our research group's
+look at our group's
 [website](http://www.s3.eurecom.fr/tools/symbolic_execution/symcc.html). It also
 contains detailed instructions to replicate our experiments, as well as the raw
 results that we obtained.
