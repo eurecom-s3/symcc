@@ -246,16 +246,19 @@ size_t SYM(fread)(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 }
 
 int SYM(fseek)(FILE *stream, long offset, int whence) {
+  tryAlternative(offset, _sym_get_parameter_expression(1), SYM(fseek));
+
   auto result = fseek(stream, offset, whence);
   _sym_set_return_expression(nullptr);
   if (result == -1)
     return result;
 
-  if (whence == SEEK_SET)
-    _sym_set_return_expression(_sym_get_parameter_expression(1));
-
-  if (fileno(stream) == inputFileDescriptor)
-    inputOffset = result;
+  if (fileno(stream) == inputFileDescriptor) {
+    auto pos = ftell(stream);
+    if (pos == -1)
+      return -1;
+    inputOffset = pos;
+  }
 
   return result;
 }
