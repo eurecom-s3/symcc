@@ -74,23 +74,23 @@ int main(int argc, char* argv[]) {
   // Rewind and read again.
   //
 
-  if (lseek(fd, 0, SEEK_SET) == (off_t)-1) {
+  if (lseek(fd, 4, SEEK_SET) != 4) {
     perror("failed to rewind the file");
     return -1;
   }
 
-  if (read(fd, &input, sizeof(input)) < 0) {
+  if (read(fd, &four_as, sizeof(four_as)) < 0) {
     perror("failed to read from the input file");
     return -1;
   }
 
   // SIMPLE: Trying to solve
-  // SIMPLE: Can't find
+  // SIMPLE: Found diverging input
   // QSYM-COUNT-2: SMT
-  // QSYM: New testcase: {{.*}}-optimistic
+  // QSYM: New testcase
   // ANY: No.
-  if (input >= 42)
-    printf("Again, this may be it.\n");
+  if (four_as != (int)0x61616161)
+    printf("The matrix has changed.\n");
   else
     printf("No.\n");
 
@@ -123,21 +123,23 @@ int main(int argc, char* argv[]) {
   // Rewind and read again.
   //
 
-  if (fseek(file, 0, SEEK_SET) == -1) {
+  // fseek doesn't return the current offset (unlike lseek) - it just returns 0
+  // on success!
+  if (fseek(file, 4, SEEK_SET) != 0) {
     perror("failed to rewind the file");
     return -1;
   }
 
-  if (fread(&same_input, sizeof(same_input), 1, file) < 0) {
+  int same_four_as;
+  if (fread(&same_four_as, sizeof(same_four_as), 1, file) < 0) {
     perror("failed to read from the input file");
     return -1;
   }
 
   // SIMPLE: Trying to solve
-  // SIMPLE-NOT: stdin4
   // QSYM-COUNT-2: SMT
   // ANY: Still
-  if (same_input == 5)
+  if (same_four_as == (int)0x61616161)
     printf("Still the test input.\n");
   else
     printf("Not the test input!\n");
