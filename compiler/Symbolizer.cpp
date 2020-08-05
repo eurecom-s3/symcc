@@ -837,7 +837,7 @@ CallInst *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
            IRB.CreateTrunc(V, IRB.getInt64Ty())});
     default:
       return IRB.CreateCall(runtime.buildInteger,
-                            {IRB.CreateZExtOrBitCast(V, IRB.getInt64Ty()),
+                            {IRB.CreateZExtOrTrunc(V, IRB.getInt64Ty()),
                              IRB.getInt8(valueType->getPrimitiveSizeInBits())});
     }
   }
