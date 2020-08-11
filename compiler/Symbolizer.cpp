@@ -820,25 +820,25 @@ CallInst *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
   }
 
   if (valueType->isIntegerTy()) {
-    switch (valueType->getPrimitiveSizeInBits()) {
-    case 1:
+    auto bits = valueType->getPrimitiveSizeInBits();
+    if (bits == 1) {
       // Special case: LLVM uses the type i1 to represent Boolean values, but
       // for Z3 we have to create expressions of a separate sort.
       return IRB.CreateCall(runtime.buildBool, {V});
-    case 128:
-      // 128-bit integers are a bit tricky because the symbolic backends don't
-      // support them per se. We have a special function in the run-time library
-      // that handles such large integers.
-      return IRB.CreateCall(
-          runtime.buildInteger128,
-          {IRB.CreateTrunc(
-               IRB.CreateLShr(V, ConstantInt::get(IRB.getInt128Ty(), 64)),
-               IRB.getInt64Ty()),
-           IRB.CreateTrunc(V, IRB.getInt64Ty())});
-    default:
+    } else if (bits <= 64) {
       return IRB.CreateCall(runtime.buildInteger,
                             {IRB.CreateZExtOrBitCast(V, IRB.getInt64Ty()),
                              IRB.getInt8(valueType->getPrimitiveSizeInBits())});
+    } else {
+      // Anything up to the maximum supported 128 bits. Those integers are a bit
+      // tricky because the symbolic backends don't support them per se. We have
+      // a special function in the run-time library that handles them, usually
+      // by assembling expressions from smaller chunks.
+      return IRB.CreateCall(
+          runtime.buildInteger128,
+          {IRB.CreateTrunc(IRB.CreateLShr(V, ConstantInt::get(valueType, 64)),
+                           IRB.getInt64Ty()),
+           IRB.CreateTrunc(V, IRB.getInt64Ty())});
     }
   }
 
