@@ -213,7 +213,7 @@ SymExpr _sym_build_bool(bool value) {
 #define DEF_BINARY_EXPR_BUILDER(name, qsymName)                                \
   SymExpr _sym_build_##name(SymExpr a, SymExpr b) {                            \
     return registerExpression(g_expr_builder->create##qsymName(                \
-        allocatedExpressions[a], allocatedExpressions[b]));                    \
+        allocatedExpressions.at(a), allocatedExpressions.at(b)));              \
   }
 
 DEF_BINARY_EXPR_BUILDER(add, Add)
@@ -250,27 +250,27 @@ DEF_BINARY_EXPR_BUILDER(xor, Xor)
 
 SymExpr _sym_build_neg(SymExpr expr) {
   return registerExpression(
-      g_expr_builder->createNeg(allocatedExpressions[expr]));
+      g_expr_builder->createNeg(allocatedExpressions.at(expr)));
 }
 
 SymExpr _sym_build_not(SymExpr expr) {
   return registerExpression(
-      g_expr_builder->createNot(allocatedExpressions[expr]));
+      g_expr_builder->createNot(allocatedExpressions.at(expr)));
 }
 
 SymExpr _sym_build_sext(SymExpr expr, uint8_t bits) {
   return registerExpression(g_expr_builder->createSExt(
-      allocatedExpressions[expr], bits + expr->bits()));
+      allocatedExpressions.at(expr), bits + expr->bits()));
 }
 
 SymExpr _sym_build_zext(SymExpr expr, uint8_t bits) {
   return registerExpression(g_expr_builder->createZExt(
-      allocatedExpressions[expr], bits + expr->bits()));
+      allocatedExpressions.at(expr), bits + expr->bits()));
 }
 
 SymExpr _sym_build_trunc(SymExpr expr, uint8_t bits) {
   return registerExpression(
-      g_expr_builder->createTrunc(allocatedExpressions[expr], bits));
+      g_expr_builder->createTrunc(allocatedExpressions.at(expr), bits));
 }
 
 void _sym_push_path_constraint(SymExpr constraint, int taken,
@@ -278,7 +278,7 @@ void _sym_push_path_constraint(SymExpr constraint, int taken,
   if (constraint == nullptr)
     return;
 
-  g_solver->addJcc(allocatedExpressions[constraint], taken != 0, site_id);
+  g_solver->addJcc(allocatedExpressions.at(constraint), taken != 0, site_id);
 }
 
 SymExpr _sym_get_input_byte(size_t offset) {
@@ -287,19 +287,19 @@ SymExpr _sym_get_input_byte(size_t offset) {
 
 SymExpr _sym_concat_helper(SymExpr a, SymExpr b) {
   return registerExpression(g_expr_builder->createConcat(
-      allocatedExpressions[a], allocatedExpressions[b]));
+      allocatedExpressions.at(a), allocatedExpressions.at(b)));
 }
 
 SymExpr _sym_extract_helper(SymExpr expr, size_t first_bit, size_t last_bit) {
   return registerExpression(g_expr_builder->createExtract(
-      allocatedExpressions[expr], last_bit, first_bit - last_bit + 1));
+      allocatedExpressions.at(expr), last_bit, first_bit - last_bit + 1));
 }
 
 size_t _sym_bits_helper(SymExpr expr) { return expr->bits(); }
 
 SymExpr _sym_build_bool_to_bits(SymExpr expr, uint8_t bits) {
   return registerExpression(
-      g_expr_builder->boolToBit(allocatedExpressions[expr], bits));
+      g_expr_builder->boolToBit(allocatedExpressions.at(expr), bits));
 }
 
 //
