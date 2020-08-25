@@ -453,6 +453,7 @@ void _sym_push_path_constraint(Z3_ast constraint, int taken,
   } else {
     fprintf(g_log, "Can't find a diverging input at this point\n");
   }
+  fflush(g_log);
 
   Z3_solver_pop(g_context, g_solver, 1);
 
