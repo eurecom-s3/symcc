@@ -230,6 +230,9 @@ pub struct AflConfig {
     /// Do we need to pass data to standard input?
     use_standard_input: bool,
 
+    /// Are we using AFL's QEMU mode?
+    use_qemu_mode: bool,
+
     /// The fuzzer instance's queue of test cases.
     queue: PathBuf,
 }
@@ -289,6 +292,7 @@ impl AflConfig {
         Ok(AflConfig {
             show_map: afl_binary_dir.join("afl-showmap"),
             use_standard_input: !afl_target_command.contains(&"@@".into()),
+            use_qemu_mode: afl_command.contains(&"-Q".into()),
             target_command: afl_target_command,
             queue: fuzzer_output.as_ref().join("queue"),
         })
@@ -324,6 +328,11 @@ impl AflConfig {
         testcase: impl AsRef<Path>,
     ) -> Result<AflShowmapResult> {
         let mut afl_show_map = Command::new(&self.show_map);
+
+        if self.use_qemu_mode {
+            afl_show_map.arg("-Q");
+        }
+
         afl_show_map
             .args(&["-t", "5000", "-m", "none", "-b", "-o"])
             .arg(testcase_bitmap.as_ref())
