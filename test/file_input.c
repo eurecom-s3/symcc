@@ -22,6 +22,7 @@
 #include <unistd.h>
 
 int main(int argc, char* argv[]) {
+  setbuf(stdout, NULL);
   //
   // Read from the input file using Unix primitives.
   //

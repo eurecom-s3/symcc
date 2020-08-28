@@ -24,6 +24,7 @@
 int main(int argc, char *argv[]) {
   char buffer[5];
 
+  setbuf(stdout, NULL);
   if (read(STDIN_FILENO, buffer, sizeof(buffer) - 1) !=
       sizeof(buffer) - 1) {
     printf("Failed to read the input\n");

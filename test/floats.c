@@ -22,6 +22,7 @@ float g_value = 0.1234;
 
 int main(int argc, char *argv[]) {
   int x;
+  setbuf(stdout, NULL);
   if (read(STDIN_FILENO, &x, sizeof(x)) != sizeof(x)) {
     printf("Failed to read x\n");
     return -1;

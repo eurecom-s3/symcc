@@ -23,6 +23,7 @@ volatile int g_value = 0x00ab0012;
 int main(int argc, char* argv[]) {
     int x;
     void *ptr;
+    setbuf(stdout, NULL);
     if (read(STDIN_FILENO, &x, sizeof(x)) != sizeof(x)) {
         printf("Failed to read x\n");
         return -1;
