@@ -23,6 +23,7 @@
 int main(int argc, char* argv[]) {
   char c;
 
+  setbuf(stdout, NULL);
   ssize_t nbytes = read(STDIN_FILENO, &c, 1);
   if (nbytes != 1)
     return 1;

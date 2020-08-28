@@ -29,6 +29,7 @@ int main(int argc, char *argv[]) {
   char values_copy[3];
 
   int dest_offset;
+  setbuf(stdout, NULL);
   if (read(STDIN_FILENO, &dest_offset, sizeof(dest_offset)) !=
       sizeof(dest_offset)) {
     printf("Failed to read dest_offset\n");

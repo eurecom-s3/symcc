@@ -22,6 +22,7 @@ uint64_t g_value = 0xaaaabbbbccccdddd;
 
 int main(int argc, char *argv[]) {
   uint64_t x;
+  setbuf(stdout, NULL);
   if (read(STDIN_FILENO, &x, sizeof(x)) != sizeof(x)) {
     printf("Failed to read x\n");
     return -1;

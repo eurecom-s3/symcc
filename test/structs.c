@@ -33,6 +33,7 @@ static struct point g_point_array[] = {{1, 2}, {3, 4}, {5, 6}};
 
 int main(int argc, char* argv[]) {
     int x;
+    setbuf(stdout, NULL);
     if (read(STDIN_FILENO, &x, sizeof(x)) != sizeof(x)) {
         printf("Failed to read x\n");
         return -1;
