@@ -83,7 +83,7 @@ SymExpr _sym_read_memory(uint8_t *addr, size_t length, bool little_endian) {
   assert(length && "Invalid query for zero-length memory region");
 
 #ifdef DEBUG_RUNTIME
-  std::cout << "Reading " << length << " bytes from address " << P(addr)
+  std::cerr << "Reading " << length << " bytes from address " << P(addr)
             << std::endl;
   dump_known_regions();
 #endif
@@ -111,7 +111,7 @@ void _sym_write_memory(uint8_t *addr, size_t length, SymExpr expr,
   assert(length && "Invalid query for zero-length memory region");
 
 #ifdef DEBUG_RUNTIME
-  std::cout << "Writing " << length << " bytes to address " << P(addr)
+  std::cerr << "Writing " << length << " bytes to address " << P(addr)
             << std::endl;
   dump_known_regions();
 #endif
