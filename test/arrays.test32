@@ -1,0 +1,2 @@
+RUN: %symcc -m32 -O2 %S/arrays.c -o %t_32
+RUN: echo -ne "\x01\x02\x03\x04\x00" | %t_32 2>&1 | %filecheck %S/arrays.c

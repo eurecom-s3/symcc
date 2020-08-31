@@ -81,7 +81,7 @@ void Symbolizer::finalizePHINodes() {
 }
 
 void Symbolizer::shortCircuitExpressionUses() {
-  for (const auto &symbolicComputation : expressionUses) {
+  for (auto &symbolicComputation : expressionUses) {
     assert(!symbolicComputation.inputs.empty() &&
            "Symbolic computation has no inputs");
 
@@ -120,7 +120,7 @@ void Symbolizer::shortCircuitExpressionUses() {
         });
     for (unsigned argIndex = 0; argIndex < symbolicComputation.inputs.size();
          argIndex++) {
-      const auto &argument = symbolicComputation.inputs[argIndex];
+      auto &argument = symbolicComputation.inputs[argIndex];
       auto *originalArgExpression = argument.getSymbolicOperand();
       auto *argCheckBlock = symbolicComputation.firstInstruction->getParent();
 
@@ -157,8 +157,7 @@ void Symbolizer::shortCircuitExpressionUses() {
         finalArgExpression = newArgExpression;
       }
 
-      argument.user->replaceUsesOfWith(originalArgExpression,
-                                       finalArgExpression);
+      argument.replaceOperand(finalArgExpression);
     }
 
     // Finally, the overall result (if the computation produces one) is null

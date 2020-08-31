@@ -143,6 +143,10 @@ private:
     llvm::Value *getSymbolicOperand() const {
       return user->getOperand(operandIndex);
     }
+
+    void replaceOperand(llvm::Value *newOperand) {
+      user->setOperand(operandIndex, newOperand);
+    }
   };
 
   /// A symbolic computation with its inputs.
