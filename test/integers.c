@@ -22,13 +22,12 @@ uint64_t g_value = 0xaaaabbbbccccdddd;
 
 int main(int argc, char *argv[]) {
   uint64_t x;
-  setbuf(stdout, NULL);
   if (read(STDIN_FILENO, &x, sizeof(x)) != sizeof(x)) {
-    printf("Failed to read x\n");
+    fprintf(stderr, "Failed to read x\n");
     return -1;
   }
 
-  printf("%s\n", (x == g_value) ? "yes" : "no");
+  fprintf(stderr, "%s\n", (x == g_value) ? "yes" : "no");
   // SIMPLE: Trying to solve
   // SIMPLE: Found diverging input
   // Make sure that we don't truncate integers.

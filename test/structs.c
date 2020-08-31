@@ -33,41 +33,40 @@ static struct point g_point_array[] = {{1, 2}, {3, 4}, {5, 6}};
 
 int main(int argc, char* argv[]) {
     int x;
-    setbuf(stdout, NULL);
     if (read(STDIN_FILENO, &x, sizeof(x)) != sizeof(x)) {
-        printf("Failed to read x\n");
+        fprintf(stderr, "Failed to read x\n");
         return -1;
     }
 
     struct point p = {x, 17};
 
-    printf("%s\n", (p.x < 100) ? "yes" : "no");
+    fprintf(stderr, "%s\n", (p.x < 100) ? "yes" : "no");
     // SIMPLE: Trying to solve
     // SIMPLE: Found diverging input
     // QSYM-COUNT-2: SMT
     // QSYM: New testcase
     // ANY: yes
 
-    printf("%s\n", (p.y < 100) ? "yes" : "no");
+    fprintf(stderr, "%s\n", (p.y < 100) ? "yes" : "no");
     // SIMPLE-NOT: Trying to solve
     // QSYM-NOT: SMT
     // ANY: yes
 
-    printf("%s\n", (p.x < p.y) ? "yes" : "no");
+    fprintf(stderr, "%s\n", (p.x < p.y) ? "yes" : "no");
     // SIMPLE: Trying to solve
     // SIMPLE: Found diverging input
     // QSYM-COUNT-2: SMT
     // QSYM: New testcase
     // ANY: yes
 
-    printf("%s\n", ((p.x < g_point.x) || (p.y < g_point.y)) ? "yes" : "no");
+    fprintf(stderr, "%s\n", ((p.x < g_point.x) || (p.y < g_point.y)) ? "yes" : "no");
     // SIMPLE: Trying to solve
     // SIMPLE: Found diverging input
     // QSYM-COUNT-2: SMT
     // QSYM: New testcase
     // ANY: no
 
-    printf("%s\n", (g_point_array[1].x < x) ? "yes" : "no");
+    fprintf(stderr, "%s\n", (g_point_array[1].x < x) ? "yes" : "no");
     // SIMPLE: Trying to solve
     // SIMPLE: Found diverging input
     // QSYM-COUNT-2: SMT
@@ -78,7 +77,7 @@ int main(int argc, char* argv[]) {
 
     struct line l = {{0, 0}, {5, 5}};
 
-    printf("%s\n", (l.end.x > x) ? "yes" : "no");
+    fprintf(stderr, "%s\n", (l.end.x > x) ? "yes" : "no");
     // SIMPLE: Trying to solve
     // SIMPLE: Found diverging input
     // QSYM-COUNT-2: SMT

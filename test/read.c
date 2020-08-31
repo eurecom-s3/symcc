@@ -23,7 +23,6 @@
 int main(int argc, char* argv[]) {
   char c;
 
-  setbuf(stdout, NULL);
   ssize_t nbytes = read(STDIN_FILENO, &c, 1);
   if (nbytes != 1)
     return 1;
@@ -34,9 +33,9 @@ int main(int argc, char* argv[]) {
   // QSYM-COUNT-2: SMT
   // QSYM: New testcase
   if (c == 'a')
-    printf("Correct\n");
+    fprintf(stderr, "Correct\n");
   else
-    printf("Next time...\n");
+    fprintf(stderr, "Next time...\n");
   // ANY: Next time...
   return 0;
 }

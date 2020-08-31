@@ -23,9 +23,8 @@
 
 int main(int argc, char* argv[]) {
   uint32_t x;
-  setbuf(stdout, NULL);
   if (read(STDIN_FILENO, &x, sizeof(x)) != sizeof(x)) {
-    printf("Failed to read x\n");
+    fprintf(stderr, "Failed to read x\n");
     return -1;
   }
 
@@ -33,7 +32,7 @@ int main(int argc, char* argv[]) {
   uint32_t y = __builtin_bswap32(x);
 
   // ANY: 0x04030201 0x01020304
-  printf("0x%08x 0x%08x\n", x, y);
+  fprintf(stderr, "0x%08x 0x%08x\n", x, y);
 
   // SIMPLE: Trying to solve
   // SIMPLE: Found diverging input
@@ -44,9 +43,9 @@ int main(int argc, char* argv[]) {
   // QSYM-COUNT-2: SMT
   // ANY: Not quite.
   if (y == 0xcafebeef)
-    printf("Correct test input.\n");
+    fprintf(stderr, "Correct test input.\n");
   else
-    printf("Not quite.\n");
+    fprintf(stderr, "Not quite.\n");
 
   return 0;
 }
