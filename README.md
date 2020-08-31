@@ -175,11 +175,12 @@ To cite SymCC in scientific work, please use the following BibTeX:
   author =       {Sebastian Poeplau and Aurélien Francillon},
   title =        {Symbolic execution with {SymCC}: Don't interpret, compile!},
   booktitle =    {29th {USENIX} Security Symposium ({USENIX} Security 20)},
+  isbn =         {978-1-939133-17-5},
+  pages =        {181--198},
   year =         2020,
-  address =      {Boston, MA},
   url =          {https://www.usenix.org/conference/usenixsecurity20/presentation/poeplau},
   publisher =    {{USENIX} Association},
-  month =        August,
+  month =        aug,
 }
 ```
 
