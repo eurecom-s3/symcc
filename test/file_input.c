@@ -22,7 +22,6 @@
 #include <unistd.h>
 
 int main(int argc, char* argv[]) {
-  setbuf(stdout, NULL);
   //
   // Read from the input file using Unix primitives.
   //
@@ -54,9 +53,9 @@ int main(int argc, char* argv[]) {
 
   // Make sure that we haven't created a symbolic expression
   if (eof == 42)
-    printf("All is good.\n");
+    fprintf(stderr, "All is good.\n");
   else
-    printf("Why was the variable overwritten?\n");
+    fprintf(stderr, "Why was the variable overwritten?\n");
   // SIMPLE-NOT: Trying to solve
   // QSYM-NOT: SMT
   // ANY: All is good.
@@ -67,9 +66,9 @@ int main(int argc, char* argv[]) {
   // QSYM: New testcase
   // ANY: Not sure
   if (input >= 42)
-    printf("This may be the answer.\n");
+    fprintf(stderr, "This may be the answer.\n");
   else
-    printf("Not sure this is correct...\n");
+    fprintf(stderr, "Not sure this is correct...\n");
 
   //
   // Rewind and read again.
@@ -91,9 +90,9 @@ int main(int argc, char* argv[]) {
   // QSYM: New testcase
   // ANY: No.
   if (four_as != (int)0x61616161)
-    printf("The matrix has changed.\n");
+    fprintf(stderr, "The matrix has changed.\n");
   else
-    printf("No.\n");
+    fprintf(stderr, "No.\n");
 
   //
   // Read with the C standard library.
@@ -116,9 +115,9 @@ int main(int argc, char* argv[]) {
   // QSYM-COUNT-2: SMT
   // ANY: Yep
   if (same_input == 5)
-    printf("Yep, it's the test input.\n");
+    fprintf(stderr, "Yep, it's the test input.\n");
   else
-    printf("Not the test input!\n");
+    fprintf(stderr, "Not the test input!\n");
 
   //
   // Rewind and read again.
@@ -141,9 +140,9 @@ int main(int argc, char* argv[]) {
   // QSYM-COUNT-2: SMT
   // ANY: Still
   if (same_four_as == (int)0x61616161)
-    printf("Still the test input.\n");
+    fprintf(stderr, "Still the test input.\n");
   else
-    printf("Not the test input!\n");
+    fprintf(stderr, "Not the test input!\n");
 
   return 0;
 }

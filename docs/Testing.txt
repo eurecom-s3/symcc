@@ -51,7 +51,10 @@ The build system makes sure that "%filecheck" always expands to an invocation of
 FileCheck that activates the right prefixes for the current build configuration.
 
 Note that we run the tests only with the backend selected at configuration time,
-so a full test requires building the project in multiple configurations.
+so a full test requires building the project in multiple configurations. Also,
+be aware that the backends write all log messages to standard error; therefore,
+checks should not depend on the relative ordering of backend logs and messages
+that the test program writes to standard output (use stderr instead).
 
 
                                 Regression tests

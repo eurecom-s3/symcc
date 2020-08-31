@@ -29,26 +29,25 @@ int main(int argc, char *argv[]) {
   char values_copy[3];
 
   int dest_offset;
-  setbuf(stdout, NULL);
   if (read(STDIN_FILENO, &dest_offset, sizeof(dest_offset)) !=
       sizeof(dest_offset)) {
-    printf("Failed to read dest_offset\n");
+    fprintf(stderr, "Failed to read dest_offset\n");
     return -1;
   }
   int src_offset;
   if (read(STDIN_FILENO, &src_offset, sizeof(src_offset)) !=
       sizeof(src_offset)) {
-    printf("Failed to read src_offset\n");
+    fprintf(stderr, "Failed to read src_offset\n");
     return -1;
   }
   int length;
   if (read(STDIN_FILENO, &length, sizeof(length)) != sizeof(length)) {
-    printf("Failed to read length\n");
+    fprintf(stderr, "Failed to read length\n");
     return -1;
   }
 
   memcpy(values_copy + dest_offset, values + src_offset, length);
-  printf("%d\n", values_copy[0]);
+  fprintf(stderr, "%d\n", values_copy[0]);
   // SIMPLE: Trying to solve
   // SIMPLE: Found diverging input
   // SIMPLE: stdin{{[0-3]}}

@@ -23,9 +23,8 @@
 
 int main(int argc, char* argv[]) {
   int x;
-  setbuf(stdout, NULL);
   if (read(STDIN_FILENO, &x, sizeof(x)) != sizeof(x)) {
-    printf("Failed to read x\n");
+    fprintf(stderr, "Failed to read x\n");
     return -1;
   }
 
@@ -33,7 +32,7 @@ int main(int argc, char* argv[]) {
   switch (x) {
   case 3:
     foo = 0;
-    printf("x is 3\n");
+    fprintf(stderr, "x is 3\n");
     break;
   case 4:
     foo = 1;
@@ -42,11 +41,11 @@ int main(int argc, char* argv[]) {
     break;
   case 5:
     foo = 2;
-    printf("x is 5\n");
+    fprintf(stderr, "x is 5\n");
     break;
   default:
     foo = 3;
-    printf("x is something else\n");
+    fprintf(stderr, "x is something else\n");
     break;
   }
   // SIMPLE: Trying to solve
@@ -55,7 +54,7 @@ int main(int argc, char* argv[]) {
   // QSYM: New testcase
   // ANY: x is 5
 
-  printf("%d\n", foo);
+  fprintf(stderr, "%d\n", foo);
   // ANY: 2
 
   // When the value to branch on is concrete there should be no solver
@@ -63,16 +62,16 @@ int main(int argc, char* argv[]) {
   volatile int y = 17;
   switch (y) {
   case 3:
-    printf("y is 3\n");
+    fprintf(stderr, "y is 3\n");
     break;
   case 4:
-    printf("y is 4\n");
+    fprintf(stderr, "y is 4\n");
     break;
   case 5:
-    printf("y is 5\n");
+    fprintf(stderr, "y is 5\n");
     break;
   default:
-    printf("y is something else\n");
+    fprintf(stderr, "y is something else\n");
     break;
   }
   // SIMPLE-NOT: Trying to solve

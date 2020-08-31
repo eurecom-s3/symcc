@@ -24,29 +24,28 @@
 int main(int argc, char *argv[]) {
   char buffer[5];
 
-  setbuf(stdout, NULL);
   if (read(STDIN_FILENO, buffer, sizeof(buffer) - 1) !=
       sizeof(buffer) - 1) {
-    printf("Failed to read the input\n");
+    fprintf(stderr, "Failed to read the input\n");
     return -1;
   }
 
   buffer[4] = '\0';
 
   // Fully concrete
-  puts(strchr("foobar", 'o') != NULL ? "found" : "nope");
+  fputs(strchr("foobar", 'o') != NULL ? "found" : "nope", stderr);
   // SIMPLE-NOT: Trying to solve
   // QSYM-NOT: SMT
   // ANY: found
 
   // Symbolic buffer, concrete char
-  puts(strchr(buffer, 'x') != NULL ? "found" : "nope");
+  fputs(strchr(buffer, 'x') != NULL ? "found" : "nope", stderr);
   // SIMPLE-COUNT-4: Found diverging input
   // QSYM: SMT
   // ANY: nope
 
   // Concrete buffer, symbolic char
-  puts(strchr("test", buffer[0]) != NULL ? "found" : "nope");
+  fputs(strchr("test", buffer[0]) != NULL ? "found" : "nope", stderr);
   // SIMPLE: Trying to solve
   //
   // QSYM's back-off mechanism kicks in because we're generating too many
@@ -55,7 +54,7 @@ int main(int argc, char *argv[]) {
   // ANY: found
 
   // Symbolic buffer, symbolic char
-  puts(strchr(buffer, buffer[1]) != NULL ? "found" : "nope");
+  fputs(strchr(buffer, buffer[1]) != NULL ? "found" : "nope", stderr);
   // SIMPLE-COUNT-2: Trying to solve
   // ANY: found
 

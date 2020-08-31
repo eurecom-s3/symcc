@@ -22,17 +22,16 @@ float g_value = 0.1234;
 
 int main(int argc, char *argv[]) {
   int x;
-  setbuf(stdout, NULL);
   if (read(STDIN_FILENO, &x, sizeof(x)) != sizeof(x)) {
-    printf("Failed to read x\n");
+    fprintf(stderr, "Failed to read x\n");
     return -1;
   }
 
   g_value += x;
-  printf("%f\n", g_value);
+  fprintf(stderr, "%f\n", g_value);
   // ANY: 5.1234
 
-  printf("%s\n", ((g_value < 7) && (g_value > 6)) ? "yes" : "no");
+  fprintf(stderr, "%s\n", ((g_value < 7) && (g_value > 6)) ? "yes" : "no");
   // SIMPLE: Trying to solve
   // SIMPLE: Found diverging input
   // SIMPLE: #x06

@@ -41,11 +41,10 @@ int fac(int x) {
 
 int main(int argc, char* argv[]) {
     int x;
-    setbuf(stdout, NULL);
     if (read(STDIN_FILENO, &x, sizeof(x)) != sizeof(x)) {
-        printf("Failed to read x\n");
+        fprintf(stderr, "Failed to read x\n");
         return -1;
     }
-    printf("%d\n", fac(x));
+    fprintf(stderr, "%d\n", fac(x));
     return 0;
 }

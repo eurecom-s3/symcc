@@ -24,16 +24,15 @@
 
 int main(int argc, char *argv[]) {
   int x;
-  setbuf(stdout, NULL);
   if (read(STDIN_FILENO, &x, sizeof(x)) != sizeof(x)) {
-    printf("Failed to read x\n");
+    fprintf(stderr, "Failed to read x\n");
     return -1;
   }
 
   char *largeAllocation = malloc(10000);
   memset(largeAllocation, (char)x, 10000);
 
-  printf("%s\n", (largeAllocation[9999] < 100) ? "worked" : "error");
+  fprintf(stderr, "%s\n", (largeAllocation[9999] < 100) ? "worked" : "error");
   // SIMPLE: Trying to solve
   // SIMPLE: Found diverging input
   // QSYM-COUNT-2: SMT
@@ -41,13 +40,13 @@ int main(int argc, char *argv[]) {
   // ANY: worked
 
   memset(largeAllocation, 'A', 10000);
-  printf("%s\n", (largeAllocation[5000] == 17) ? "true" : "false");
+  fprintf(stderr, "%s\n", (largeAllocation[5000] == 17) ? "true" : "false");
   // SIMPLE-NOT: Trying to solve
   // QSYM-NOT: SMT
   // ANY: false
 
   memset(largeAllocation, x, 10000);
-  printf("%s\n", (largeAllocation[5000] > 100) ? "true" : "false");
+  fprintf(stderr, "%s\n", (largeAllocation[5000] > 100) ? "true" : "false");
   // SIMPLE: Trying to solve
   // SIMPLE: Can't find a diverging input at this point
   // QSYM-COUNT-2: SMT
@@ -65,7 +64,7 @@ int main(int argc, char *argv[]) {
   // QSYM-NOT: SMT
 
   memmove(largeAllocation + 1, largeAllocation, sizeof(x));
-  printf("%s\n", (largeAllocation[0] == largeAllocation[2]) ? "true" : "false");
+  fprintf(stderr, "%s\n", (largeAllocation[0] == largeAllocation[2]) ? "true" : "false");
   // SIMPLE: Trying to solve
   // QSYM-COUNT-2: SMT
   // TODO should find new inputs
