@@ -35,6 +35,13 @@ Each of these is passed to CMake with "-D" when configuring the build:
 - Z3_DIR/Z3_32BIT_DIR (default empty): Hints for the build system to find Z3 if
   it's in a non-standard location.
 
+- Z3_TRUST_SYSTEM_VERSION (default OFF): Trust that the system provides a
+  suitable version of Z3 if the corresponding CMake module can't be found. Use
+  this with Linux distributions that don't package the CMake module but still
+  ship an otherwise usable development setup (e.g., Fedora before F33). Note
+  that we can't check the Z3 version for compatibility in this case, so prepare
+  for compiler errors if the system-wide installation of Z3 is too old.
+
 
                                 Run-time options
 
