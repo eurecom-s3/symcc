@@ -115,6 +115,10 @@ void _sym_initialize(void) {
 
   loadConfig();
   initLibcWrappers();
+  std::cerr << "This is SymCC running with the simple backend" << std::endl
+            << "For anything but debugging SymCC itself, you will want to use "
+               "the QSYM backend instead (see README.md for build instructions)"
+            << std::endl;
 
   Z3_config cfg;
 
@@ -448,7 +452,7 @@ void _sym_push_path_constraint(Z3_ast constraint, int taken,
     Z3_model model = Z3_solver_get_model(g_context, g_solver);
     Z3_model_inc_ref(g_context, model);
     fprintf(g_log, "Found diverging input:\n%s\n",
-           Z3_model_to_string(g_context, model));
+            Z3_model_to_string(g_context, model));
     Z3_model_dec_ref(g_context, model);
   } else {
     fprintf(g_log, "Can't find a diverging input at this point\n");

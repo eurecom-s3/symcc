@@ -121,8 +121,13 @@ void _sym_initialize(void) {
 
   loadConfig();
   initLibcWrappers();
-  if (g_config.fullyConcrete)
+  std::cerr << "This is SymCC running with the QSYM backend" << std::endl;
+  if (g_config.fullyConcrete) {
+    std::cerr
+        << "Performing fully concrete execution (i.e., without symbolic input)"
+        << std::endl;
     return;
+  }
 
   // Check the output directory
   if (!fs::exists(g_config.outputDir) ||
@@ -162,6 +167,8 @@ void _sym_initialize(void) {
     }
   } else {
     inputFileName = g_config.inputFile;
+    std::cerr << "Making data read from " << inputFileName << " as symbolic"
+              << std::endl;
   }
 
   g_solver =
