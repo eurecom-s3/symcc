@@ -14,10 +14,11 @@
 # You should have received a copy of the GNU General Public License along with
 # SymCC. If not, see <https://www.gnu.org/licenses/>.
 
-runtime_64bit_dir="@SYM_RUNTIME_DIR@"
-runtime_32bit_dir="@SYM_RUNTIME_32BIT_DIR@"
-pass="@CMAKE_CURRENT_BINARY_DIR@/libSymbolize.so"
+runtime_64bit_dir="${SYMCC_RUNTIME_DIR:-@SYM_RUNTIME_DIR@}"
+runtime_32bit_dir="${SYMCC_RUNTIME32_DIR:-@SYM_RUNTIME_32BIT_DIR@}"
+pass="${SYMCC_PASS_DIR:-@CMAKE_CURRENT_BINARY_DIR@}/libSymbolize.so"
 libcxx_var=SYMCC_LIBCXX_PATH
+compiler="${SYMCC_CLANGPP:-@CLANGPP_BINARY@}"
 
 # Find out if we're cross-compiling for a 32-bit architecture
 runtime_dir="$runtime_64bit_dir"
@@ -48,7 +49,7 @@ else
     stdlib_ldflags="-L${!libcxx_var}/lib -Wl,-rpath,${!libcxx_var}/lib -lstdc++ -lc++ -stdlib=libc++"
 fi
 
-exec @CLANGPP_BINARY@                           \
+exec $compiler                                  \
      -Xclang -load -Xclang "$pass"              \
      $stdlib_cflags                             \
      "$@"                                       \

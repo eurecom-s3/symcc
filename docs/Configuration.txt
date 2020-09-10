@@ -77,3 +77,27 @@ environment variables.
   only). The map is updated in place, so beware of races when running multiple
   instances of SymCC! The fuzzing helper uses this to remember the state of
   exploration across multiple executions of the target program.
+
+(Most people should stop reading here.)
+
+
+                                Advanced options
+
+
+There is actually a third category of options: when compiling with SymCC, you
+can specify the location of its various components via environment variables.
+This is not necessary in most cases because the build system makes sure that all
+components know about each other; however, in some advanced setups you may need
+to move files around after building them, and in that case you can use the
+variables documented below to communicate the new locations:
+
+- SYMCC_RUNTIME_DIR and SYMCC_RUNTIME32_DIR: The directory that contains the
+  run-time support library (i.e., libSymRuntime.so).
+
+- SYMCC_PASS_DIR: The directory containing the compiler pass (i.e.,
+  libSymbolize.so).
+
+- SYMCC_CLANG and SYMCC_CLANGPP: The clang and clang++ binaries to use during
+  compilation. Be very careful with this one: if the version of the compiler you
+  specify here doesn't match the one you built SymCC against, you'll most likely
+  get linker errors.
