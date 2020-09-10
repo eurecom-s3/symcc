@@ -15,39 +15,6 @@
 cmake_minimum_required(VERSION 3.5)
 project(SymbolicCompiler)
 
-find_package(LLVM REQUIRED CONFIG)
-
-message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
-message(STATUS "Using LLVMConfig.cmake from ${LLVM_DIR}")
-
-if (${LLVM_VERSION_MAJOR} LESS 8 OR ${LLVM_VERSION_MAJOR} GREATER 10)
-  message(WARNING "The software has been developed for LLVM 8, 9 and 10; \
-it is unlikely to work with other versions!")
-endif()
-
-add_definitions(${LLVM_DEFINITIONS})
-include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
-
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 \
--Wredundant-decls -Wcast-align -Wmissing-include-dirs -Wswitch-default \
--Wextra -Wall -Winvalid-pch -Wredundant-decls -Wformat=2 \
--Wmissing-format-attribute -Wformat-nonliteral -Werror")
-
-# Mark nodelete to work around unload bug in upstream LLVM 5.0+
-set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,-z,nodelete")
-
-# This is the compiler pass that we later load into clang or opt. If LLVM is
-# built without RTTI we have to disable it for our library too, otherwise we'll
-# get linker errors.
-add_library(Symbolize MODULE
-  compiler/Symbolizer.cpp
-  compiler/Pass.cpp
-  compiler/Runtime.cpp
-  compiler/Main.cpp)
-if (NOT LLVM_ENABLE_RTTI)
-  set_target_properties(Symbolize PROPERTIES COMPILE_FLAGS "-fno-rtti")
-endif()
-
 option(QSYM_BACKEND "Use the Qsym backend instead of our own" OFF)
 option(TARGET_32BIT "Make the compiler work correctly with -m32" OFF)
 
@@ -57,6 +24,11 @@ option(TARGET_32BIT "Make the compiler work correctly with -m32" OFF)
 include(ExternalProject)
 
 set(SYM_RUNTIME_BUILD_ARGS
+  -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+  -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS}
+  -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+  -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
+  -DCMAKE_SHARED_LINKER_FLAGS=${CMAKE_SHARED_LINKER_FLAGS}
   -DQSYM_BACKEND=${QSYM_BACKEND}
   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
   -DZ3_TRUST_SYSTEM_VERSION=${Z3_TRUST_SYSTEM_VERSION})
@@ -88,6 +60,39 @@ if (${TARGET_32BIT})
 
   ExternalProject_Get_Property(SymRuntime32 BINARY_DIR)
   set(SYM_RUNTIME_32BIT_DIR ${BINARY_DIR})
+endif()
+
+find_package(LLVM REQUIRED CONFIG)
+
+message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+message(STATUS "Using LLVMConfig.cmake from ${LLVM_DIR}")
+
+if (${LLVM_VERSION_MAJOR} LESS 8 OR ${LLVM_VERSION_MAJOR} GREATER 10)
+  message(WARNING "The software has been developed for LLVM 8, 9 and 10; \
+it is unlikely to work with other versions!")
+endif()
+
+add_definitions(${LLVM_DEFINITIONS})
+include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 \
+-Wredundant-decls -Wcast-align -Wmissing-include-dirs -Wswitch-default \
+-Wextra -Wall -Winvalid-pch -Wredundant-decls -Wformat=2 \
+-Wmissing-format-attribute -Wformat-nonliteral -Werror")
+
+# Mark nodelete to work around unload bug in upstream LLVM 5.0+
+set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,-z,nodelete")
+
+# This is the compiler pass that we later load into clang or opt. If LLVM is
+# built without RTTI we have to disable it for our library too, otherwise we'll
+# get linker errors.
+add_library(Symbolize MODULE
+  compiler/Symbolizer.cpp
+  compiler/Pass.cpp
+  compiler/Runtime.cpp
+  compiler/Main.cpp)
+if (NOT LLVM_ENABLE_RTTI)
+  set_target_properties(Symbolize PROPERTIES COMPILE_FLAGS "-fno-rtti")
 endif()
 
 find_program(CLANG_BINARY "clang"
