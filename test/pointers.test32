@@ -1,2 +1,2 @@
 RUN: %symcc -m32 -O2 %S/pointers.c -o %t_32
-RUN: echo -ne "\x05\x00\x00\x00\x12\x34\x56\x78" | %t_32 2>&1 | %filecheck %S/pointers.c
+RUN: echo -ne "\x00\x00\x00\x05\x12\x34\x56\x78" | %t_32 2>&1 | %filecheck %S/pointers.c

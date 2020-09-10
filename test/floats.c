@@ -13,9 +13,12 @@
 // SymCC. If not, see <https://www.gnu.org/licenses/>.
 
 // RUN: %symcc -O2 %s -o %t
-// RUN: echo -ne "\x05\x00\x00\x00" | %t 2>&1 | %filecheck %s
+// RUN: echo -ne "\x00\x00\x00\x05" | %t 2>&1 | %filecheck %s
+
 #include <stdint.h>
 #include <stdio.h>
+
+#include <arpa/inet.h>
 #include <unistd.h>
 
 float g_value = 0.1234;
@@ -26,6 +29,7 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Failed to read x\n");
     return -1;
   }
+  x = ntohl(x);
 
   g_value += x;
   fprintf(stderr, "%f\n", g_value);

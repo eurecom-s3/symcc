@@ -20,6 +20,7 @@
 #include <string>
 #include <vector>
 
+#include <arpa/inet.h>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -408,4 +409,27 @@ int SYM(memcmp)(const void *a, const void *b, size_t n) {
                             reinterpret_cast<uintptr_t>(SYM(memcmp)));
   return result;
 }
+
+uint32_t SYM(ntohl)(uint32_t netlong)
+{
+  auto netlongExpr = _sym_get_parameter_expression(0);
+  tryAlternative(netlong, netlongExpr, SYM(ntohl));
+
+  auto result = ntohl(netlong);
+  _sym_set_return_expression(nullptr);
+
+  if (netlongExpr->isConcrete())
+    return result;
+
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+  _sym_set_return_expression(_sym_build_bswap(netlongExpr));
+#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+  _sym_set_return_expression(netlongExpr);
+#else
+#error Unsupported __BYTE_ORDER__
+#endif
+
+  return result;
+}
+
 }

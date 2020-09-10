@@ -1,2 +1,2 @@
 RUN: %symcc -m32 %S/large_alloc.c -o %t_32
-RUN: echo -ne "\x2a\x00\x00\x00" | %t_32 2>&1 | %filecheck %S/large_alloc.c
+RUN: echo -ne "\x00\x00\x00\x2a" | %t_32 2>&1 | %filecheck %S/large_alloc.c

@@ -13,12 +13,15 @@
 // SymCC. If not, see <https://www.gnu.org/licenses/>.
 
 // RUN: %symcc -O2 %s -o %t
-// RUN: echo -ne "\x05\x00\x00\x00\x12\x34\x56\x78\x90\xab\xcd\xef" | %t 2>&1 | %filecheck %s
-#include <stdio.h>
+// RUN: echo -ne "\x00\x00\x00\x05\x12\x34\x56\x78\x90\xab\xcd\xef" | %t 2>&1 | %filecheck %s
+
 #include <stdint.h>
+#include <stdio.h>
+
+#include <arpa/inet.h>
 #include <unistd.h>
 
-volatile int g_value = 0x00ab0012;
+volatile int g_value;
 
 int main(int argc, char* argv[]) {
     int x;
@@ -27,10 +30,12 @@ int main(int argc, char* argv[]) {
         fprintf(stderr, "Failed to read x\n");
         return -1;
     }
+    x = ntohl(x);
     if (read(STDIN_FILENO, &ptr, sizeof(ptr)) != sizeof(ptr)) {
         fprintf(stderr, "Failed to read ptr\n");
         return -1;
     }
+    g_value = htonl(0x1200ab00);
     uint8_t *charPtr = (uint8_t*)&g_value;
 
     charPtr += 2;

@@ -13,12 +13,14 @@
 // SymCC. If not, see <https://www.gnu.org/licenses/>.
 
 // RUN: %symcc -O2 %s -o %t
-// RUN: echo -ne "\x05\x00\x00\x00" | %t 2>&1 | %filecheck %s
+// RUN: echo -ne "\x00\x00\x00\x05" | %t 2>&1 | %filecheck %s
 //
 // Check the symbolic handling of "read"
 
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
+
+#include <arpa/inet.h>
 #include <unistd.h>
 
 int main(int argc, char* argv[]) {
@@ -27,6 +29,7 @@ int main(int argc, char* argv[]) {
     fprintf(stderr, "Failed to read x\n");
     return -1;
   }
+  x = ntohl(x);
 
   int foo = 0;
   switch (x) {

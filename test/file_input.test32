@@ -1,3 +1,3 @@
-RUN: /bin/echo -ne "\x05\x00\x00\x00aaaa" > %T/%basename_t.input
+RUN: /bin/echo -ne "\x00\x00\x00\x05aaaa" > %T/%basename_t.input
 RUN: %symcc -m32 -O2 %S/file_input.c -o %t_32
 RUN: env SYMCC_INPUT_FILE=%T/%basename_t.input %t_32 %T/%basename_t.input 2>&1 | %filecheck %S/file_input.c

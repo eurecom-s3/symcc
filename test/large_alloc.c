@@ -13,13 +13,16 @@
 // SymCC. If not, see <https://www.gnu.org/licenses/>.
 
 // RUN: %symcc %s -o %t
-// RUN: echo -ne "\x2a\x00\x00\x00" | %t 2>&1 | %filecheck %s
+// RUN: echo -ne "\x00\x00\x00\x2a" | %t 2>&1 | %filecheck %s
 //
 // Make sure that we can handle large allocations symbolically. Also, test
 // memory-related library functions.
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include <arpa/inet.h>
 #include <unistd.h>
 
 int main(int argc, char *argv[]) {
@@ -28,6 +31,8 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Failed to read x\n");
     return -1;
   }
+  int netlongX = x;
+  x = ntohl(x);
 
   char *largeAllocation = malloc(10000);
   memset(largeAllocation, (char)x, 10000);
@@ -58,6 +63,9 @@ int main(int argc, char *argv[]) {
   // SIMPLE: Found diverging input
   // QSYM-COUNT-2: SMT
   // QSYM: New testcase
+
+  // Make x little-endian.
+  x = __builtin_bswap32(netlongX);
 
   memcpy(largeAllocation, &x, sizeof(x));
   // SIMPLE-NOT: Trying to solve
