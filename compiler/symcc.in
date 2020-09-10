@@ -33,6 +33,11 @@ for arg in "$@"; do
     fi
 done
 
+if [ $# -eq 0 ]; then
+    echo "Use symcc as a drop-in replacement for clang, e.g., symcc -O2 -o foo foo.c" >&2
+    exit 1
+fi
+
 exec $compiler                                  \
      -Xclang -load -Xclang "$pass"              \
      "$@"                                       \

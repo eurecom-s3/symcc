@@ -49,6 +49,11 @@ else
     stdlib_ldflags="-L${!libcxx_var}/lib -Wl,-rpath,${!libcxx_var}/lib -lstdc++ -lc++ -stdlib=libc++"
 fi
 
+if [ $# -eq 0 ]; then
+    echo "Use sym++ as a drop-in replacement for clang++, e.g., sym++ -O2 -o foo foo.cpp" >&2
+    exit 1
+fi
+
 exec $compiler                                  \
      -Xclang -load -Xclang "$pass"              \
      $stdlib_cflags                             \
