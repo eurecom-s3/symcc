@@ -1,3 +1,3 @@
 RUN: %symcc -m32 %S/bswap.c -o %t_32
-RUN: echo -ne "\x01\x02\x03\x04" | %t_32 2>&1 | %filecheck %S/bswap.c
+RUN: echo -ne "\x04\x03\x02\x01" | %t_32 2>&1 | %filecheck %S/bswap.c
 RUN: %symcc %S/bswap.c -m32 -S -emit-llvm -o - | FileCheck --check-prefix=BITCODE %S/bswap.c

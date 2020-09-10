@@ -13,12 +13,15 @@
 // SymCC. If not, see <https://www.gnu.org/licenses/>.
 
 // RUN: %symcc %s -o %t
-// RUN: echo -ne "\x01\x02\x03\x04" | %t 2>&1 | %filecheck %s
+// RUN: echo -ne "\x04\x03\x02\x01" | %t 2>&1 | %filecheck %s
 // RUN: %symcc %s -S -emit-llvm -o - | FileCheck --check-prefix=BITCODE %s
 //
 // Here we test that the "bswap" intrinsic is handled correctly.
+
 #include <stdint.h>
 #include <stdio.h>
+
+#include <arpa/inet.h>
 #include <unistd.h>
 
 int main(int argc, char* argv[]) {
@@ -27,6 +30,7 @@ int main(int argc, char* argv[]) {
     fprintf(stderr, "Failed to read x\n");
     return -1;
   }
+  x = ntohl(x);
 
   // BITCODE: llvm.bswap.i32
   uint32_t y = __builtin_bswap32(x);

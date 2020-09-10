@@ -13,13 +13,16 @@
 // SymCC. If not, see <https://www.gnu.org/licenses/>.
 
 // RUN: %symcc -O2 %s -o %t
-// RUN: echo -ne "\x05\x00\x00\x00" | %t 2>&1 | %filecheck %s
+// RUN: echo -ne "\x00\x00\x00\x05" | %t 2>&1 | %filecheck %s
 //
 // Test that global variables are handled correctly. The special challenge is
 // that we need to initialize the symbolic expression corresponding to any
 // global variable that has an initial value.
-#include <stdio.h>
+
 #include <stdint.h>
+#include <stdio.h>
+
+#include <arpa/inet.h>
 #include <unistd.h>
 
 int g_increment = 17;
@@ -61,6 +64,7 @@ int main(int argc, char* argv[]) {
         fprintf(stderr, "Failed to read x\n");
         return -1;
     }
+    x = ntohl(x);
 
     fprintf(stderr, "%d\n", increment(x));
     // SIMPLE: Trying to solve

@@ -12,12 +12,14 @@
 // You should have received a copy of the GNU General Public License along with
 // SymCC. If not, see <https://www.gnu.org/licenses/>.
 
-// RUN: /bin/echo -ne "\x05\x00\x00\x00aaaa" > %T/%basename_t.input
+// RUN: /bin/echo -ne "\x00\x00\x00\x05aaaa" > %T/%basename_t.input
 // RUN: %symcc -O2 %s -o %t
 // RUN: env SYMCC_INPUT_FILE=%T/%basename_t.input %t %T/%basename_t.input 2>&1 | %filecheck %s
 
-#include <fcntl.h>
 #include <stdio.h>
+
+#include <arpa/inet.h>
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -38,6 +40,7 @@ int main(int argc, char* argv[]) {
     perror("failed to read from the input file");
     return -1;
   }
+  input = ntohl(input);
 
   int four_as;
   if (read(fd, &four_as, sizeof(four_as)) != 4) {
@@ -110,6 +113,7 @@ int main(int argc, char* argv[]) {
     perror("failed to read from the input file");
     return -1;
   }
+  same_input = ntohl(same_input);
 
   // SIMPLE: Trying to solve
   // QSYM-COUNT-2: SMT
