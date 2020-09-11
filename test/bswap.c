@@ -40,10 +40,10 @@ int main(int argc, char* argv[]) {
 
   // SIMPLE: Trying to solve
   // SIMPLE: Found diverging input
-  // SIMPLE-DAG: stdin0 -> #xca
-  // SIMPLE-DAG: stdin1 -> #xfe
-  // SIMPLE-DAG: stdin2 -> #xbe
-  // SIMPLE-DAG: stdin3 -> #xef
+  // SIMPLE-DAG: stdin0 -> #xef
+  // SIMPLE-DAG: stdin1 -> #xbe
+  // SIMPLE-DAG: stdin2 -> #xfe
+  // SIMPLE-DAG: stdin3 -> #xca
   // QSYM-COUNT-2: SMT
   // ANY: Not quite.
   if (y == 0xcafebeef)

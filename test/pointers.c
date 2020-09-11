@@ -68,9 +68,9 @@ int main(int argc, char* argv[]) {
     // We expect a null pointer, but since pointer length varies between 32 and
     // 64-bit architectures we can't just expect N times #x00. Instead, we use a
     // regular expression that disallows nonzero values for anything but stdin0
-    // (which is part of x, not ptr).
+    // to stdin3 (which are part of x, not ptr).
     //
-    // SIMPLE-NOT: stdin{{[^0][0-9]?}} -> #x{{.?[^0].?}}
+    // SIMPLE-NOT: stdin{{[4-9]|1[0-9]}} -> #x{{.?[^0].?}}
     // QSYM-COUNT-2: SMT
     // QSYM: New testcase
     // ANY: not null
