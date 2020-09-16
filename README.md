@@ -99,8 +99,9 @@ program starts to execute.
 
 When execution is finished, the result directory will contain the new test cases
 generated during program execution. Try running the program again on one of
-those or combine it with a fuzzer to automate this process (see
-docs/Fuzzing.txt).
+those (or use [util/pure_concolic_execution.sh](util/pure_concolic_execution.sh)
+to automate the process). For better results, combine SymCC with a fuzzer (see
+[docs/Fuzzing.txt](docs/Fuzzing.txt)).
 
 
 ## Documentation
