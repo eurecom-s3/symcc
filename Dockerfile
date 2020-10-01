@@ -15,30 +15,25 @@
 #
 # The build stage
 #
-FROM ubuntu:18.04 AS builder
+FROM ubuntu:20.04 AS builder
 
 # Install dependencies
-RUN apt-get update && apt-get install -y \
-      cargo \
-      clang-8 \
-      cmake \
-      g++ \
-      git \
-      llvm-8-dev \
-      llvm-8-tools \
-      ninja-build \
-      python3-pip \
-      zlib1g-dev \
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        cargo \
+        clang-10 \
+        cmake \
+        g++ \
+        git \
+        libz3-dev \
+        llvm-10-dev \
+        llvm-10-tools \
+        ninja-build \
+        python2 \
+        python3-pip \
+        zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 RUN pip3 install lit
-
-# Build Z3; the version in the Ubuntu repositories is too old for Qsym.
-RUN git clone -b z3-4.8.6 https://github.com/Z3Prover/z3.git \
-    && mkdir z3/build \
-    && cd z3/build \
-    && cmake -G Ninja -DCMAKE_BUILD_TYPE=Release .. \
-    && ninja \
-    && ninja install
 
 # Build AFL.
 RUN git clone -b v2.56b https://github.com/google/AFL.git afl \
@@ -47,17 +42,25 @@ RUN git clone -b v2.56b https://github.com/google/AFL.git afl \
 
 # Download the LLVM sources already so that we don't need to get them again when
 # SymCC changes
-RUN git clone -b llvmorg-8.0.1 --depth 1 https://github.com/llvm/llvm-project.git /llvm_source
+RUN git clone -b llvmorg-10.0.1 --depth 1 https://github.com/llvm/llvm-project.git /llvm_source
 
 # Build a version of SymCC with the simple backend to compile libc++
 COPY . /symcc_source
 WORKDIR /symcc_build_simple
-RUN cmake -G Ninja -DQSYM_BACKEND=OFF -DCMAKE_BUILD_TYPE=RelWithDebInfo /symcc_source \
+RUN cmake -G Ninja \
+        -DQSYM_BACKEND=OFF \
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+        -DZ3_TRUST_SYSTEM_VERSION=on \
+        /symcc_source \
     && ninja check
 
 # Build SymCC with the Qsym backend
 WORKDIR /symcc_build
-RUN cmake -G Ninja -DQSYM_BACKEND=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo /symcc_source \
+RUN cmake -G Ninja \
+        -DQSYM_BACKEND=ON \
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+        -DZ3_TRUST_SYSTEM_VERSION=on \
+        /symcc_source \
     && ninja check \
     && cargo install --path /symcc_source/util/symcc_fuzzing_helper
 
@@ -80,15 +83,16 @@ RUN export SYMCC_REGULAR_LIBCXX=yes SYMCC_NO_SYMBOLIC_INPUT=yes \
 #
 # The final image
 #
-FROM ubuntu:18.04
+FROM ubuntu:20.04
 
-RUN apt-get update && apt-get install -y \
-      build-essential \
-      clang-8 \
-      g++ \
-      libllvm8 \
-      zlib1g \
-      sudo \
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        build-essential \
+        clang-10 \
+        g++ \
+        libllvm10 \
+        zlib1g \
+        sudo \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -s /bin/bash ubuntu \
     && echo 'ubuntu ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/ubuntu
@@ -96,13 +100,12 @@ RUN apt-get update && apt-get install -y \
 COPY --from=builder /symcc_build /symcc_build
 COPY --from=builder /root/.cargo/bin/symcc_fuzzing_helper /symcc_build/
 COPY --from=builder /libcxx_symcc_install /libcxx_symcc_install
-COPY --from=builder /usr/local/lib/libz3.so* /usr/local/lib/
 COPY --from=builder /afl /afl
 
 ENV PATH /symcc_build:$PATH
 ENV AFL_PATH /afl
-ENV AFL_CC clang-8
-ENV AFL_CXX clang++-8
+ENV AFL_CC clang-10
+ENV AFL_CXX clang++-10
 ENV SYMCC_LIBCXX_PATH=/libcxx_symcc_install
 
 USER ubuntu

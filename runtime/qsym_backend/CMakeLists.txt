@@ -17,7 +17,7 @@
 set(QSYM_SOURCE_DIR "qsym/qsym/pintool")
 
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/expr__gen.cpp
-  COMMAND python gen_expr.py ${CMAKE_CURRENT_BINARY_DIR}
+  COMMAND python2 gen_expr.py ${CMAKE_CURRENT_BINARY_DIR}
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${QSYM_SOURCE_DIR}/codegen
   COMMENT "Generating Qsym's expr__gen.cpp"
   VERBATIM
@@ -26,7 +26,7 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/expr__gen.cpp
   ${QSYM_SOURCE_DIR}/codegen/gen_expr.py)
 
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/expr_builder__gen.cpp
-  COMMAND python gen_expr_builder.py ${CMAKE_CURRENT_BINARY_DIR}
+  COMMAND python2 gen_expr_builder.py ${CMAKE_CURRENT_BINARY_DIR}
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${QSYM_SOURCE_DIR}/codegen
   COMMENT "Generating Qsym's expr__gen.cpp"
   VERBATIM
@@ -46,7 +46,11 @@ if (NOT Z3_FOUND)
 If you want me to trust that a suitable version is available nonetheless, \
 configure CMake with -DZ3_TRUST_SYSTEM_VERSION=on (see also docs/Configuration.txt).")
   else()
-    set(Z3_CXX_INCLUDE_DIRS "/usr/include/z3")
+    if (EXISTS "/usr/include/z3")
+      set(Z3_CXX_INCLUDE_DIRS "/usr/include/z3")
+    else()
+      set(Z3_CXX_INCLUDE_DIRS)
+    endif()
     set(Z3_LIBRARIES "z3")
   endif()
 endif()
