@@ -321,6 +321,14 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
                     getSymbolicExpressionOrNull(arg)});
 
   if (!I.user_empty()) {
+    // The result of the function is used somewhere later on. Since we have no
+    // way of knowing whether the function is instrumented (and thus sets a
+    // proper return expression), we have to account for the possibility that
+    // it's not: in that case, we'll have to treat the result as an opaque
+    // concrete value. Therefore, we set the return expression to null here in
+    // order to avoid accidentally using whatever is stored there from the
+    // previous function call. (If the function is instrumented, it will just
+    // override our null with the real expression.)
     IRB.CreateCall(runtime.setReturnExpression,
                    ConstantPointerNull::get(IRB.getInt8PtrTy()));
     IRB.SetInsertPoint(returnPoint);
