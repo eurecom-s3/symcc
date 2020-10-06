@@ -99,6 +99,7 @@ RUN apt-get update \
 
 COPY --from=builder /symcc_build /symcc_build
 COPY --from=builder /root/.cargo/bin/symcc_fuzzing_helper /symcc_build/
+COPY util/pure_concolic_execution.sh /symcc_build/
 COPY --from=builder /libcxx_symcc_install /libcxx_symcc_install
 COPY --from=builder /afl /afl
 
