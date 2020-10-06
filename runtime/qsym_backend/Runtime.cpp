@@ -68,7 +68,7 @@ namespace qsym {
 ExprBuilder *g_expr_builder;
 Solver *g_solver;
 CallStackManager g_call_stack_manager;
-z3::context g_z3_context;
+z3::context *g_z3_context;
 
 } // namespace qsym
 
@@ -171,6 +171,7 @@ void _sym_initialize(void) {
               << std::endl;
   }
 
+  g_z3_context = new z3::context{};
   g_solver =
       new Solver(inputFileName, g_config.outputDir, g_config.aflCoverageMap);
   g_expr_builder = g_config.pruning ? PruneExprBuilder::create()
