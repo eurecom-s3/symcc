@@ -39,9 +39,10 @@ if [[ ! -v in ]]; then
     exit 1
 fi
 
-# Create temporary directories for the current and next generations of inputs
+# Create the work environment
 work_dir=$(mktemp -d)
 mkdir $work_dir/{next,symcc_out}
+touch $work_dir/analyzed_inputs
 if [[ -v out ]]; then
     mkdir -p $out
 fi
@@ -52,54 +53,92 @@ function cleanup() {
 
 trap cleanup EXIT
 
-# Move files from the source directory into the next generation and possibly
-# make a copy in $out
-function import() {
-    source_dir=$1
-    if [ -n "$(ls -A $source_dir)" ]; then
-        for new_case in $source_dir/*; do
-            dest=$work_dir/next/$(sha256sum $new_case | cut -d' ' -f1)
-            cp $new_case $dest
+# Copy all files in the source directory to the destination directory, renaming
+# them according to their hash.
+function copy_with_unique_name() {
+    local source_dir="$1"
+    local dest_dir="$2"
 
-            if [[ -v out ]]; then
-                cp $dest $out
-            fi
+    if [ -n "$(ls -A $source_dir)" ]; then
+        local f
+        for f in $source_dir/*; do
+            local dest="$dest_dir/$(sha256sum $f | cut -d' ' -f1)"
+            cp "$f" "$dest"
         done
     fi
 }
 
-# Set up the environment
+# Copy files from the source directory into the next generation.
+function add_to_next_generation() {
+    local source_dir="$1"
+    copy_with_unique_name "$source_dir" "$work_dir/next"
+}
+
+# If an output directory is set, copy the files in the source directory there.
+function maybe_export() {
+    local source_dir="$1"
+    if [[ -v out ]]; then
+        copy_with_unique_name "$source_dir" "$out"
+    fi
+}
+
+# Copy those files from the input directory to the next generation that haven't
+# been analyzed yet.
+function maybe_import() {
+    if [ -n "$(ls -A $in)" ]; then
+        local f
+        for f in $in/*; do
+            if grep -q "$(basename $f)" $work_dir/analyzed_inputs; then
+                continue
+            fi
+
+            if [ -e "$work_dir/next/$(basename $f)" ]; then
+                continue
+            fi
+
+            echo "Importing $f from the input directory"
+            cp "$f" "$work_dir/next"
+        done
+    fi
+}
+
+# Set up the shell environment
 export SYMCC_OUTPUT_DIR=$work_dir/symcc_out
 export SYMCC_ENABLE_LINEARIZATION=1
-export SYMCC_AFL_COVERAGE_MAP=$work_dir/map
+# export SYMCC_AFL_COVERAGE_MAP=$work_dir/map
 
 # Run generation after generation until we don't generate new inputs anymore
 gen_count=0
 while true; do
     # Initialize the generation
-    import $in                  # new files from the input directory (if any)
+    maybe_import
     mv $work_dir/{next,cur}
     mkdir $work_dir/next
 
     # Run it (or wait if there's nothing to run on)
     if [ -n "$(ls -A $work_dir/cur)" ]; then
         echo "Generation $gen_count..."
+
         for f in $work_dir/cur/*; do
+            echo "Running on $f"
             if [[ "$target " =~ " @@ " ]]; then
                 env SYMCC_INPUT_FILE=$f $timeout ${target[@]/@@/$f} >/dev/null 2>&1
             else
-                cat $f | $timeout $target >/dev/null 2>&1
+                $timeout $target <$f >/dev/null 2>&1
             fi
 
             # Make the new test cases part of the next generation
-            import $work_dir/symcc_out
-            rm $f
+            add_to_next_generation $work_dir/symcc_out
+            maybe_export $work_dir/symcc_out
+            echo $(basename $f) >> $work_dir/analyzed_inputs
+            rm -f $f
         done
 
-        rmdir $work_dir/cur
+        rm -rf $work_dir/cur
         gen_count=$((gen_count+1))
     else
         echo "Waiting for more input..."
+        rmdir $work_dir/cur
         sleep 5
     fi
 done
