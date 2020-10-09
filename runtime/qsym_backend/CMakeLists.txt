@@ -82,4 +82,15 @@ target_include_directories(SymRuntime SYSTEM PRIVATE
 # We need to get the LLVM support component for llvm::APInt.
 llvm_map_components_to_libnames(QSYM_LLVM_DEPS support)
 
-target_link_libraries(SymRuntime stdc++fs ${Z3_LIBRARIES} ${QSYM_LLVM_DEPS})
+target_link_libraries(SymRuntime ${Z3_LIBRARIES} ${QSYM_LLVM_DEPS})
+
+# We use std::filesystem, which has been added in C++17. Before its official
+# inclusion in the standard library, Clang shipped the feature first in
+# libc++experimental and later in libc++fs; GCC used to require libstdc++fs. We
+# make no attempt to support those older compiler versions, with one exception:
+# some current LTS distributions ship a GCC that requires libstdc++fs for
+# std::filesystem - we catch this case in order to enable users of such systems
+# to build with the default compiler.
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+  target_link_libraries(SymRuntime stdc++fs)
+endif()
