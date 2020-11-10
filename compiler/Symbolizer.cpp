@@ -313,7 +313,7 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
   IRB.CreateCall(runtime.notifyCall, getTargetPreferredInt(&I));
 
   if (callee == nullptr)
-    tryAlternative(IRB, I.getCalledValue());
+    tryAlternative(IRB, I.getCalledOperand());
 
   for (Use &arg : I.args())
     IRB.CreateCall(runtime.setParameterExpression,
@@ -340,7 +340,7 @@ void Symbolizer::visitBinaryOperator(BinaryOperator &I) {
   // Binary operators propagate into the symbolic expression.
 
   IRBuilder<> IRB(&I);
-  Value *handler = runtime.binaryOperatorHandlers.at(I.getOpcode());
+  SymFnT handler = runtime.binaryOperatorHandlers.at(I.getOpcode());
 
   // Special case: the run-time library distinguishes between "and" and "or"
   // on Boolean values and bit vectors.
@@ -386,7 +386,7 @@ void Symbolizer::visitCmpInst(CmpInst &I) {
   // simply include either in the resulting expression.
 
   IRBuilder<> IRB(&I);
-  Value *handler = runtime.comparisonHandlers.at(I.getPredicate());
+  SymFnT handler = runtime.comparisonHandlers.at(I.getPredicate());
   assert(handler && "Unable to handle icmp/fcmp variant");
   auto runtimeCall =
       buildRuntimeCall(IRB, handler, {I.getOperand(0), I.getOperand(1)});
@@ -706,7 +706,7 @@ void Symbolizer::visitCastInst(CastInst &I) {
          {IRB.getInt8(I.getDestTy()->getIntegerBitWidth()), false}});
     registerSymbolicComputation(boolToBitConversion, &I);
   } else {
-    Value *target;
+    SymFnT target;
 
     switch (I.getOpcode()) {
     case Instruction::SExt:
@@ -888,7 +888,7 @@ CallInst *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
 }
 
 Symbolizer::SymbolicComputation
-Symbolizer::forceBuildRuntimeCall(IRBuilder<> &IRB, Value *function,
+Symbolizer::forceBuildRuntimeCall(IRBuilder<> &IRB, SymFnT function,
                                   ArrayRef<std::pair<Value *, bool>> args) {
   std::vector<Value *> functionArgs;
   for (const auto &[arg, symbolic] : args) {

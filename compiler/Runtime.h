@@ -18,55 +18,61 @@
 #include <llvm/IR/InstrTypes.h>
 #include <llvm/IR/Module.h>
 
+#if LLVM_VERSION_MAJOR >= 9 && LLVM_VERSION_MAJOR < 11
+  using SymFnT = llvm::Value *;
+#else
+  using SymFnT = llvm::FunctionCallee;
+#endif
+
 /// Runtime functions
 struct Runtime {
   Runtime(llvm::Module &M);
 
-  llvm::Value *buildInteger{};
-  llvm::Value *buildInteger128{};
-  llvm::Value *buildFloat{};
-  llvm::Value *buildNullPointer{};
-  llvm::Value *buildTrue{};
-  llvm::Value *buildFalse{};
-  llvm::Value *buildBool{};
-  llvm::Value *buildSExt{};
-  llvm::Value *buildZExt{};
-  llvm::Value *buildTrunc{};
-  llvm::Value *buildBswap{};
-  llvm::Value *buildIntToFloat{};
-  llvm::Value *buildFloatToFloat{};
-  llvm::Value *buildBitsToFloat{};
-  llvm::Value *buildFloatToBits{};
-  llvm::Value *buildFloatToSignedInt{};
-  llvm::Value *buildFloatToUnsignedInt{};
-  llvm::Value *buildFloatAbs{};
-  llvm::Value *buildBoolAnd{};
-  llvm::Value *buildBoolOr{};
-  llvm::Value *buildBoolXor{};
-  llvm::Value *buildBoolToBits{};
-  llvm::Value *pushPathConstraint{};
-  llvm::Value *getParameterExpression{};
-  llvm::Value *setParameterExpression{};
-  llvm::Value *setReturnExpression{};
-  llvm::Value *getReturnExpression{};
-  llvm::Value *memcpy{};
-  llvm::Value *memset{};
-  llvm::Value *memmove{};
-  llvm::Value *readMemory{};
-  llvm::Value *writeMemory{};
-  llvm::Value *buildExtract{};
-  llvm::Value *notifyCall{};
-  llvm::Value *notifyRet{};
-  llvm::Value *notifyBasicBlock{};
+  SymFnT buildInteger{};
+  SymFnT buildInteger128{};
+  SymFnT buildFloat{};
+  SymFnT buildNullPointer{};
+  SymFnT buildTrue{};
+  SymFnT buildFalse{};
+  SymFnT buildBool{};
+  SymFnT buildSExt{};
+  SymFnT buildZExt{};
+  SymFnT buildTrunc{};
+  SymFnT buildBswap{};
+  SymFnT buildIntToFloat{};
+  SymFnT buildFloatToFloat{};
+  SymFnT buildBitsToFloat{};
+  SymFnT buildFloatToBits{};
+  SymFnT buildFloatToSignedInt{};
+  SymFnT buildFloatToUnsignedInt{};
+  SymFnT buildFloatAbs{};
+  SymFnT buildBoolAnd{};
+  SymFnT buildBoolOr{};
+  SymFnT buildBoolXor{};
+  SymFnT buildBoolToBits{};
+  SymFnT pushPathConstraint{};
+  SymFnT getParameterExpression{};
+  SymFnT setParameterExpression{};
+  SymFnT setReturnExpression{};
+  SymFnT getReturnExpression{};
+  SymFnT memcpy{};
+  SymFnT memset{};
+  SymFnT memmove{};
+  SymFnT readMemory{};
+  SymFnT writeMemory{};
+  SymFnT buildExtract{};
+  SymFnT notifyCall{};
+  SymFnT notifyRet{};
+  SymFnT notifyBasicBlock{};
 
   /// Mapping from icmp predicates to the functions that build the corresponding
   /// symbolic expressions.
-  std::array<llvm::Value *, llvm::CmpInst::BAD_ICMP_PREDICATE>
+  std::array<SymFnT, llvm::CmpInst::BAD_ICMP_PREDICATE>
       comparisonHandlers{};
 
   /// Mapping from binary operators to the functions that build the
   /// corresponding symbolic expressions.
-  std::array<llvm::Value *, llvm::Instruction::BinaryOpsEnd>
+  std::array<SymFnT, llvm::Instruction::BinaryOpsEnd>
       binaryOperatorHandlers{};
 };
 
