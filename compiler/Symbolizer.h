@@ -213,7 +213,7 @@ private:
 
   /// Like buildRuntimeCall, but the call is always generated.
   SymbolicComputation
-  forceBuildRuntimeCall(llvm::IRBuilder<> &IRB, llvm::Value *function,
+  forceBuildRuntimeCall(llvm::IRBuilder<> &IRB, SymFnT function,
                         llvm::ArrayRef<std::pair<llvm::Value *, bool>> args);
 
   /// Create a call to the specified function in the run-time library.
@@ -226,7 +226,7 @@ private:
   /// concrete (e.g., because they are compile-time constants), no call
   /// instruction is emitted and the function returns null.
   std::optional<SymbolicComputation>
-  buildRuntimeCall(llvm::IRBuilder<> &IRB, llvm::Value *function,
+  buildRuntimeCall(llvm::IRBuilder<> &IRB, SymFnT function,
                    llvm::ArrayRef<std::pair<llvm::Value *, bool>> args) {
     if (std::all_of(args.begin(), args.end(),
                     [this](std::pair<llvm::Value *, bool> arg) {
@@ -240,7 +240,7 @@ private:
 
   /// Convenience overload that treats all arguments as symbolic.
   std::optional<SymbolicComputation>
-  buildRuntimeCall(llvm::IRBuilder<> &IRB, llvm::Value *function,
+  buildRuntimeCall(llvm::IRBuilder<> &IRB, SymFnT function,
                    llvm::ArrayRef<llvm::Value *> symbolicArgs) {
     std::vector<std::pair<llvm::Value *, bool>> args;
     for (const auto &arg : symbolicArgs) {
