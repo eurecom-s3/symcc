@@ -285,7 +285,8 @@ void Symbolizer::handleIntrinsicCall(CallBase &I) {
     break;
   }
   default:
-    errs() << "Warning: unhandled LLVM intrinsic " << callee->getName() << '\n';
+    errs() << "Warning: unhandled LLVM intrinsic " << callee->getName()
+           << "; the result will be concretized\n";
     break;
   }
 }
@@ -816,7 +817,8 @@ void Symbolizer::visitInstruction(Instruction &I) {
   if (isa<LandingPadInst>(I) || isa<ResumeInst>(I) || isa<InsertValueInst>(I))
     return;
 
-  errs() << "Warning: unknown instruction " << I << '\n';
+  errs() << "Warning: unknown instruction " << I
+         << "; the result will be concretized";
 }
 
 CallInst *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
