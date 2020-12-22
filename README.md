@@ -118,6 +118,8 @@ look at our group's
 contains detailed instructions to replicate our experiments, as well as the raw
 results that we obtained.
 
+### Video demonstration
+A practical introduction to the SymCC tool can be found on [YouTube](https://www.youtube.com/watch?v=htDrNBiL7Y8)
 
 ## Building a Docker image
 
