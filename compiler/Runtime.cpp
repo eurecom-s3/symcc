@@ -23,9 +23,9 @@ using namespace llvm;
 namespace {
 
 template <typename... ArgsTy>
-SymFnT import(llvm::Module &M, llvm::StringRef name, llvm::Type *ret,
+llvm::Value *import(llvm::Module &M, llvm::StringRef name, llvm::Type *ret,
                     ArgsTy... args) {
-#if LLVM_VERSION_MAJOR >= 9 && LLVM_VERSION_MAJOR < 11
+#if LLVM_VERSION_MAJOR >= 9
   return M.getOrInsertFunction(name, ret, args...).getCallee();
 #else
   return M.getOrInsertFunction(name, ret, args...);
@@ -158,10 +158,10 @@ Runtime::Runtime(Module &M) {
 /// Decide whether a function is called symbolically.
 bool isInterceptedFunction(const Function &f) {
   static const StringSet<> kInterceptedFunctions = {
-      "malloc",  "calloc",  "mmap",    "mmap64",  "open",   "read",     "lseek",
-      "lseek64", "fopen",   "fopen64", "fread",   "fseek",  "fseeko64", "getc",
-      "ungetc",  "memcpy",  "memset",  "strncpy", "strchr", "memcmp",   "memmove",
-      "ntohl"};
+      "malloc",   "calloc",  "mmap",    "mmap64",  "open",   "read",
+      "lseek",    "lseek64", "fopen",   "fopen64", "fread",  "fseek",
+      "fseeko64", "getc",    "ungetc",  "memcpy",  "memset", "strncpy",
+      "strchr",   "memcmp",  "memmove", "ntohl",   "fgets",  "fgetc"};
 
   return (kInterceptedFunctions.count(f.getName()) > 0);
 }
