@@ -818,7 +818,7 @@ void Symbolizer::visitInstruction(Instruction &I) {
     return;
 
   errs() << "Warning: unknown instruction " << I
-         << "; the result will be concretized";
+         << "; the result will be concretized\n";
 }
 
 CallInst *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
