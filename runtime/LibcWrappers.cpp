@@ -246,6 +246,26 @@ size_t SYM(fread)(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   return result;
 }
 
+char *SYM(fgets)(char *str, int n, FILE *stream) {
+  tryAlternative(str, _sym_get_parameter_expression(0), SYM(fgets));
+  tryAlternative(n, _sym_get_parameter_expression(1), SYM(fgets));
+
+  auto result = fgets(str, n, stream);
+  _sym_set_return_expression(nullptr);
+
+  if (fileno(stream) == inputFileDescriptor) {
+    // Reading symbolic input.
+    ReadWriteShadow shadow(str, sizeof(char) * n);
+    std::generate(shadow.begin(), shadow.end(),
+                  []() { return _sym_get_input_byte(inputOffset++); });
+  } else if (!isConcrete(str, sizeof(char) * n)) {
+    ReadWriteShadow shadow(str, sizeof(char) * n);
+    std::fill(shadow.begin(), shadow.end(), nullptr);
+  }
+
+  return result;
+}
+
 int SYM(fseek)(FILE *stream, long offset, int whence) {
   tryAlternative(offset, _sym_get_parameter_expression(1), SYM(fseek));
 
@@ -284,6 +304,22 @@ int SYM(fseeko64)(FILE *stream, uint64_t offset, int whence) {
 
 int SYM(getc)(FILE *stream) {
   auto result = getc(stream);
+  if (result == EOF) {
+    _sym_set_return_expression(nullptr);
+    return result;
+  }
+
+  if (fileno(stream) == inputFileDescriptor)
+    _sym_set_return_expression(_sym_build_zext(
+        _sym_get_input_byte(inputOffset++), sizeof(int) * 8 - 8));
+  else
+    _sym_set_return_expression(nullptr);
+
+  return result;
+}
+
+int SYM(fgetc)(FILE *stream) {
+  auto result = fgetc(stream);
   if (result == EOF) {
     _sym_set_return_expression(nullptr);
     return result;
