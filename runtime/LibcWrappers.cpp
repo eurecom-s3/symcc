@@ -264,8 +264,8 @@ int SYM(fseek)(FILE *stream, long offset, int whence) {
   return result;
 }
 
-int SYM(fseeko64)(FILE *stream, long offset, int whence) {
-  tryAlternative(offset, _sym_get_parameter_expression(1), SYM(fseek));
+int SYM(fseeko64)(FILE *stream, uint64_t offset, int whence) {
+  tryAlternative(offset, _sym_get_parameter_expression(1), SYM(fseeko64));
 
   auto result = fseeko64(stream, offset, whence);
   _sym_set_return_expression(nullptr);
