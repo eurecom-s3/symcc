@@ -251,15 +251,15 @@ char *SYM(fgets)(char *str, int n, FILE *stream) {
   tryAlternative(n, _sym_get_parameter_expression(1), SYM(fgets));
 
   auto result = fgets(str, n, stream);
-  _sym_set_return_expression(nullptr);
+  _sym_set_return_expression(_sym_get_parameter_expression(0));
 
   if (fileno(stream) == inputFileDescriptor) {
     // Reading symbolic input.
-    ReadWriteShadow shadow(str, sizeof(char) * n);
+    ReadWriteShadow shadow(str, sizeof(char) * strlen(str));
     std::generate(shadow.begin(), shadow.end(),
                   []() { return _sym_get_input_byte(inputOffset++); });
-  } else if (!isConcrete(str, sizeof(char) * n)) {
-    ReadWriteShadow shadow(str, sizeof(char) * n);
+  } else if (!isConcrete(str, sizeof(char) * strlen(str))) {
+    ReadWriteShadow shadow(str, sizeof(char) * strlen(str));
     std::fill(shadow.begin(), shadow.end(), nullptr);
   }
 
