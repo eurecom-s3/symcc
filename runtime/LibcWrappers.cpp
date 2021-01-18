@@ -266,6 +266,15 @@ char *SYM(fgets)(char *str, int n, FILE *stream) {
   return result;
 }
 
+void SYM(rewind)(FILE *stream) {
+  rewind(stream);
+  _sym_set_return_expression(nullptr);
+
+  if (fileno(stream) == inputFileDescriptor) {
+    inputOffset = 0;
+  }
+}
+
 int SYM(fseek)(FILE *stream, long offset, int whence) {
   tryAlternative(offset, _sym_get_parameter_expression(1), SYM(fseek));
 
@@ -276,6 +285,24 @@ int SYM(fseek)(FILE *stream, long offset, int whence) {
 
   if (fileno(stream) == inputFileDescriptor) {
     auto pos = ftell(stream);
+    if (pos == -1)
+      return -1;
+    inputOffset = pos;
+  }
+
+  return result;
+}
+
+int SYM(fseeko)(FILE *stream, off_t offset, int whence) {
+  tryAlternative(offset, _sym_get_parameter_expression(1), SYM(fseeko));
+
+  auto result = fseeko(stream, offset, whence);
+  _sym_set_return_expression(nullptr);
+  if (result == -1)
+    return result;
+
+  if (fileno(stream) == inputFileDescriptor) {
+    auto pos = ftello(stream);
     if (pos == -1)
       return -1;
     inputOffset = pos;
@@ -464,8 +491,7 @@ int SYM(memcmp)(const void *a, const void *b, size_t n) {
   return result;
 }
 
-uint32_t SYM(ntohl)(uint32_t netlong)
-{
+uint32_t SYM(ntohl)(uint32_t netlong) {
   auto netlongExpr = _sym_get_parameter_expression(0);
   auto result = ntohl(netlong);
 
@@ -484,5 +510,4 @@ uint32_t SYM(ntohl)(uint32_t netlong)
 
   return result;
 }
-
 }
