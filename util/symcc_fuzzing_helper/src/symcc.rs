@@ -231,7 +231,7 @@ pub struct AflConfig {
     use_standard_input: bool,
 
     /// Are we using AFL's QEMU mode?
-    use_qemu_mode: bool,
+    pub use_qemu_mode: bool,
 
     /// The fuzzer instance's queue of test cases.
     queue: PathBuf,
@@ -245,6 +245,8 @@ pub enum AflShowmapResult {
     Hang,
     /// The target crashed.
     Crash,
+    /// Ignore the afl-showmap result (e.g. on showmap errors)
+    Ignore,
 }
 
 impl AflConfig {
@@ -291,7 +293,8 @@ impl AflConfig {
 
         Ok(AflConfig {
             show_map: afl_binary_dir.join("afl-showmap"),
-            use_standard_input: !afl_target_command.contains(&"@@".into()),
+            use_standard_input: !afl_target_command.contains(&"@@".into()) &&
+                                !afl_command.contains(&"-f".into()),
             use_qemu_mode: afl_command.contains(&"-Q".into()),
             target_command: afl_target_command,
             queue: fuzzer_output.as_ref().join("queue"),
@@ -379,7 +382,8 @@ impl AflConfig {
             }
             1 => Ok(AflShowmapResult::Hang),
             2 => Ok(AflShowmapResult::Crash),
-            unexpected => panic!("Unexpected return code {} from afl-showmap", unexpected),
+            _ => Ok(AflShowmapResult::Ignore),
+            //panic!("Unexpected return code {} from afl-showmap", unexpected),
         }
     }
 }

@@ -50,6 +50,10 @@ struct CLI {
     #[structopt(short = "v")]
     verbose: bool,
 
+    /// force -Q qemu_mode
+    #[structopt(short = "Q")]
+    force_qemu_mode: bool,
+
     /// Program under test
     command: Vec<String>,
 }
@@ -232,7 +236,12 @@ impl State {
             .run(&input, tmp_dir.path().join("output"))
             .context("Failed to run SymCC")?;
         for new_test in symcc_result.test_cases.iter() {
-            let res = process_new_testcase(&new_test, &input, &tmp_dir, &afl_config, self)?;
+            let res = process_new_testcase(&new_test, &input, &tmp_dir, &afl_config, self);
+
+            let res = match res {
+                Ok(result) => result,
+                Err(_) => continue,
+            };
 
             num_total += 1;
             if res == TestcaseResult::New {
@@ -298,7 +307,10 @@ fn main() -> Result<()> {
 
     let symcc = SymCC::new(symcc_dir.clone(), &options.command);
     log::debug!("SymCC configuration: {:?}", &symcc);
-    let afl_config = AflConfig::load(options.output_dir.join(&options.fuzzer_name))?;
+    let mut afl_config = AflConfig::load(options.output_dir.join(&options.fuzzer_name))?;
+    if options.force_qemu_mode {
+      afl_config.use_qemu_mode = true;
+    }
     log::debug!("AFL configuration: {:?}", &afl_config);
     let mut state = State::initialize(symcc_dir)?;
 
@@ -352,6 +364,10 @@ fn process_new_testcase(
                 &testcase.as_ref().display()
             )
         })? {
+        AflShowmapResult::Ignore => {
+            log::info!("afl-showmap error'ed, ignoring");
+            Ok(TestcaseResult::Uninteresting)
+        }
         AflShowmapResult::Success(testcase_bitmap) => {
             let interesting = state.current_bitmap.merge(&testcase_bitmap);
             if interesting {
