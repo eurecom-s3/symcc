@@ -363,7 +363,7 @@ fn process_new_testcase(
                 "Failed to check whether test case {} is interesting",
                 &testcase.as_ref().display()
             )
-        })? {
+        }).unwrap_or(AflShowmapResult::Ignore) {
         AflShowmapResult::Ignore => {
             log::info!("afl-showmap error'ed, ignoring");
             Ok(TestcaseResult::Uninteresting)

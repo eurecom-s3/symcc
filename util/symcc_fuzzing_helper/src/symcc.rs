@@ -383,7 +383,6 @@ impl AflConfig {
             1 => Ok(AflShowmapResult::Hang),
             2 => Ok(AflShowmapResult::Crash),
             _ => Ok(AflShowmapResult::Ignore),
-            //panic!("Unexpected return code {} from afl-showmap", unexpected),
         }
     }
 }
