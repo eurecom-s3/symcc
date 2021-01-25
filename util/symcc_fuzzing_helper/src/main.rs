@@ -310,10 +310,12 @@ fn main() -> Result<()> {
     log::debug!("SymCC configuration: {:?}", &symcc);
     let mut afl_config = AflConfig::load(options.output_dir.join(&options.fuzzer_name))?;
     if options.force_qemu_mode && !afl_config.use_qemu_mode {
-      // We need to overwrite the binary afl-showmap is running as the one
-      // in the afl config is an instrumented one!
-      afl_config.target_command[0] = OsString::from(options.command[0].clone()).to_os_string();
-      afl_config.use_qemu_mode = true;
+        // We need to overwrite the binary afl-showmap is running as the one
+        // in the afl config is an instrumented one
+        if options.command[0].contains("symqemu") {
+            afl_config.target_command[1] = OsString::from(options.command[1].clone()).to_os_string();
+        }
+        afl_config.use_qemu_mode = true;
     }
     log::debug!("AFL configuration: {:?}", &afl_config);
     let mut state = State::initialize(symcc_dir)?;
