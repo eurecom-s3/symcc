@@ -366,22 +366,23 @@ impl AflConfig {
             .wait()
             .context("Failed to wait for afl-showmap")?;
         log::debug!("afl-showmap returned {}", &afl_show_map_status);
-        match afl_show_map_status
-            .code()
-            .expect("No exit code available for afl-showmap")
+        match afl_show_map_status.code()
         {
-            0 => {
+            Some(0) => {
                 let map = AflMap::load(&testcase_bitmap).with_context(|| {
                     format!(
                         "Failed to read the AFL bitmap that \
                          afl-showmap should have generated at {}",
                         testcase_bitmap.as_ref().display()
                     )
-                })?;
-                Ok(AflShowmapResult::Success(Box::new(map)))
+                });
+                match map {
+                  Ok(m) => Ok(AflShowmapResult::Success(Box::new(m))),
+                  _ => Ok(AflShowmapResult::Ignore),
+                }
             }
-            1 => Ok(AflShowmapResult::Hang),
-            2 => Ok(AflShowmapResult::Crash),
+            Some(1) => Ok(AflShowmapResult::Hang),
+            Some(2) => Ok(AflShowmapResult::Crash),
             _ => Ok(AflShowmapResult::Ignore),
         }
     }
