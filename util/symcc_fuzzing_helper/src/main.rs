@@ -22,6 +22,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, Instant};
+use std::ffi::OsString;
 use structopt::StructOpt;
 use symcc::{AflConfig, AflMap, AflShowmapResult, SymCC, TestcaseDir};
 use tempfile::tempdir;
@@ -308,7 +309,10 @@ fn main() -> Result<()> {
     let symcc = SymCC::new(symcc_dir.clone(), &options.command);
     log::debug!("SymCC configuration: {:?}", &symcc);
     let mut afl_config = AflConfig::load(options.output_dir.join(&options.fuzzer_name))?;
-    if options.force_qemu_mode {
+    if options.force_qemu_mode && !afl_config.use_qemu_mode {
+      // We need to overwrite the binary afl-showmap is running as the one
+      // in the afl config is an instrumented one!
+      afl_config.target_command[0] = OsString::from(options.command[0].clone()).to_os_string();
       afl_config.use_qemu_mode = true;
     }
     log::debug!("AFL configuration: {:?}", &afl_config);

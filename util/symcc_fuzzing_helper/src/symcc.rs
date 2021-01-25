@@ -225,7 +225,7 @@ pub struct AflConfig {
     show_map: PathBuf,
 
     /// The command that AFL uses to invoke the target program.
-    target_command: Vec<OsString>,
+    pub target_command: Vec<OsString>,
 
     /// Do we need to pass data to standard input?
     use_standard_input: bool,
