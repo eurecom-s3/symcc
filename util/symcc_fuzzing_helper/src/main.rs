@@ -23,6 +23,7 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, Instant};
 use std::ffi::OsString;
+use std::str::FromStr;
 use structopt::StructOpt;
 use symcc::{AflConfig, AflMap, AflShowmapResult, SymCC, TestcaseDir};
 use tempfile::tempdir;
@@ -54,6 +55,10 @@ struct CLI {
     /// force -Q qemu_mode
     #[structopt(short = "Q")]
     force_qemu_mode: bool,
+
+    /// starting ID in the sync fuzzer queue - a poor person's restart option
+    #[structopt(short = "S")]
+    start_id: u32,
 
     /// Program under test
     command: Vec<String>,
@@ -329,7 +334,23 @@ fn main() -> Result<()> {
                 log::debug!("Waiting for new test cases...");
                 thread::sleep(Duration::from_secs(5));
             }
-            Some(input) => state.test_input(&input, &symcc, &afl_config)?,
+            Some(input) => {
+                let filename = input.file_name().unwrap().to_string_lossy();
+                if filename.starts_with("id:") {
+                    let id_str = filename.get(3..9).unwrap();
+                    let id = FromStr::from_str(id_str).unwrap_or(0);
+                    if id >= options.start_id {
+                        state.test_input(&input, &symcc, &afl_config)?
+                    } else {
+                        log::info!("Skipping input {} because it has a low ID", input.display());
+                        state.processed_files.insert(input.to_path_buf());
+                    }
+                } else {
+                    log::info!("Skipping invalid input name {}", input.display());
+                    state.processed_files.insert(input.to_path_buf());
+                }
+            },
+
         }
 
         if state.last_stats_output.elapsed().as_secs() > STATS_INTERVAL_SEC {
