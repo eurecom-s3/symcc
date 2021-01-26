@@ -23,7 +23,6 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, Instant};
 use std::ffi::OsString;
-use std::str::FromStr;
 use structopt::StructOpt;
 use symcc::{AflConfig, AflMap, AflShowmapResult, SymCC, TestcaseDir};
 use tempfile::tempdir;
@@ -338,7 +337,7 @@ fn main() -> Result<()> {
                 let filename = input.file_name().unwrap().to_string_lossy();
                 if filename.starts_with("id:") {
                     let id_str = filename.get(3..9).unwrap();
-                    let id = FromStr::from_str(id_str).unwrap_or(0);
+                    let id = id_str.parse().unwrap_or(0);
                     if id >= options.start_id {
                         state.test_input(&input, &symcc, &afl_config)?
                     } else {
