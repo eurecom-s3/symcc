@@ -56,7 +56,7 @@ struct CLI {
     force_qemu_mode: bool,
 
     /// starting ID in the sync fuzzer queue - a poor person's restart option
-    #[structopt(short = "S")]
+    #[structopt(short = "S", default_value("0"), required(false))]
     start_id: u32,
 
     /// Program under test
