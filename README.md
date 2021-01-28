@@ -6,7 +6,7 @@ compiler inserts code that computes symbolic expressions for each value in the
 program. The actual computation happens through calls to the support library at
 run time.
 
-To build the pass and the support library, make sure that LLVM 8, 9 or 10 and Z3
+To build the pass and the support library, make sure that LLVM 8, 9, 10 or 11 and Z3
 version 4.5 or later, as well as a C++ compiler with support for C++17 are
 installed. (Alternatively, see below for using the provided Dockerfile.) Make
 sure to pull the QSYM code:
