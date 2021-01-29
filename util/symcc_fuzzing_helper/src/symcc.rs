@@ -169,8 +169,9 @@ impl TestcaseDir {
             current_id: 0,
         };
 
-        fs::create_dir(&dir.path)
-            .with_context(|| format!("Failed to create directory {}", dir.path.display()))?;
+        fs::create_dir(&dir.path).with_context(|| {
+            format!("Failed to create directory {}", dir.path.display())
+        })?;
         Ok(dir)
     }
 }
@@ -222,19 +223,19 @@ pub fn copy_testcase(
 #[derive(Debug)]
 pub struct AflConfig {
     /// The location of the afl-showmap program.
-    show_map: PathBuf,
+    pub show_map: PathBuf,
 
     /// The command that AFL uses to invoke the target program.
     pub target_command: Vec<OsString>,
 
     /// Do we need to pass data to standard input?
-    use_standard_input: bool,
+    pub use_standard_input: bool,
 
     /// Are we using AFL's QEMU mode?
     pub use_qemu_mode: bool,
 
     /// The fuzzer instance's queue of test cases.
-    queue: PathBuf,
+    pub queue: PathBuf,
 }
 
 /// Possible results of afl-showmap.
@@ -260,14 +261,14 @@ impl AflConfig {
             )
         })?;
         let mut afl_stats = String::new();
-        afl_stats_file
-            .read_to_string(&mut afl_stats)
-            .with_context(|| {
+        afl_stats_file.read_to_string(&mut afl_stats).with_context(
+            || {
                 format!(
                     "Failed to read the fuzzer's stats at {}",
                     afl_stats_file_path.display()
                 )
-            })?;
+            },
+        )?;
         let afl_command: Vec<_> = afl_stats
             .lines()
             .find(|&l| l.starts_with("command_line"))
@@ -283,18 +284,15 @@ impl AflConfig {
             .skip_while(|s| **s != "--")
             .map(OsString::from)
             .collect();
-        let afl_binary_dir = Path::new(
-            afl_command
-                .get(0)
-                .expect("The AFL command is unexpectedly short"),
-        )
-        .parent()
-        .unwrap();
+        let afl_binary_dir = Path::new(afl_command.get(0).expect(
+            "The AFL command is unexpectedly short",
+        )).parent()
+            .unwrap();
 
         Ok(AflConfig {
             show_map: afl_binary_dir.join("afl-showmap"),
             use_standard_input: !afl_target_command.contains(&"@@".into()) &&
-                                !afl_command.contains(&"-f".into()),
+                !afl_command.contains(&"-f".into()),
             use_qemu_mode: afl_command.contains(&"-Q".into()),
             target_command: afl_target_command,
             queue: fuzzer_output.as_ref().join("queue"),
@@ -354,20 +352,17 @@ impl AflConfig {
         if self.use_standard_input {
             io::copy(
                 &mut File::open(&testcase)?,
-                afl_show_map_child
-                    .stdin
-                    .as_mut()
-                    .expect("Failed to open the stardard input of afl-showmap"),
-            )
-            .context("Failed to pipe the test input to afl-showmap")?;
+                afl_show_map_child.stdin.as_mut().expect(
+                    "Failed to open the stardard input of afl-showmap",
+                ),
+            ).context("Failed to pipe the test input to afl-showmap")?;
         }
 
-        let afl_show_map_status = afl_show_map_child
-            .wait()
-            .context("Failed to wait for afl-showmap")?;
+        let afl_show_map_status = afl_show_map_child.wait().context(
+            "Failed to wait for afl-showmap",
+        )?;
         log::debug!("afl-showmap returned {}", &afl_show_map_status);
-        match afl_show_map_status.code()
-        {
+        match afl_show_map_status.code() {
             Some(0) => {
                 let map = AflMap::load(&testcase_bitmap).with_context(|| {
                     format!(
@@ -377,8 +372,8 @@ impl AflConfig {
                     )
                 });
                 match map {
-                  Ok(m) => Ok(AflShowmapResult::Success(Box::new(m))),
-                  _ => Ok(AflShowmapResult::Ignore),
+                    Ok(m) => Ok(AflShowmapResult::Success(Box::new(m))),
+                    _ => Ok(AflShowmapResult::Ignore),
                 }
             }
             Some(1) => Ok(AflShowmapResult::Hang),
@@ -506,17 +501,13 @@ impl SymCC {
                         self.input_file.display()
                     )
                 })?,
-                child
-                    .stdin
-                    .as_mut()
-                    .expect("Failed to pipe to the child's standard input"),
-            )
-            .context("Failed to pipe the test input to SymCC")?;
+                child.stdin.as_mut().expect(
+                    "Failed to pipe to the child's standard input",
+                ),
+            ).context("Failed to pipe the test input to SymCC")?;
         }
 
-        let result = child
-            .wait_with_output()
-            .context("Failed to wait for SymCC")?;
+        let result = child.wait_with_output().context("Failed to wait for SymCC")?;
         let total_time = start.elapsed();
         let killed = match result.status.code() {
             Some(code) => {
