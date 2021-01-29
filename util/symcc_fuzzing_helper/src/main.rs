@@ -51,11 +51,15 @@ struct CLI {
     #[structopt(short = "v")]
     verbose: bool,
 
+    /// Wait until sync target shows up
+    #[structopt(short = "W")]
+    wait_for_sync: bool,
+
     /// force -Q qemu_mode
     #[structopt(short = "Q")]
     force_qemu_mode: bool,
 
-    /// starting ID in the sync fuzzer queue - a poor person's restart option
+    /// Minimum ID in the sync fuzzer queue (restart option workaround)
     #[structopt(short = "S", default_value("0"), required(false))]
     start_id: u32,
 
@@ -277,6 +281,7 @@ impl State {
     }
 }
 
+#[allow(unused_assignments)]
 fn main() -> Result<()> {
     let options = CLI::from_args();
     env_logger::builder()
@@ -287,32 +292,53 @@ fn main() -> Result<()> {
         })
         .init();
 
-    if !options.output_dir.is_dir() {
-        log::error!(
-            "The directory {} does not exist!",
-            options.output_dir.display()
-        );
-        return Ok(());
-    }
-
+    let mut errors = 1;
     let afl_queue = options.output_dir.join(&options.fuzzer_name).join("queue");
-    if !afl_queue.is_dir() {
-        log::error!("The AFL queue {} does not exist!", afl_queue.display());
-        return Ok(());
-    }
-
     let symcc_dir = options.output_dir.join(&options.name);
-    if symcc_dir.is_dir() {
-        log::error!(
-            "{} already exists; we do not currently support resuming",
-            symcc_dir.display()
-        );
-        return Ok(());
+    let mut afl_config;
+
+    while errors != 0 {
+
+        errors = 0;
+
+        if !options.output_dir.is_dir() {
+            log::error!("The directory {} does not exist!",
+                options.output_dir.display());
+            errors += 1;
+            //return Ok(());
+        }
+
+        if !afl_queue.is_dir() {
+            log::error!("The AFL queue {} does not exist!", afl_queue.display());
+            errors += 1;
+            //return Ok(());
+        }
+
+        match AflConfig::load(options.output_dir.join(&options.fuzzer_name)) {
+            Ok(result) => afl_config = result,
+            Err(_) => { 
+                log::error!("Could not load afl-fuzz fuzzer_stats");
+                errors += 1
+            },
+        }
+
+        if errors > 0 { 
+            if !options.wait_for_sync {
+                return Ok(());
+            }
+            log::error!("waiting for afl-fuzz to start for 5 seconds ...");
+            thread::sleep(Duration::from_secs(5));
+        }
     }
 
+    if symcc_dir.is_dir() {
+        log::error!("{} already exists; removing ...", symcc_dir.display());
+        fs::remove_dir_all(&symcc_dir)?;
+    }
+
+    afl_config = AflConfig::load(options.output_dir.join(&options.fuzzer_name))?;
     let symcc = SymCC::new(symcc_dir.clone(), &options.command);
     log::debug!("SymCC configuration: {:?}", &symcc);
-    let mut afl_config = AflConfig::load(options.output_dir.join(&options.fuzzer_name))?;
     if options.force_qemu_mode && !afl_config.use_qemu_mode {
         // We need to overwrite the binary afl-showmap is running as the one
         // in the afl config is an instrumented one
