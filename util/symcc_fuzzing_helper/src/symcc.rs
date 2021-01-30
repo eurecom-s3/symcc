@@ -338,6 +338,7 @@ impl AflConfig {
             .args(&["-t", "5000", "-m", "none", "-b", "-o"])
             .arg(testcase_bitmap.as_ref())
             .args(insert_input_file(&self.target_command, &testcase))
+            .env("AFL_MAP_SIZE", "65535")  // req for afl++
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .stdin(if self.use_standard_input {
