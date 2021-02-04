@@ -393,6 +393,9 @@ pub struct SymCC {
     /// The cumulative bitmap for branch pruning.
     bitmap: PathBuf,
 
+    /// Actually use the bitmap?
+    use_bitmap: bool,
+
     /// The place to store the current input.
     input_file: PathBuf,
 
@@ -414,12 +417,13 @@ pub struct SymCCResult {
 
 impl SymCC {
     /// Create a new SymCC configuration.
-    pub fn new(output_dir: PathBuf, command: &[String]) -> Self {
+    pub fn new(output_dir: PathBuf, command: &[String], use_bitmap: bool) -> Self {
         let input_file = output_dir.join(".cur_input");
 
         SymCC {
             use_standard_input: !command.contains(&String::from("@@")),
             bitmap: output_dir.join("bitmap"),
+            use_bitmap,
             command: insert_input_file(command, &input_file),
             input_file,
         }
@@ -475,13 +479,17 @@ impl SymCC {
 
         let mut analysis_command = Command::new("timeout");
         analysis_command
-            .args(&["-k", "5", &TIMEOUT.to_string()])
+            .args(&["-k", "15", &TIMEOUT.to_string()])
             .args(&self.command)
             .env("SYMCC_ENABLE_LINEARIZATION", "1")
             .env("SYMCC_AFL_COVERAGE_MAP", &self.bitmap)
             .env("SYMCC_OUTPUT_DIR", output_dir.as_ref())
             .stdout(Stdio::null())
             .stderr(Stdio::piped()); // capture SMT logs
+
+        if self.use_bitmap {
+            analysis_command.env("SYMCC_AFL_COVERAGE_MAP", &self.bitmap);
+        }
 
         if self.use_standard_input {
             analysis_command.stdin(Stdio::piped());

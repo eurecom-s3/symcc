@@ -247,17 +247,20 @@ impl State {
             "Failed to run SymCC",
         )?;
         for new_test in symcc_result.test_cases.iter() {
-            let res = process_new_testcase(&new_test, &input, &tmp_dir, &afl_config, self);
 
-            let res = match res {
-                Ok(result) => result,
-                Err(_) => continue,
-            };
+            if afl_config.use_qemu_mode {
+                let res = process_new_testcase(&new_test, &input, &tmp_dir, &afl_config, self);
 
-            num_total += 1;
-            if res == TestcaseResult::New {
-                log::debug!("Test case is interesting");
-                num_interesting += 1;
+                let res = match res {
+                    Ok(result) => result,
+                    Err(_) => continue,
+                };
+
+                num_total += 1;
+                if res == TestcaseResult::New {
+                    log::debug!("Test case is interesting");
+                    num_interesting += 1;
+                }
             }
         }
 
@@ -345,8 +348,6 @@ fn main() -> Result<()> {
         fs::remove_dir_all(&symcc_dir)?;
     }
 
-    let symcc = SymCC::new(symcc_dir.clone(), &options.command);
-    log::debug!("SymCC configuration: {:?}", &symcc);
     if options.force_qemu_mode && !afl_config.use_qemu_mode {
         // We need to overwrite the binary afl-showmap is running as the one
         // in the afl config is an instrumented one
@@ -357,6 +358,14 @@ fn main() -> Result<()> {
         afl_config.use_qemu_mode = true;
     }
     log::debug!("AFL configuration: {:?}", &afl_config);
+
+    let symcc = SymCC::new(
+        symcc_dir.clone(),
+        &options.command,
+        afl_config.use_qemu_mode,
+    );
+    log::debug!("SymCC configuration: {:?}", &symcc);
+
     let mut state = State::initialize(symcc_dir)?;
 
     loop {
