@@ -119,13 +119,13 @@ contains detailed instructions to replicate our experiments, as well as the raw
 results that we obtained.
 
 ### Video demonstration
-A practical introduction to the SymCC tool can be found on [YouTube](https://www.youtube.com/watch?v=htDrNBiL7Y8)
+On YouTube you can find [a practical introduction to SymCC](https://www.youtube.com/watch?v=htDrNBiL7Y8) as well as a video on [how to combine AFL and SymCC](https://www.youtube.com/watch?v=zmC-ptp3W3k)
 
 ## Building a Docker image
 
 If you prefer a Docker container over building SymCC natively, just tell Docker
 to build the image after pulling the QSYM code as above. (Be warned though: the
-Docker image enables optional C++ support and builds Z3 from source, so creating
+Docker image enables optional C++ support from source, so creating
 the image can take quite some time!)
 
 ```
