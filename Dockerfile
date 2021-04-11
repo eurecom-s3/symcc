@@ -46,6 +46,15 @@ RUN git clone -b llvmorg-10.0.1 --depth 1 https://github.com/llvm/llvm-project.g
 
 # Build a version of SymCC with the simple backend to compile libc++
 COPY . /symcc_source
+
+# Init submodules if they are not initialiazed yet
+WORKDIR /symcc_source
+RUN if git submodule status | grep "^-">/dev/null ; then \
+    echo "Initializing submodules"; \
+    git submodule init; \
+    git submodule update; \
+    fi
+
 WORKDIR /symcc_build_simple
 RUN cmake -G Ninja \
         -DQSYM_BACKEND=OFF \
