@@ -6,10 +6,21 @@ compiler inserts code that computes symbolic expressions for each value in the
 program. The actual computation happens through calls to the support library at
 run time.
 
-To build the pass and the support library, make sure that LLVM 8, 9, 10 or 11 and Z3
-version 4.5 or later, as well as a C++ compiler with support for C++17 are
-installed. (Alternatively, see below for using the provided Dockerfile.) Make
-sure to pull the QSYM code:
+To build the pass and the support library, make sure that LLVM 8, 9, 10 or 11
+and Z3 version 4.5 or later, as well as a C++ compiler with support for C++17
+are installed. "lit" is also needed which is not always packaged with LLVM.
+
+Under Ubuntu groovy the following one liner should install all required
+packages:
+
+```
+sudo apt install -y git cargo clang-10 cmake g++ git libz3-dev llvm-10-dev llvm-10-tools ninja-build python2 python3-pip zlib1g-dev && sudo pip3 install lit
+```
+Alternatively, see below for using the provided Dockerfile, or the file
+`util/quicktest.sh` for exact steps to perform under Ubuntu (or use with the
+provided Vagrant file).
+
+Make sure to pull the QSYM code:
 
 ```
 $ git submodule init
