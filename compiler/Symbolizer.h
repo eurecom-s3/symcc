@@ -125,6 +125,7 @@ public:
   void visitFPToUI(llvm::FPToUIInst &I);
   void visitCastInst(llvm::CastInst &I);
   void visitPHINode(llvm::PHINode &I);
+  void visitInsertValueInst(llvm::InsertValueInst &I);
   void visitExtractValueInst(llvm::ExtractValueInst &I);
   void visitSwitchInst(llvm::SwitchInst &I);
   void visitUnreachableInst(llvm::UnreachableInst &);
@@ -291,6 +292,10 @@ private:
     return llvm::ConstantInt::get(intPtrType,
                                   reinterpret_cast<uint64_t>(pointer));
   }
+
+  /// Compute the offset of a member in a (possibly nested) aggregate.
+  uint64_t aggregateMemberOffset(llvm::Type *aggregateType,
+                                 llvm::ArrayRef<unsigned> indices) const;
 
   const Runtime runtime;
 

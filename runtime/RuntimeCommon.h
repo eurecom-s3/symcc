@@ -152,6 +152,8 @@ void _sym_write_memory(uint8_t *addr, size_t length, SymExpr expr,
 void _sym_memcpy(uint8_t *dest, const uint8_t *src, size_t length);
 void _sym_memset(uint8_t *memory, SymExpr value, size_t length);
 void _sym_memmove(uint8_t *dest, const uint8_t *src, size_t length);
+SymExpr _sym_build_insert(SymExpr target, SymExpr to_insert, uint64_t offset,
+                          bool little_endian);
 SymExpr _sym_build_extract(SymExpr expr, uint64_t offset, uint64_t length,
                            bool little_endian);
 

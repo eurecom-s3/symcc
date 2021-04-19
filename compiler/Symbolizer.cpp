@@ -749,30 +749,27 @@ void Symbolizer::visitPHINode(PHINode &I) {
   symbolicExpressions[&I] = exprPHI;
 }
 
+void Symbolizer::visitInsertValueInst(InsertValueInst &I) {
+  IRBuilder<> IRB(&I);
+  auto insert = buildRuntimeCall(
+      IRB, runtime.buildInsert,
+      {{I.getAggregateOperand(), true},
+       {I.getInsertedValueOperand(), true},
+       {IRB.getInt64(aggregateMemberOffset(I.getAggregateOperand()->getType(),
+                                           I.getIndices())),
+        false},
+       {IRB.getInt8(isLittleEndian(I.getInsertedValueOperand()->getType()) ? 1 : 0), false}});
+  registerSymbolicComputation(insert, &I);
+}
+
 void Symbolizer::visitExtractValueInst(ExtractValueInst &I) {
-  uint64_t offset = 0;
-  auto *indexedType = I.getAggregateOperand()->getType();
-  for (auto index : I.indices()) {
-    // All indices in an extractvalue instruction are constant:
-    // https://llvm.org/docs/LangRef.html#extractvalue-instruction
-
-    if (auto *structType = dyn_cast<StructType>(indexedType)) {
-      offset += dataLayout.getStructLayout(structType)->getElementOffset(index);
-      indexedType = structType->getElementType(index);
-    } else {
-      auto *arrayType = cast<ArrayType>(indexedType);
-      unsigned elementSize =
-          dataLayout.getTypeAllocSize(arrayType->getArrayElementType());
-      offset += elementSize * index;
-      indexedType = arrayType->getArrayElementType();
-    }
-  }
-
   IRBuilder<> IRB(&I);
   auto extract = buildRuntimeCall(
       IRB, runtime.buildExtract,
       {{I.getAggregateOperand(), true},
-       {IRB.getInt64(offset), false},
+       {IRB.getInt64(aggregateMemberOffset(I.getAggregateOperand()->getType(),
+                                           I.getIndices())),
+        false},
        {IRB.getInt64(dataLayout.getTypeStoreSize(I.getType())), false},
        {IRB.getInt8(isLittleEndian(I.getType()) ? 1 : 0), false}});
   registerSymbolicComputation(extract, &I);
@@ -814,7 +811,7 @@ void Symbolizer::visitUnreachableInst(UnreachableInst & /*unused*/) {
 void Symbolizer::visitInstruction(Instruction &I) {
   // Some instructions are only used in the context of exception handling, which
   // we ignore for now.
-  if (isa<LandingPadInst>(I) || isa<ResumeInst>(I) || isa<InsertValueInst>(I))
+  if (isa<LandingPadInst>(I) || isa<ResumeInst>(I))
     return;
 
   errs() << "Warning: unknown instruction " << I
@@ -921,4 +918,27 @@ void Symbolizer::tryAlternative(IRBuilder<> &IRB, Value *V) {
     registerSymbolicComputation(SymbolicComputation(
         concreteDestExpr, pushAssertion, {{V, 0, destAssertion}}));
   }
+}
+
+uint64_t Symbolizer::aggregateMemberOffset(Type *aggregateType,
+                                           ArrayRef<unsigned> indices) const {
+  uint64_t offset = 0;
+  auto *indexedType = aggregateType;
+  for (auto index : indices) {
+    // All indices in an extractvalue instruction are constant:
+    // https://llvm.org/docs/LangRef.html#extractvalue-instruction
+
+    if (auto *structType = dyn_cast<StructType>(indexedType)) {
+      offset += dataLayout.getStructLayout(structType)->getElementOffset(index);
+      indexedType = structType->getElementType(index);
+    } else {
+      auto *arrayType = cast<ArrayType>(indexedType);
+      unsigned elementSize =
+          dataLayout.getTypeAllocSize(arrayType->getArrayElementType());
+      offset += elementSize * index;
+      indexedType = arrayType->getArrayElementType();
+    }
+  }
+
+  return offset;
 }
