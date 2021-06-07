@@ -134,6 +134,12 @@ void _sym_write_memory(uint8_t *addr, size_t length, SymExpr expr,
   }
 }
 
+#ifdef COMMON_ONLY
+
+// these builders should be implementable by the runtime.
+
+#else
+
 SymExpr _sym_build_extract(SymExpr expr, uint64_t offset, uint64_t length,
                            bool little_endian) {
   size_t totalBits = _sym_bits_helper(expr);
@@ -192,6 +198,7 @@ SymExpr _sym_build_insert(SymExpr target, SymExpr to_insert, uint64_t offset,
 
   return result;
 }
+#endif
 
 void _sym_register_expression_region(SymExpr *start, size_t length) {
   registerExpressionRegion({start, length});

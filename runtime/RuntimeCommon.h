@@ -25,6 +25,8 @@
 #ifndef RUNTIMECOMMON_H
 #define RUNTIMECOMMON_H
 
+#include <stddef.h>
+
 #ifdef __cplusplus
 #include <cstdint>
 extern "C" {
@@ -126,7 +128,9 @@ SymExpr _sym_build_bool_to_bits(SymExpr expr, uint8_t bits);
  */
 SymExpr _sym_concat_helper(SymExpr a, SymExpr b);
 SymExpr _sym_extract_helper(SymExpr expr, size_t first_bit, size_t last_bit);
+#ifndef COMMON_ONLY
 size_t _sym_bits_helper(SymExpr expr);
+#endif
 
 /*
  * Function-call helpers

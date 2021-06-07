@@ -23,8 +23,6 @@
 
 #include <Runtime.h>
 
-#include <z3.h>
-
 //
 // This file is dedicated to the management of shadow memory.
 //
@@ -84,9 +82,11 @@ public:
   }
 
   SymExpr operator*() {
+#ifndef COMMON_ONLY // _sym_bits_helper may not be implemeted
     assert((shadow_ == nullptr || *shadow_ == nullptr ||
             _sym_bits_helper(*shadow_) == 8) &&
            "Shadow memory always represents bytes");
+#endif
     return shadow_ != nullptr ? *shadow_ : nullptr;
   }
 
