@@ -23,3 +23,5 @@ target_include_directories(SymRuntime PRIVATE
 set_target_properties(SymRuntime PROPERTIES COMPILE_FLAGS "-Werror")
 
 add_definitions(-DCOMMON_ONLY)
+
+install(TARGETS SymRuntime ARCHIVE DESTINATION ${CMAKE_INSTALL_PREFIX})
