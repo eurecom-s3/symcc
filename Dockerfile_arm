@@ -35,8 +35,6 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 RUN pip3 install lit
 
-RUN echo $(ls -1 /usr/bin/llvm-config*)
-
 # Build AFL.
 RUN git clone -b v2.56b https://github.com/google/AFL.git afl \
     && cd afl \
