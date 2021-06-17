@@ -12,7 +12,9 @@
 # You should have received a copy of the GNU General Public License along with
 # SymCC. If not, see <https://www.gnu.org/licenses/>.
 
-add_library(SymRuntime STATIC
+cmake_minimum_required(VERSION 3.12)
+
+add_library(SymRuntime SHARED
   ${SHARED_RUNTIME_SOURCES}
   Runtime.cpp)
 
@@ -22,6 +24,10 @@ target_include_directories(SymRuntime PRIVATE
 
 set_target_properties(SymRuntime PROPERTIES COMPILE_FLAGS "-Werror")
 
-add_definitions(-DCOMMON_ONLY)
+find_package(Corrosion REQUIRED)
 
-install(TARGETS SymRuntime ARCHIVE DESTINATION ${CMAKE_INSTALL_PREFIX})
+corrosion_import_crate(MANIFEST_PATH ../../../runtime/Cargo.toml)
+
+target_link_libraries(SymRuntime PUBLIC runtime)
+
+add_definitions(-DCOMMON_ONLY)

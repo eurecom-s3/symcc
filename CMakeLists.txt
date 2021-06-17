@@ -15,6 +15,7 @@
 cmake_minimum_required(VERSION 3.5)
 project(SymbolicCompiler)
 
+option(RUST_BACKEND "Build just the common backend code, linked with the rust runtime" OFF)
 option(QSYM_BACKEND "Use the Qsym backend instead of our own" OFF)
 option(TARGET_32BIT "Make the compiler work correctly with -m32" OFF)
 
@@ -29,6 +30,7 @@ set(SYM_RUNTIME_BUILD_ARGS
   -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
   -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
   -DCMAKE_SHARED_LINKER_FLAGS=${CMAKE_SHARED_LINKER_FLAGS}
+  -DRUST_BACKEND=${RUST_BACKEND}
   -DQSYM_BACKEND=${QSYM_BACKEND}
   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
   -DZ3_TRUST_SYSTEM_VERSION=${Z3_TRUST_SYSTEM_VERSION})
