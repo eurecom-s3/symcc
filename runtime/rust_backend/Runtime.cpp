@@ -61,11 +61,6 @@ void _sym_initialize(void)
   }
 }
 
-/* No call-stack tracing */
-void _sym_notify_call(uintptr_t) {}
-void _sym_notify_ret(uintptr_t) {}
-void _sym_notify_basic_block(uintptr_t) {}
-
 /* No debugging */
 const char *_sym_expr_to_string(SymExpr)
 {
