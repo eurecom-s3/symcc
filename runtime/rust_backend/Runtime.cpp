@@ -48,7 +48,7 @@ void _sym_initialize(void)
 
   loadConfig();
   initLibcWrappers();
-  std::cerr << "This is SymCC running with the common backend" << std::endl
+  std::cerr << "This is SymCC running with the rust backend" << std::endl
             << std::endl;
 
   if (g_config.logFile.empty())
