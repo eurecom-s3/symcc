@@ -12,7 +12,7 @@
 # You should have received a copy of the GNU General Public License along with
 # SymCC. If not, see <https://www.gnu.org/licenses/>.
 
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.19)
 
 add_library(SymRuntime SHARED
   ${SHARED_RUNTIME_SOURCES}
@@ -27,6 +27,20 @@ set_target_properties(SymRuntime PROPERTIES COMPILE_FLAGS "-Werror")
 find_package(Corrosion REQUIRED)
 
 corrosion_import_crate(MANIFEST_PATH ../../../runtime/Cargo.toml)
+
+# enfore panic=abort on the rust runtime, as unwinding will never be what we want (and may cause weird behavior)
+set_property(
+        TARGET runtime
+        APPEND
+        PROPERTY CORROSION_ENVIRONMENT_VARIABLES
+        "CARGO_PROFILE_DEV_PANIC=abort"
+)
+set_property(
+        TARGET runtime
+        APPEND
+        PROPERTY CORROSION_ENVIRONMENT_VARIABLES
+        "CARGO_PROFILE_RELEASE_PANIC=abort"
+)
 
 target_link_libraries(SymRuntime PUBLIC runtime)
 
