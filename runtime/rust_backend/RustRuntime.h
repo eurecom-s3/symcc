@@ -141,7 +141,7 @@ void _rsym_notify_basic_block(uintptr_t site_id);
 /*
  * Garbage collection
  */
-void _rsym_expression_unreachable(RSymExpr expr);
+void _rsym_expression_unreachable(RSymExpr *expressions, size_t num_elements);
 
 #ifdef __cplusplus
 }

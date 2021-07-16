@@ -325,15 +325,21 @@ void _sym_collect_garbage() {
   auto startSize = allocatedExpressions.size();
 #endif
 
+  std::vector<RSymExpr> unreachable_expressions;
+
   auto reachableExpressions = collectReachableExpressions();
   for (auto expr_it = allocatedExpressions.begin();
        expr_it != allocatedExpressions.end();) {
     if (reachableExpressions.count(*expr_it) == 0) {
-      _rsym_expression_unreachable(symexpr_id(*expr_it));
+      unreachable_expressions.push_back(symexpr_id(*expr_it));
       expr_it = allocatedExpressions.erase(expr_it);
     } else {
       ++expr_it;
     }
+  }
+  if (unreachable_expressions.size() > 0) {
+    _rsym_expression_unreachable(unreachable_expressions.data(),
+                                 unreachable_expressions.size());
   }
 
 #ifndef NDEBUG
