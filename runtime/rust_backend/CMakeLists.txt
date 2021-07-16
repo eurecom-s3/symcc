@@ -43,5 +43,3 @@ set_property(
 )
 
 target_link_libraries(SymRuntime PUBLIC runtime)
-
-add_definitions(-DCOMMON_ONLY)
