@@ -14,6 +14,7 @@
 
 #ifndef RUNTIME_H
 #define RUNTIME_H
+#include <stdbool.h>
 
 typedef void* SymExpr;
 #include <RuntimeCommon.h>
