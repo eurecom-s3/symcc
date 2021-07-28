@@ -23,8 +23,6 @@
 #ifndef RUSTRUNTIME_H
 #define RUSTRUNTIME_H
 
-typedef uintptr_t RSymExpr;
-
 #include <stddef.h>
 
 #ifdef __cplusplus
@@ -33,6 +31,8 @@ extern "C" {
 #else
 #include <stdint.h>
 #endif
+
+typedef uintptr_t RSymExpr;
 
 /*
  * Construction of simple values
