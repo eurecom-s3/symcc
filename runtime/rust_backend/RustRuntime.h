@@ -39,7 +39,7 @@ typedef uintptr_t RSymExpr;
  */
 RSymExpr _rsym_build_integer(uint64_t value, uint8_t bits);
 RSymExpr _rsym_build_integer128(uint64_t high, uint64_t low);
-RSymExpr _rsym_build_float(double value, int is_double);
+RSymExpr _rsym_build_float(double value, bool is_double);
 RSymExpr _rsym_build_null_pointer(void);
 RSymExpr _rsym_build_true(void);
 RSymExpr _rsym_build_false(void);
@@ -109,10 +109,10 @@ RSymExpr _rsym_build_float_unordered_not_equal(RSymExpr a, RSymExpr b);
 RSymExpr _rsym_build_sext(RSymExpr expr, uint8_t bits);
 RSymExpr _rsym_build_zext(RSymExpr expr, uint8_t bits);
 RSymExpr _rsym_build_trunc(RSymExpr expr, uint8_t bits);
-RSymExpr _rsym_build_bswap(RSymExpr expr);
-RSymExpr _rsym_build_int_to_float(RSymExpr value, int is_double, int is_signed);
-RSymExpr _rsym_build_float_to_float(RSymExpr expr, int to_double);
-RSymExpr _rsym_build_bits_to_float(RSymExpr expr, int to_double);
+RSymExpr _rsym_build_int_to_float(RSymExpr value, bool is_double,
+                                  bool is_signed);
+RSymExpr _rsym_build_float_to_float(RSymExpr expr, bool to_double);
+RSymExpr _rsym_build_bits_to_float(RSymExpr expr, bool to_double);
 RSymExpr _rsym_build_float_to_bits(RSymExpr expr);
 RSymExpr _rsym_build_float_to_signed_integer(RSymExpr expr, uint8_t bits);
 RSymExpr _rsym_build_float_to_unsigned_integer(RSymExpr expr, uint8_t bits);
@@ -127,7 +127,7 @@ RSymExpr _rsym_extract_helper(RSymExpr expr, size_t first_bit, size_t last_bit);
 /*
  * Constraint handling
  */
-void _rsym_push_path_constraint(RSymExpr constraint, int taken,
+void _rsym_push_path_constraint(RSymExpr constraint, bool taken,
                                 uintptr_t site_id);
 RSymExpr _rsym_get_input_byte(size_t offset);
 
