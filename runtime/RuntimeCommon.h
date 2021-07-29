@@ -25,8 +25,6 @@
 #ifndef RUNTIMECOMMON_H
 #define RUNTIMECOMMON_H
 
-#include <stddef.h>
-
 #ifdef __cplusplus
 #include <cstdint>
 extern "C" {

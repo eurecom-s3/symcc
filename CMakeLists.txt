@@ -15,8 +15,8 @@
 cmake_minimum_required(VERSION 3.5)
 project(SymbolicCompiler)
 
-option(RUST_BACKEND "Build just the common backend code, linked with the rust runtime" OFF)
 option(QSYM_BACKEND "Use the Qsym backend instead of our own" OFF)
+option(RUST_BACKEND "Build the support code required for a Rust backend as a static archive." OFF)
 option(TARGET_32BIT "Make the compiler work correctly with -m32" OFF)
 
 # We need to build the runtime as an external project because CMake otherwise
