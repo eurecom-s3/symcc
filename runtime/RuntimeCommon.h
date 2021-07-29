@@ -26,9 +26,11 @@
 #define RUNTIMECOMMON_H
 
 #ifdef __cplusplus
+#include <cstddef> // for size_t
 #include <cstdint>
 extern "C" {
 #else
+#include <stddef.h> // for size_t
 #include <stdint.h>
 #endif
 
