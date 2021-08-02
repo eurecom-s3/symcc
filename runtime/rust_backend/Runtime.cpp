@@ -239,7 +239,7 @@ SymExpr _sym_build_zext(SymExpr expr, uint8_t bits) {
 
 SymExpr _sym_build_trunc(SymExpr expr, uint8_t bits) {
   return registerExpression(
-      symexpr(_rsym_build_zext(symexpr_id(expr), bits), bits));
+      symexpr(_rsym_build_trunc(symexpr_id(expr), bits), bits));
 }
 
 SymExpr _sym_build_int_to_float(SymExpr expr, int is_double, int is_signed) {
