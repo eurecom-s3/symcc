@@ -1,3 +1,5 @@
+[![Compile and test SymCC](https://github.com/eurecom-s3/symcc/actions/workflows/run_tests.yml/badge.svg)](https://github.com/eurecom-s3/symcc/actions/workflows/run_tests.yml)
+
 # SymCC: efficient compiler-based symbolic execution
 
 SymCC is a compiler wrapper which embeds symbolic execution into the program
