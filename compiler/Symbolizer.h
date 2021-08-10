@@ -20,6 +20,7 @@
 #include <llvm/IR/InstVisitor.h>
 #include <llvm/IR/ValueMap.h>
 #include <llvm/Support/raw_ostream.h>
+#include <optional>
 
 #include "Runtime.h"
 
