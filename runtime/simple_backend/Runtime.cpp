@@ -243,6 +243,10 @@ DEF_BINARY_EXPR_BUILDER(float_ordered_equal, fpa_eq)
 
 #undef DEF_BINARY_EXPR_BUILDER
 
+Z3_ast _sym_build_ite(Z3_ast cond, Z3_ast a, Z3_ast b) {
+  return registerExpression(Z3_mk_ite(g_context, cond, a, b));
+}
+
 Z3_ast _sym_build_fp_add(Z3_ast a, Z3_ast b) {
   return registerExpression(Z3_mk_fpa_add(g_context, g_rounding_mode, a, b));
 }
@@ -419,8 +423,8 @@ Z3_ast _sym_build_float_to_unsigned_integer(Z3_ast expr, uint8_t bits) {
 Z3_ast _sym_build_bool_to_bit(Z3_ast expr) {
   if (expr == nullptr)
     return nullptr;
-  return registerExpression(Z3_mk_ite(g_context, expr, _sym_build_integer(1, 1),
-                                      _sym_build_integer(0, 1)));
+  return _sym_build_ite(expr, _sym_build_integer(1, 1),
+                        _sym_build_integer(0, 1));
 }
 
 void _sym_push_path_constraint(Z3_ast constraint, int taken,

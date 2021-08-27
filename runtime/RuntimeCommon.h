@@ -99,6 +99,7 @@ SymExpr _sym_build_bool_or(SymExpr a, SymExpr b);
 SymExpr _sym_build_or(SymExpr a, SymExpr b);
 SymExpr _sym_build_bool_xor(SymExpr a, SymExpr b);
 SymExpr _sym_build_xor(SymExpr a, SymExpr b);
+SymExpr _sym_build_ite(SymExpr cond, SymExpr a, SymExpr b);
 
 SymExpr _sym_build_float_ordered_greater_than(SymExpr a, SymExpr b);
 SymExpr _sym_build_float_ordered_greater_equal(SymExpr a, SymExpr b);
