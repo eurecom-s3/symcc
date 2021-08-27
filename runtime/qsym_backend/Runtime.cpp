@@ -274,6 +274,13 @@ SymExpr _sym_build_not(SymExpr expr) {
       g_expr_builder->createNot(allocatedExpressions.at(expr)));
 }
 
+SymExpr _sym_build_ite(SymExpr cond, SymExpr a, SymExpr b) {
+  return registerExpression(
+    g_expr_builder->createIte(allocatedExpressions.at(cond),
+                              allocatedExpressions.at(a),
+                              allocatedExpressions.at(b)));
+}
+
 SymExpr _sym_build_sext(SymExpr expr, uint8_t bits) {
   if (expr == nullptr)
     return nullptr;
