@@ -430,6 +430,30 @@ SymExpr _sym_build_mul_overflow(SymExpr a, SymExpr b, bool is_signed,
   return buildOverflowResult(_sym_build_mul(a, b), overflow, little_endian);
 }
 
+SymExpr _sym_build_funnel_shift_left(SymExpr a, SymExpr b, SymExpr c) {
+  size_t bits = _sym_bits_helper(c);
+  SymExpr concat = _sym_concat_helper(a, b);
+  SymExpr shift = _sym_build_unsigned_rem(c, _sym_build_integer(bits, bits));
+
+  return _sym_extract_helper(_sym_build_shift_left(concat, shift), 0, bits);
+}
+
+SymExpr _sym_build_funnel_shift_right(SymExpr a, SymExpr b, SymExpr c) {
+  size_t bits = _sym_bits_helper(c);
+  SymExpr concat = _sym_concat_helper(a, b);
+  SymExpr shift = _sym_build_unsigned_rem(c, _sym_build_integer(bits, bits));
+
+  return _sym_extract_helper(_sym_build_logical_shift_right(concat, shift), 0,
+                             bits);
+}
+
+SymExpr _sym_build_abs(SymExpr expr) {
+  size_t bits = _sym_bits_helper(expr);
+  return _sym_build_ite(
+      _sym_build_signed_greater_equal(expr, _sym_build_integer(0, bits)), expr,
+      _sym_build_sub(_sym_build_integer(0, bits), expr));
+}
+
 void _sym_register_expression_region(SymExpr *start, size_t length) {
   registerExpressionRegion({start, length});
 }

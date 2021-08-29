@@ -60,6 +60,9 @@ struct Runtime {
   SymFnT buildUSubSat{};
   SymFnT buildSShlSat{};
   SymFnT buildUShlSat{};
+  SymFnT buildFshl{};
+  SymFnT buildFshr{};
+  SymFnT buildAbs{};
   SymFnT pushPathConstraint{};
   SymFnT getParameterExpression{};
   SymFnT setParameterExpression{};
