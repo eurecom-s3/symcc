@@ -51,6 +51,12 @@ struct Runtime {
   SymFnT buildBoolXor{};
   SymFnT buildBoolToBit{};
   SymFnT buildBitToBool{};
+  SymFnT buildSAddSat{};
+  SymFnT buildUAddSat{};
+  SymFnT buildSSubSat{};
+  SymFnT buildUSubSat{};
+  SymFnT buildSShlSat{};
+  SymFnT buildUShlSat{};
   SymFnT pushPathConstraint{};
   SymFnT getParameterExpression{};
   SymFnT setParameterExpression{};

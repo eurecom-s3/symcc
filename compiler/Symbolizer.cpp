@@ -284,6 +284,27 @@ void Symbolizer::handleIntrinsicCall(CallBase &I) {
     registerSymbolicComputation(swapped, &I);
     break;
   }
+
+#define DEF_SAT_ARITH_BUILDER(intrinsic_op, runtime_name)                      \
+  case Intrinsic::intrinsic_op##_sat: {                                        \
+    IRBuilder<> IRB(&I);                                                       \
+    auto result = buildRuntimeCall(IRB, runtime.build##runtime_name,           \
+                                   {I.getOperand(0), I.getOperand(1)});        \
+    registerSymbolicComputation(result, &I);                                   \
+    break;                                                                     \
+  }
+
+    DEF_SAT_ARITH_BUILDER(sadd, SAddSat)
+    DEF_SAT_ARITH_BUILDER(uadd, UAddSat)
+    DEF_SAT_ARITH_BUILDER(ssub, SSubSat)
+    DEF_SAT_ARITH_BUILDER(usub, USubSat)
+#if LLVM_VERSION_MAJOR > 11
+    DEF_SAT_ARITH_BUILDER(sshl, SShlSat)
+    DEF_SAT_ARITH_BUILDER(ushl, UShlSat)
+#endif
+
+#undef DEF_SAT_ARITH_BUILDER
+
   default:
     errs() << "Warning: unhandled LLVM intrinsic " << callee->getName()
            << "; the result will be concretized\n";

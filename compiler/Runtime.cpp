@@ -74,6 +74,13 @@ Runtime::Runtime(Module &M) {
   pushPathConstraint = import(M, "_sym_push_path_constraint", voidT, ptrT,
                               IRB.getInt1Ty(), intPtrType);
 
+  buildSAddSat = import(M, "_sym_build_sadd_sat", ptrT, ptrT, ptrT);
+  buildUAddSat = import(M, "_sym_build_uadd_sat", ptrT, ptrT, ptrT);
+  buildSSubSat = import(M, "_sym_build_ssub_sat", ptrT, ptrT, ptrT);
+  buildUSubSat = import(M, "_sym_build_usub_sat", ptrT, ptrT, ptrT);
+  buildSShlSat = import(M, "_sym_build_sshl_sat", ptrT, ptrT, ptrT);
+  buildUShlSat = import(M, "_sym_build_ushl_sat", ptrT, ptrT, ptrT);
+
   setParameterExpression =
       import(M, "_sym_set_parameter_expression", voidT, int8T, ptrT);
   getParameterExpression =
