@@ -90,6 +90,10 @@ Runtime::Runtime(Module &M) {
   buildSShlSat = import(M, "_sym_build_sshl_sat", ptrT, ptrT, ptrT);
   buildUShlSat = import(M, "_sym_build_ushl_sat", ptrT, ptrT, ptrT);
 
+  buildFshl = import(M, "_sym_build_funnel_shift_left", ptrT, ptrT, ptrT, ptrT);
+  buildFshr = import(M, "_sym_build_funnel_shift_right", ptrT, ptrT, ptrT, ptrT);
+  buildAbs = import(M, "_sym_build_abs", ptrT, ptrT);
+
   setParameterExpression =
       import(M, "_sym_set_parameter_expression", voidT, int8T, ptrT);
   getParameterExpression =

@@ -331,6 +331,27 @@ void Symbolizer::handleIntrinsicCall(CallBase &I) {
 
 #undef DEF_SAT_ARITH_BUILDER
 
+  case Intrinsic::fshl:
+  case Intrinsic::fshr: {
+    IRBuilder<> IRB(&I);
+    auto funnelShift = buildRuntimeCall(
+        IRB,
+        I.getIntrinsicID() == Intrinsic::fshl ? runtime.buildFshl
+                                              : runtime.buildFshr,
+        {I.getOperand(0), I.getOperand(1), I.getOperand(2)});
+    registerSymbolicComputation(funnelShift, &I);
+    break;
+  }
+#if LLVM_VERSION_MAJOR > 11
+  case Intrinsic::abs: {
+    // Integer absolute value
+
+    IRBuilder<> IRB(&I);
+    auto abs = buildRuntimeCall(IRB, runtime.buildAbs, I.getOperand(0));
+    registerSymbolicComputation(abs, &I);
+    break;
+  }
+#endif
   default:
     errs() << "Warning: unhandled LLVM intrinsic " << callee->getName()
            << "; the result will be concretized\n";
