@@ -180,15 +180,9 @@ void Symbolizer::handleIntrinsicCall(CallBase &I) {
   auto *callee = I.getCalledFunction();
 
   switch (callee->getIntrinsicID()) {
-  case Intrinsic::lifetime_start:
-  case Intrinsic::lifetime_end:
-  case Intrinsic::dbg_declare:
   case Intrinsic::dbg_value:
   case Intrinsic::is_constant:
   case Intrinsic::trap:
-  case Intrinsic::invariant_start:
-  case Intrinsic::invariant_end:
-  case Intrinsic::assume:
     // These are safe to ignore.
     break;
   case Intrinsic::memcpy: {
@@ -258,22 +252,13 @@ void Symbolizer::handleIntrinsicCall(CallBase &I) {
     registerSymbolicComputation(abs, &I);
     break;
   }
-  case Intrinsic::cttz:
-  case Intrinsic::ctpop:
-  case Intrinsic::ctlz: {
-    // Various bit-count operations. Expressing these symbolically is
-    // difficult, so for now we just concretize.
-
-    errs() << "Warning: losing track of symbolic expressions at bit-count "
-              "operation "
-           << I << "\n";
-    break;
-  }
-  case Intrinsic::returnaddress: {
+  case Intrinsic::returnaddress:
+  case Intrinsic::frameaddress:
+  case Intrinsic::addressofreturnaddress: {
     // Obtain the return address of the current function or one of its parents
     // on the stack. We just concretize.
 
-    errs() << "Warning: using concrete value for return address\n";
+    errs() << "Warning: using concrete value for return/frame address\n";
     break;
   }
   case Intrinsic::bswap: {
