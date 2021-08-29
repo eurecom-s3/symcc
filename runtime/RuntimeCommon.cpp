@@ -37,6 +37,51 @@ SymExpr g_return_value;
 std::array<SymExpr, kMaxFunctionArguments> g_function_arguments;
 // TODO make thread-local
 
+SymExpr buildMinSignedInt(uint8_t bits) {
+  return _sym_build_integer((uint64_t)(1) << (bits - 1), bits);
+}
+
+SymExpr buildMaxSignedInt(uint8_t bits) {
+  uint64_t mask = ((uint64_t)(1) << bits) - 1;
+  return _sym_build_integer(((uint64_t)(~0) & mask) >> 1, bits);
+}
+
+SymExpr buildMaxUnsignedInt(uint8_t bits) {
+  uint64_t mask = ((uint64_t)(1) << bits) - 1;
+  return _sym_build_integer((uint64_t)(~0) & mask, bits);
+}
+
+/// Construct an expression describing the in-memory representation of the
+/// bitcode structure {iN, i1} returned by the intrinsics for arithmetic with
+/// overflow (see
+/// https://llvm.org/docs/LangRef.html#arithmetic-with-overflow-intrinsics). The
+/// overflow parameter is expected to be a symbolic Boolean.
+SymExpr buildOverflowResult(SymExpr result_expr, SymExpr overflow,
+                            bool little_endian) {
+  auto result_bits = _sym_bits_helper(result_expr);
+  assert(result_bits % 8 == 0 &&
+         "Arithmetic with overflow on integers of invalid length");
+
+  // When storing {iN, i1} in memory, the compiler would insert padding between
+  // the two elements, extending the Boolean to the same size as the integer. We
+  // simulate the same here, taking endianness into account.
+
+  auto result_expr_mem =
+      little_endian ? _sym_build_bswap(result_expr) : result_expr;
+  auto overflow_byte = _sym_build_zext(_sym_build_bool_to_bit(overflow), 7);
+
+  // There's no padding if the result is a single byte.
+  if (result_bits == 8) {
+    return _sym_concat_helper(result_expr_mem, overflow_byte);
+  }
+
+  auto padding = _sym_build_zero_bytes(result_bits / 8 - 1);
+  return _sym_concat_helper(result_expr_mem,
+                            little_endian
+                                ? _sym_concat_helper(overflow_byte, padding)
+                                : _sym_concat_helper(padding, overflow_byte));
+}
+
 } // namespace
 
 void _sym_set_return_expression(SymExpr expr) { g_return_value = expr; }
@@ -212,6 +257,110 @@ SymExpr _sym_build_zero_bytes(size_t length) {
   }
 
   return result;
+}
+
+SymExpr _sym_build_sadd_sat(SymExpr a, SymExpr b) {
+  size_t bits = _sym_bits_helper(a);
+  SymExpr min = buildMinSignedInt(bits);
+  SymExpr max = buildMaxSignedInt(bits);
+  SymExpr add_sext =
+      _sym_build_add(_sym_build_sext(a, 1), _sym_build_sext(b, 1));
+
+  return _sym_build_ite(
+      // If the result is less than the min signed integer...
+      _sym_build_signed_less_equal(add_sext, _sym_build_sext(min, 1)),
+      // ... Return the min signed integer
+      min,
+      _sym_build_ite(
+          // Otherwise, if the result is greater than the max signed integer...
+          _sym_build_signed_greater_equal(add_sext, _sym_build_sext(max, 1)),
+          // ... Return the max signed integer
+          max,
+          // Otherwise, return the addition
+          _sym_build_add(a, b)));
+}
+
+SymExpr _sym_build_uadd_sat(SymExpr a, SymExpr b) {
+  size_t bits = _sym_bits_helper(a);
+  SymExpr max = buildMaxUnsignedInt(bits);
+  SymExpr add_zext =
+      _sym_build_add(_sym_build_zext(a, 1), _sym_build_zext(b, 1));
+
+  return _sym_build_ite(
+      // If the top bit is set, an overflow has occurred and...
+      _sym_build_bit_to_bool(_sym_extract_helper(add_zext, bits, bits)),
+      // ... Return the max unsigned integer
+      max,
+      // Otherwise, return the addition
+      _sym_build_add(a, b));
+}
+
+SymExpr _sym_build_ssub_sat(SymExpr a, SymExpr b) {
+  size_t bits = _sym_bits_helper(a);
+  SymExpr min = buildMinSignedInt(bits);
+  SymExpr max = buildMaxSignedInt(bits);
+
+  SymExpr sub_sext =
+      _sym_build_sub(_sym_build_sext(a, 1), _sym_build_sext(b, 1));
+
+  return _sym_build_ite(
+      // If the result is less than the min signed integer...
+      _sym_build_signed_less_equal(sub_sext, _sym_build_sext(min, 1)),
+      // ... Return the min signed integer
+      min,
+      _sym_build_ite(
+          // Otherwise, if the result is greater than the max signed integer...
+          _sym_build_signed_greater_equal(sub_sext, _sym_build_sext(max, 1)),
+          // ... Return the max signed integer
+          max,
+          // Otherwise, return the subtraction
+          _sym_build_sub(a, b)));
+}
+
+SymExpr _sym_build_usub_sat(SymExpr a, SymExpr b) {
+  size_t bits = _sym_bits_helper(a);
+
+  return _sym_build_ite(
+      // If `a >= b`, then no overflow occurs and...
+      _sym_build_unsigned_greater_equal(a, b),
+      // ... Return the subtraction
+      _sym_build_sub(a, b),
+      // Otherwise, saturate at zero
+      _sym_build_integer(0, bits));
+}
+
+static SymExpr _sym_build_shift_left_overflow(SymExpr a, SymExpr b) {
+  return _sym_build_not_equal(
+      _sym_build_arithmetic_shift_right(_sym_build_shift_left(a, b), b), a);
+}
+
+SymExpr _sym_build_sshl_sat(SymExpr a, SymExpr b) {
+  size_t bits = _sym_bits_helper(a);
+
+  return _sym_build_ite(
+      // If an overflow occurred...
+      _sym_build_shift_left_overflow(a, b),
+      _sym_build_ite(
+          // ... And the LHS is negative...
+          _sym_build_bit_to_bool(_sym_extract_helper(a, bits - 1, bits - 1)),
+          // ... Return the min signed integer...
+          buildMinSignedInt(bits),
+          // ... Otherwise, return the max signed integer
+          buildMaxSignedInt(bits)),
+      // Otherwise, return the left shift
+      _sym_build_shift_left(a, b));
+}
+
+SymExpr _sym_build_ushl_sat(SymExpr a, SymExpr b) {
+  size_t bits = _sym_bits_helper(a);
+
+  return _sym_build_ite(
+      // If an overflow occurred...
+      _sym_build_shift_left_overflow(a, b),
+      // ... Return the max unsigned integer
+      buildMaxUnsignedInt(bits),
+      // Otherwise, return the left shift
+      _sym_build_shift_left(a, b));
 }
 
 void _sym_register_expression_region(SymExpr *start, size_t length) {

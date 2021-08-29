@@ -58,7 +58,7 @@ SymExpr _sym_build_false(void);
 SymExpr _sym_build_bool(bool value);
 
 /*
- * Arithmetic and shifts
+ * Integer arithmetic and shifts
  */
 SymExpr _sym_build_neg(SymExpr expr);
 SymExpr _sym_build_add(SymExpr a, SymExpr b);
@@ -72,6 +72,19 @@ SymExpr _sym_build_shift_left(SymExpr a, SymExpr b);
 SymExpr _sym_build_logical_shift_right(SymExpr a, SymExpr b);
 SymExpr _sym_build_arithmetic_shift_right(SymExpr a, SymExpr b);
 
+/*
+ * Saturating integer arithmetic and shifts
+ */
+SymExpr _sym_build_sadd_sat(SymExpr a, SymExpr b);
+SymExpr _sym_build_uadd_sat(SymExpr a, SymExpr b);
+SymExpr _sym_build_ssub_sat(SymExpr a, SymExpr b);
+SymExpr _sym_build_usub_sat(SymExpr a, SymExpr b);
+SymExpr _sym_build_sshl_sat(SymExpr a, SymExpr b);
+SymExpr _sym_build_ushl_sat(SymExpr a, SymExpr b);
+
+/*
+ * Floating-point arithmetic and shifts
+ */
 SymExpr _sym_build_fp_add(SymExpr a, SymExpr b);
 SymExpr _sym_build_fp_sub(SymExpr a, SymExpr b);
 SymExpr _sym_build_fp_mul(SymExpr a, SymExpr b);
