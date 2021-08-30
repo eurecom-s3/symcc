@@ -422,6 +422,15 @@ void Symbolizer::visitBinaryOperator(BinaryOperator &I) {
   registerSymbolicComputation(runtimeCall, &I);
 }
 
+void Symbolizer::visitUnaryOperator(UnaryOperator &I) {
+  IRBuilder<> IRB(&I);
+  SymFnT handler = runtime.unaryOperatorHandlers.at(I.getOpcode());
+
+  assert(handler && "Unable to handle unary operator");
+  auto runtimeCall = buildRuntimeCall(IRB, handler, I.getOperand(0));
+  registerSymbolicComputation(runtimeCall, &I);
+}
+
 void Symbolizer::visitSelectInst(SelectInst &I) {
   // Select is like the ternary operator ("?:") in C. We push the (potentially
   // negated) condition to the path constraints and copy the symbolic

@@ -103,6 +103,7 @@ public:
   // Implementation of InstVisitor
   //
   void visitBinaryOperator(llvm::BinaryOperator &I);
+  void visitUnaryOperator(llvm::UnaryOperator &I);
   void visitSelectInst(llvm::SelectInst &I);
   void visitCmpInst(llvm::CmpInst &I);
   void visitReturnInst(llvm::ReturnInst &I);

@@ -104,6 +104,7 @@ SymExpr _sym_build_fp_mul(SymExpr a, SymExpr b);
 SymExpr _sym_build_fp_div(SymExpr a, SymExpr b);
 SymExpr _sym_build_fp_rem(SymExpr a, SymExpr b);
 SymExpr _sym_build_fp_abs(SymExpr a);
+SymExpr _sym_build_fp_neg(SymExpr a);
 
 /*
  * Boolean operations
