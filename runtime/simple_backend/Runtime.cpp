@@ -271,6 +271,10 @@ Z3_ast _sym_build_fp_abs(Z3_ast a) {
   return registerExpression(Z3_mk_fpa_abs(g_context, a));
 }
 
+Z3_ast _sym_build_fp_neg(Z3_ast a) {
+  return registerExpression(Z3_mk_fpa_neg(g_context, a));
+}
+
 Z3_ast _sym_build_not(Z3_ast expr) {
   return registerExpression(Z3_mk_bvnot(g_context, expr));
 }

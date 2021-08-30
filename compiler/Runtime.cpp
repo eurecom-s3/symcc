@@ -127,6 +127,14 @@ Runtime::Runtime(Module &M) {
 
 #undef LOAD_BINARY_OPERATOR_HANDLER
 
+#define LOAD_UNARY_OPERATOR_HANDLER(constant, name)                            \
+  unaryOperatorHandlers[Instruction::constant] =                               \
+      import(M, "_sym_build_" #name, ptrT, ptrT);
+
+  LOAD_UNARY_OPERATOR_HANDLER(FNeg, fp_neg)
+
+#undef LOAD_UNARY_OPERATOR_HANDLER
+
 #define LOAD_COMPARISON_HANDLER(constant, name)                                \
   comparisonHandlers[CmpInst::constant] =                                      \
       import(M, "_sym_build_" #name, ptrT, ptrT, ptrT);
