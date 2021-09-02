@@ -540,7 +540,7 @@ void Symbolizer::visitLoadInst(LoadInst &I) {
       runtime.readMemory,
       {IRB.CreatePtrToInt(addr, intPtrType),
        ConstantInt::get(intPtrType, dataLayout.getTypeStoreSize(dataType)),
-       ConstantInt::get(IRB.getInt8Ty(), isLittleEndian(dataType) ? 1 : 0)});
+       IRB.getInt1(isLittleEndian(dataType) ? 1 : 0)});
 
   // Make sure that the expression corresponding to the loaded value is of
   // bit-vector kind. Shortcutting the runtime calls that we emit here (e.g.,
@@ -584,8 +584,7 @@ void Symbolizer::visitStoreInst(StoreInst &I) {
       runtime.writeMemory,
       {IRB.CreatePtrToInt(I.getPointerOperand(), intPtrType),
        ConstantInt::get(intPtrType, dataLayout.getTypeStoreSize(dataType)),
-       data,
-       ConstantInt::get(IRB.getInt8Ty(), dataLayout.isLittleEndian() ? 1 : 0)});
+       data, IRB.getInt1(dataLayout.isLittleEndian() ? 1 : 0)});
 }
 
 void Symbolizer::visitGetElementPtrInst(GetElementPtrInst &I) {
@@ -891,7 +890,7 @@ void Symbolizer::visitInsertValueInst(InsertValueInst &I) {
       runtime.buildInsert,
       {getSymbolicExpressionOrNull(target), insertedValueExpr,
        IRB.getInt64(aggregateMemberOffset(target->getType(), I.getIndices())),
-       IRB.getInt8(isLittleEndian(insertedValueType) ? 1 : 0)});
+       IRB.getInt1(isLittleEndian(insertedValueType) ? 1 : 0)});
 
   if (!insertedValueType->isFloatingPointTy())
     symbolicInput = {insertedValue, 1, result};
@@ -914,7 +913,7 @@ void Symbolizer::visitExtractValueInst(ExtractValueInst &I) {
       {targetExpr,
        IRB.getInt64(aggregateMemberOffset(target->getType(), I.getIndices())),
        IRB.getInt64(dataLayout.getTypeStoreSize(resultType)),
-       IRB.getInt8(isLittleEndian(resultType) ? 1 : 0)});
+       IRB.getInt1(isLittleEndian(resultType) ? 1 : 0)});
 
   // Floating-point values are a distinct kind in the solver. Extracting from an
   // aggregate gives us a bit vector, so we need to convert the expression to a
@@ -1044,7 +1043,7 @@ CallInst *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
           runtime.readMemory,
           {IRB.CreatePtrToInt(memory, intPtrType),
            ConstantInt::get(intPtrType, dataLayout.getTypeStoreSize(valueType)),
-           IRB.getInt8(0)});
+           IRB.getInt1(0)});
     }
   }
 
