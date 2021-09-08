@@ -3,11 +3,6 @@
 ; This file exposed a bug in our handling of "invoke" instructions that would
 ; lead to invalid byte code.
 
-; ModuleID = '/home/seba/work/compiler/llvm-project/libcxxabi/src/cxa_vector.cpp'
-source_filename = "/home/seba/work/compiler/llvm-project/libcxxabi/src/cxa_vector.cpp"
-target datalayout = "e-m:e-i64:64-f80:128-n8:16:32:64-S128"
-target triple = "x86_64-pc-linux-gnu"
-
 $__clang_call_terminate = comdat any
 
 ; Function Attrs: sspstrong uwtable
