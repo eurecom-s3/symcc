@@ -23,6 +23,10 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
+#if defined(ntohl)
+#undef ntohl
+#endif
+
 int main(int argc, char* argv[]) {
   int x;
   if (read(STDIN_FILENO, &x, sizeof(x)) != sizeof(x)) {

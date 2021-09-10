@@ -25,6 +25,10 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
+#if defined(ntohl)
+#undef ntohl
+#endif
+
 int g_increment = 17;
 int g_uninitialized;
 int g_more_than_one_byte_int = 512;

@@ -30,6 +30,10 @@
 #define MYINT int64_t
 #endif
 
+#if defined(ntohl)
+#undef ntohl
+#endif
+
 int fac(int x) {
     MYINT result = 1;
 

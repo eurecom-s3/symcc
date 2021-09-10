@@ -21,6 +21,10 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
+#if defined(ntohl)
+#undef ntohl
+#endif
+
 struct point {
     int x;
     int y;

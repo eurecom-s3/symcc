@@ -21,6 +21,10 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
+#if defined(ntohl)
+#undef ntohl
+#endif
+
 volatile int g_value;
 
 int main(int argc, char* argv[]) {

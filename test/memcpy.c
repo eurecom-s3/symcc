@@ -27,6 +27,10 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+#if defined(ntohl)
+#undef ntohl
+#endif
+
 int main(int argc, char *argv[]) {
   char values[] = {1, 2, 3};
   char values_copy[3];

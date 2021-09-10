@@ -23,6 +23,10 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#if defined(ntohl)
+#undef ntohl
+#endif
+
 int main(int argc, char* argv[]) {
   //
   // Read from the input file using Unix primitives.

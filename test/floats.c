@@ -21,6 +21,10 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
+#if defined(ntohl)
+#undef ntohl
+#endif
+
 float g_value = 0.1234;
 
 int main(int argc, char *argv[]) {
