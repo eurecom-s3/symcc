@@ -16,10 +16,20 @@
 
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/CodeGen/IntrinsicLowering.h>
+#include <llvm/CodeGen/TargetLowering.h>
+#include <llvm/CodeGen/TargetSubtargetInfo.h>
 #include <llvm/IR/InstIterator.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Verifier.h>
+#include <llvm/Target/TargetMachine.h>
+#include <llvm/Target/TargetOptions.h>
 #include <llvm/Transforms/Utils/ModuleUtils.h>
+
+#if LLVM_VERSION_MAJOR < 14
+#include <llvm/Support/TargetRegistry.h>
+#else
+#include <llvm/MC/TargetRegistry.h>
+#endif
 
 #include "Runtime.h"
 #include "Symbolizer.h"
@@ -113,6 +123,38 @@ bool canLower(const CallInst *CI) {
   llvm_unreachable("Control cannot reach here");
 }
 
+void liftInlineAssembly(CallInst *CI) {
+  // TODO When we don't have to worry about the old pass manager anymore, move
+  // the initialization to the pass constructor. (Currently there are two
+  // passes, but only if we're on a recent enough LLVM...)
+
+  Function *F = CI->getFunction();
+  Module *M = F->getParent();
+  auto triple = M->getTargetTriple();
+
+  std::string error;
+  auto target = TargetRegistry::lookupTarget(triple, error);
+  if (!target) {
+    errs() << "Warning: can't get target info to lift inline assembly\n";
+    return;
+  }
+
+  auto cpu = F->getFnAttribute("target-cpu").getValueAsString();
+  auto features = F->getFnAttribute("target-features").getValueAsString();
+
+  std::unique_ptr<TargetMachine> TM(
+      target->createTargetMachine(triple, cpu, features, TargetOptions(), {}));
+  auto subTarget = TM->getSubtargetImpl(*F);
+  if (subTarget == nullptr)
+    return;
+
+  auto targetLowering = subTarget->getTargetLowering();
+  if (targetLowering == nullptr)
+    return;
+
+  targetLowering->ExpandInlineAsm(CI);
+}
+
 bool instrumentFunction(Function &F) {
   auto functionName = F.getName();
   if (functionName == kSymCtorName)
@@ -128,8 +170,12 @@ bool instrumentFunction(Function &F) {
 
   IntrinsicLowering IL(F.getParent()->getDataLayout());
   for (auto *I : allInstructions) {
-    if (auto *CI = dyn_cast<CallInst>(I); CI && canLower(CI)) {
-      IL.LowerIntrinsicCall(CI);
+    if (auto *CI = dyn_cast<CallInst>(I)) {
+      if (canLower(CI)) {
+        IL.LowerIntrinsicCall(CI);
+      } else if (isa<InlineAsm>(CI->getCalledOperand())) {
+        liftInlineAssembly(CI);
+      }
     }
   }
 
