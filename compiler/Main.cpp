@@ -14,6 +14,9 @@
 
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
+#include <llvm/Transforms/Scalar.h>
+#include <llvm/Transforms/Scalar/LowerAtomic.h>
+#include <llvm/Transforms/Scalar/Scalarizer.h>
 
 #if LLVM_VERSION_MAJOR >= 13
 #include <llvm/Passes/PassBuilder.h>
@@ -36,6 +39,8 @@ using namespace llvm;
 
 void addSymbolizeLegacyPass(const PassManagerBuilder & /* unused */,
                             legacy::PassManagerBase &PM) {
+  PM.add(createScalarizerPass());
+  PM.add(createLowerAtomicPass());
   PM.add(new SymbolizeLegacyPass());
 }
 
@@ -67,6 +72,8 @@ PassPluginLibraryInfo getSymbolizePluginInfo() {
                 });
             PB.registerVectorizerStartEPCallback(
                 [](FunctionPassManager &PM, OptimizationLevel) {
+                  PM.addPass(ScalarizerPass());
+                  PM.addPass(LowerAtomicPass());
                   PM.addPass(SymbolizePass());
                 });
           }};
