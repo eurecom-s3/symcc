@@ -128,10 +128,31 @@ void *SYM(calloc)(size_t nmemb, size_t size) {
 void *SYM(mmap64)(void *addr, size_t len, int prot, int flags, int fildes,
                   uint64_t off) {
   auto *result = mmap64(addr, len, prot, flags, fildes, off);
+  _sym_set_return_expression(nullptr);
+
+  if (result == MAP_FAILED) // mmap failed
+    return result;
+
+  if (fildes == inputFileDescriptor) {
+    /* we update the inputOffset only when mmap() is reading from input file
+     * HACK! update inputOffset with off parameter sometimes will be dangerous
+     * We don't know whether there is read() before/after mmap,
+     * if there is, we have to fix this tricky method :P
+     */
+    inputOffset = off + len;
+    // Reading symbolic input.
+    ReadWriteShadow shadow(result, len);
+    uint8_t *resultBytes = (uint8_t *)result;
+    std::generate(shadow.begin(), shadow.end(), [resultBytes, i = 0]() mutable {
+      return _sym_get_input_byte(inputOffset, resultBytes[i++]);
+    });
+  } else if (!isConcrete(result, len)) {
+    ReadWriteShadow shadow(result, len);
+    std::fill(shadow.begin(), shadow.end(), nullptr);
+  }
 
   tryAlternative(len, _sym_get_parameter_expression(1), SYM(mmap64));
 
-  _sym_set_return_expression(nullptr);
   return result;
 }
 
