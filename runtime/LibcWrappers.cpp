@@ -858,4 +858,23 @@ long int SYM(atol)(const char *s) {
 
     return result;
 }
+
+char *SYM(strcpy)(char *dest, const char *src) {
+    tryAlternative(dest, _sym_get_parameter_expression(0), SYM(strcpy));
+    tryAlternative(src, _sym_get_parameter_expression(1), SYM(strcpy));
+
+    auto *result = strcpy(dest, src);
+    _sym_set_return_expression(nullptr);
+
+    size_t cpyLen = strlen(src);
+    if (isConcrete(src, cpyLen) && isConcrete(dest, cpyLen))
+        return result;
+
+    auto srcShadow = ReadOnlyShadow(src, cpyLen);
+    auto destShadow = ReadWriteShadow(dest, cpyLen);
+
+    std::copy(srcShadow.begin(), srcShadow.end(), destShadow.begin());
+
+    return result;
+}
 }
