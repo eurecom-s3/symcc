@@ -659,4 +659,39 @@ int SYM(strncmp)(const char *a, const char *b, size_t n) {
                               reinterpret_cast<uintptr_t>(SYM(strncmp)));
     return result;
 }
+
+uint32_t SYM(strlen)(const char *s) {
+    tryAlternative(s, _sym_get_parameter_expression(0), SYM(strlen));
+
+    // HACK! we regard strlen as a special strchr(s, '\0')
+    auto *result = strchr(s, 0);
+    _sym_set_return_expression(nullptr);
+
+    if (isConcrete(s, result != nullptr ? (result - s) : strlen(s)))
+        return (result - s);
+
+    // We force set the value of c to \x00, it should be a concrete value
+    auto *cExpr = _sym_build_integer(0, 8);
+
+    size_t length = result != nullptr ? (result - s) : strlen(s);
+    auto shadow = ReadOnlyShadow(s, length);
+    auto shadowIt = shadow.begin();
+    for (size_t i = 0; i < length; i++) {
+        _sym_push_path_constraint(
+                _sym_build_not_equal(
+                        (*shadowIt != nullptr) ? *shadowIt : _sym_build_integer(s[i], 8),
+                        cExpr),
+                /*taken*/ 1, reinterpret_cast<uintptr_t>(SYM(strchr)));
+        ++shadowIt;
+    }
+
+    // HACK! The last byte must be \x00!
+    _sym_push_path_constraint(
+            _sym_build_equal(
+                    (*shadowIt != nullptr) ? *shadowIt : _sym_build_integer(0, 8),
+                    cExpr),
+            /*taken*/ 1, reinterpret_cast<uintptr_t>(SYM(strchr)));
+
+    return (result - s);
+}
 }
