@@ -694,4 +694,168 @@ uint32_t SYM(strlen)(const char *s) {
 
     return (result - s);
 }
+
+int SYM(atoi)(const char *s) {
+    tryAlternative(s, _sym_get_parameter_expression(0), SYM(strlen));
+
+    // HACK! we mimic the libc function summary in klee
+    /* int atoi(const char *str) {
+     *     return (int)strtol(str, (char **)NULL, 10);
+     *   }
+     * */
+    auto result = strtol(s, (char **)NULL, 10);
+    _sym_set_return_expression(nullptr);
+
+    if (isConcrete(s, strlen(s)))
+        return result;
+
+    size_t length = strlen(s);
+    size_t num_len = 0;
+    for (size_t i = 0; i < length; i++) {
+        if ('0' <= (char)s[i] && (char)s[i] <= '9') {
+            num_len++;
+        } else {
+            break;
+        }
+    }
+    auto shadow = ReadOnlyShadow(s, length);
+    auto shadowIt = shadow.begin();
+    for (size_t i = 0; i < num_len; i++) {
+        int res = (char)s[i];
+        auto *cExpr = _sym_build_integer(res, 8);
+        _sym_push_path_constraint(
+                _sym_build_equal(
+                        (*shadowIt != nullptr) ? *shadowIt : _sym_build_integer(s[i], 8),
+                        cExpr),
+                /*taken*/ 1, reinterpret_cast<uintptr_t>(SYM(strchr)));
+        ++shadowIt;
+    }
+
+    // The value of tail must be non-num
+    auto *tailExpr_0 = _sym_build_integer(48, 8);  // '0'
+    auto *tailExpr_1 = _sym_build_integer(49, 8);  // '1'
+    auto *tailExpr_2 = _sym_build_integer(50, 8);  // '2'
+    auto *tailExpr_3 = _sym_build_integer(51, 8);  // '3'
+    auto *tailExpr_4 = _sym_build_integer(52, 8);  // '4'
+    auto *tailExpr_5 = _sym_build_integer(53, 8);  // '5'
+    auto *tailExpr_6 = _sym_build_integer(54, 8);  // '6'
+    auto *tailExpr_7 = _sym_build_integer(55, 8);  // '7'
+    auto *tailExpr_8 = _sym_build_integer(56, 8);  // '8'
+    auto *tailExpr_9 = _sym_build_integer(57, 8);  // '9'
+
+    _sym_push_path_constraint(
+            _sym_build_not_equal(*shadowIt, tailExpr_0),
+            /*taken*/ 1, reinterpret_cast<uintptr_t>(SYM(strchr)));
+    _sym_push_path_constraint(
+            _sym_build_not_equal(*shadowIt, tailExpr_1),
+            /*taken*/ 1, reinterpret_cast<uintptr_t>(SYM(strchr)));
+    _sym_push_path_constraint(
+            _sym_build_not_equal(*shadowIt, tailExpr_2),
+            /*taken*/ 1, reinterpret_cast<uintptr_t>(SYM(strchr)));
+    _sym_push_path_constraint(
+            _sym_build_not_equal(*shadowIt, tailExpr_3),
+            /*taken*/ 1, reinterpret_cast<uintptr_t>(SYM(strchr)));
+    _sym_push_path_constraint(
+            _sym_build_not_equal(*shadowIt, tailExpr_4),
+            /*taken*/ 1, reinterpret_cast<uintptr_t>(SYM(strchr)));
+    _sym_push_path_constraint(
+            _sym_build_not_equal(*shadowIt, tailExpr_5),
+            /*taken*/ 1, reinterpret_cast<uintptr_t>(SYM(strchr)));
+    _sym_push_path_constraint(
+            _sym_build_not_equal(*shadowIt, tailExpr_6),
+            /*taken*/ 1, reinterpret_cast<uintptr_t>(SYM(strchr)));
+    _sym_push_path_constraint(
+            _sym_build_not_equal(*shadowIt, tailExpr_7),
+            /*taken*/ 1, reinterpret_cast<uintptr_t>(SYM(strchr)));
+    _sym_push_path_constraint(
+            _sym_build_not_equal(*shadowIt, tailExpr_8),
+            /*taken*/ 1, reinterpret_cast<uintptr_t>(SYM(strchr)));
+    _sym_push_path_constraint(
+            _sym_build_not_equal(*shadowIt, tailExpr_9),
+            /*taken*/ 1, reinterpret_cast<uintptr_t>(SYM(strchr)));
+
+    return result;
+}
+
+long int SYM(atol)(const char *s) {
+    tryAlternative(s, _sym_get_parameter_expression(0), SYM(strlen));
+
+    // HACK! we mimic the libc function summary in klee
+    /* int atoi(const char *str) {
+     *     return (int)strtol(str, (char **)NULL, 10);
+     *   }
+     * */
+    auto result = strtol(s, (char **)NULL, 10);
+    _sym_set_return_expression(nullptr);
+
+    if (isConcrete(s, strlen(s)))
+        return result;
+
+    size_t length = strlen(s);
+    size_t num_len = 0;
+    for (size_t i = 0; i < length; i++) {
+        if ('0' <= (char)s[i] && (char)s[i] <= '9') {
+            num_len++;
+        } else {
+            break;
+        }
+    }
+    auto shadow = ReadOnlyShadow(s, length);
+    auto shadowIt = shadow.begin();
+    for (size_t i = 0; i < num_len; i++) {
+        int res = (char)s[i];
+        auto *cExpr = _sym_build_integer(res, 8);
+        _sym_push_path_constraint(
+                _sym_build_equal(
+                        (*shadowIt != nullptr) ? *shadowIt : _sym_build_integer(s[i], 8),
+                        cExpr),
+                /*taken*/ 1, reinterpret_cast<uintptr_t>(SYM(strchr)));
+        ++shadowIt;
+    }
+
+    // The value of tail must be non-num
+    auto *tailExpr_0 = _sym_build_integer(48, 8);  // '0'
+    auto *tailExpr_1 = _sym_build_integer(49, 8);  // '1'
+    auto *tailExpr_2 = _sym_build_integer(50, 8);  // '2'
+    auto *tailExpr_3 = _sym_build_integer(51, 8);  // '3'
+    auto *tailExpr_4 = _sym_build_integer(52, 8);  // '4'
+    auto *tailExpr_5 = _sym_build_integer(53, 8);  // '5'
+    auto *tailExpr_6 = _sym_build_integer(54, 8);  // '6'
+    auto *tailExpr_7 = _sym_build_integer(55, 8);  // '7'
+    auto *tailExpr_8 = _sym_build_integer(56, 8);  // '8'
+    auto *tailExpr_9 = _sym_build_integer(57, 8);  // '9'
+
+    _sym_push_path_constraint(
+            _sym_build_not_equal(*shadowIt, tailExpr_0),
+            /*taken*/ 1, reinterpret_cast<uintptr_t>(SYM(strchr)));
+    _sym_push_path_constraint(
+            _sym_build_not_equal(*shadowIt, tailExpr_1),
+            /*taken*/ 1, reinterpret_cast<uintptr_t>(SYM(strchr)));
+    _sym_push_path_constraint(
+            _sym_build_not_equal(*shadowIt, tailExpr_2),
+            /*taken*/ 1, reinterpret_cast<uintptr_t>(SYM(strchr)));
+    _sym_push_path_constraint(
+            _sym_build_not_equal(*shadowIt, tailExpr_3),
+            /*taken*/ 1, reinterpret_cast<uintptr_t>(SYM(strchr)));
+    _sym_push_path_constraint(
+            _sym_build_not_equal(*shadowIt, tailExpr_4),
+            /*taken*/ 1, reinterpret_cast<uintptr_t>(SYM(strchr)));
+    _sym_push_path_constraint(
+            _sym_build_not_equal(*shadowIt, tailExpr_5),
+            /*taken*/ 1, reinterpret_cast<uintptr_t>(SYM(strchr)));
+    _sym_push_path_constraint(
+            _sym_build_not_equal(*shadowIt, tailExpr_6),
+            /*taken*/ 1, reinterpret_cast<uintptr_t>(SYM(strchr)));
+    _sym_push_path_constraint(
+            _sym_build_not_equal(*shadowIt, tailExpr_7),
+            /*taken*/ 1, reinterpret_cast<uintptr_t>(SYM(strchr)));
+    _sym_push_path_constraint(
+            _sym_build_not_equal(*shadowIt, tailExpr_8),
+            /*taken*/ 1, reinterpret_cast<uintptr_t>(SYM(strchr)));
+    _sym_push_path_constraint(
+            _sym_build_not_equal(*shadowIt, tailExpr_9),
+            /*taken*/ 1, reinterpret_cast<uintptr_t>(SYM(strchr)));
+
+    return result;
+}
 }
