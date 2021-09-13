@@ -608,4 +608,29 @@ uint32_t SYM(ntohl)(uint32_t netlong) {
 
   return result;
 }
+
+int SYM(strcmp)(const char *a, const char *b) {
+    tryAlternative(a, _sym_get_parameter_expression(0), SYM(strcmp));
+    tryAlternative(b, _sym_get_parameter_expression(1), SYM(strcmp));
+
+    auto result = strcmp(a, b);
+    _sym_set_return_expression(nullptr);
+
+    if (isConcrete(a, strlen(a)) && isConcrete(b, strlen(b)))
+        return result;
+
+    auto aShadowIt = ReadOnlyShadow(a, strlen(a)).begin_non_null();
+    auto bShadowIt = ReadOnlyShadow(b, strlen(b)).begin_non_null();
+    auto *allEqual = _sym_build_equal(*aShadowIt, *bShadowIt);
+    for (size_t i = 1; i < strlen(a); i++) {
+        ++aShadowIt;
+        ++bShadowIt;
+        allEqual =
+                _sym_build_bool_and(allEqual, _sym_build_equal(*aShadowIt, *bShadowIt));
+    }
+
+    _sym_push_path_constraint(allEqual, result == 0,
+                              reinterpret_cast<uintptr_t>(SYM(strcmp)));
+    return result;
+}
 }
