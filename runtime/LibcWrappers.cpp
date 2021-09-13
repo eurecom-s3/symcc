@@ -633,4 +633,30 @@ int SYM(strcmp)(const char *a, const char *b) {
                               reinterpret_cast<uintptr_t>(SYM(strcmp)));
     return result;
 }
+
+int SYM(strncmp)(const char *a, const char *b, size_t n) {
+    tryAlternative(a, _sym_get_parameter_expression(0), SYM(strncmp));
+    tryAlternative(b, _sym_get_parameter_expression(1), SYM(strncmp));
+    tryAlternative(n, _sym_get_parameter_expression(2), SYM(strncmp));
+
+    auto result = strncmp(a, b, n);
+    _sym_set_return_expression(nullptr);
+
+    if (isConcrete(a, n) && isConcrete(b, n))
+        return result;
+
+    auto aShadowIt = ReadOnlyShadow(a, n).begin_non_null();
+    auto bShadowIt = ReadOnlyShadow(b, n).begin_non_null();
+    auto *allEqual = _sym_build_equal(*aShadowIt, *bShadowIt);
+    for (size_t i = 1; i < n; i++) {
+        ++aShadowIt;
+        ++bShadowIt;
+        allEqual =
+                _sym_build_bool_and(allEqual, _sym_build_equal(*aShadowIt, *bShadowIt));
+    }
+
+    _sym_push_path_constraint(allEqual, result == 0,
+                              reinterpret_cast<uintptr_t>(SYM(strncmp)));
+    return result;
+}
 }
