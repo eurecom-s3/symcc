@@ -285,7 +285,7 @@ void _sym_push_path_constraint(SymExpr constraint, int taken,
                                uintptr_t site_id) {
   if (constraint == nullptr)
     return;
-
+  taken = taken & 0x1;
   g_solver->addJcc(allocatedExpressions.at(constraint), taken != 0, site_id);
 }
 
