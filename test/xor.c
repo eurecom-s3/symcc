@@ -38,4 +38,8 @@ void main () {
     read(STDIN_FILENO, &g_2, sizeof(g_2));
     read(STDIN_FILENO, &g_927, sizeof(g_927));
     func_1();
+    // SIMPLE: Trying to solve
+    // SIMPLE: Found diverging input
+    // QSYM-COUNT-2: SMT
+    // QSYM: New testcase
 }
