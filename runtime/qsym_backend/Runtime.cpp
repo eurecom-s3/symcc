@@ -232,7 +232,7 @@ DEF_BINARY_EXPR_BUILDER(signed_div, SDiv)
 DEF_BINARY_EXPR_BUILDER(unsigned_rem, URem)
 DEF_BINARY_EXPR_BUILDER(signed_rem, SRem)
 
-DEF_BINARY_EXPR_BUILDER(shift_left, Shl)
+// DEF_BINARY_EXPR_BUILDER(shift_left, Shl)
 DEF_BINARY_EXPR_BUILDER(logical_shift_right, LShr)
 DEF_BINARY_EXPR_BUILDER(arithmetic_shift_right, AShr)
 
@@ -255,6 +255,13 @@ DEF_BINARY_EXPR_BUILDER(bool_xor, Distinct)
 DEF_BINARY_EXPR_BUILDER(xor, Xor)
 
 #undef DEF_BINARY_EXPR_BUILDER
+
+SymExpr _sym_build_shift_left(SymExpr a, SymExpr b) {
+  return registerExpression(
+    g_expr_builder->createShl(allocatedExpressions.at(a), 
+      g_expr_builder->createAnd(allocatedExpressions.at(b),
+      allocatedExpressions.at(_sym_build_integer(31, 32)))));
+}
 
 SymExpr _sym_build_neg(SymExpr expr) {
   return registerExpression(
