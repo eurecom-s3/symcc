@@ -42,13 +42,13 @@ fn insert_input_file<S: AsRef<OsStr>, P: AsRef<Path>>(
 
 /// A coverage map as used by AFL.
 pub struct AflMap {
-    data: [u8; 65536],
+    data: Option<Vec<u8>>,
 }
 
 impl AflMap {
     /// Create an empty map.
     pub fn new() -> AflMap {
-        AflMap { data: [0; 65536] }
+        AflMap { data: None }
     }
 
     /// Load a map from disk.
@@ -60,31 +60,41 @@ impl AflMap {
                 path.as_ref().display()
             )
         })?;
-        ensure!(
-            data.len() == 65536,
-            "The file to load the coverage map from has the wrong size ({})",
-            data.len()
-        );
+        Ok(AflMap { data: Some(data) })
+    }
 
-        let mut result = AflMap::new();
-        result.data.copy_from_slice(&data);
-        Ok(result)
+    /// Merge two coverage maps in place.
+    fn merge_vec(data: &mut Vec<u8>, new_data: Vec<u8>) -> Result<bool> {
+        let mut interesting = false;
+        ensure!(
+            data.len() == new_data.len(),
+            "Coverage maps must have the same size ({} and {})",
+            data.len(),
+            new_data.len(),
+        );
+        for (known, new) in data.iter_mut().zip(new_data.iter()) {
+            if *known != (*known | new) {
+                *known |= new;
+                interesting = true;
+            }
+        }
+        Ok(interesting)
     }
 
     /// Merge with another coverage map in place.
     ///
     /// Return true if the map has changed, i.e., if the other map yielded new
     /// coverage.
-    pub fn merge(&mut self, other: &AflMap) -> bool {
-        let mut interesting = false;
-        for (known, new) in self.data.iter_mut().zip(other.data.iter()) {
-            if *known != (*known | new) {
-                *known |= new;
-                interesting = true;
+    pub fn merge(&mut self, other: AflMap) -> Result<bool> {
+        match (&mut self.data, other.data) {
+            (Some(data), Some(new_data)) => AflMap::merge_vec(data, new_data),
+            (Some(_), None) => Ok(false),
+            (None, Some(new_data)) => {
+                self.data = Some(new_data);
+                Ok(true)
             }
+            (None, None) => Ok(false),
         }
-
-        interesting
     }
 }
 
