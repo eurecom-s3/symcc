@@ -169,8 +169,9 @@ impl TestcaseDir {
             current_id: 0,
         };
 
-        fs::create_dir(&dir.path)
-            .with_context(|| format!("Failed to create directory {}", dir.path.display()))?;
+        fs::create_dir(&dir.path).with_context(|| {
+            format!("Failed to create directory {}", dir.path.display())
+        })?;
         Ok(dir)
     }
 }
@@ -222,19 +223,19 @@ pub fn copy_testcase(
 #[derive(Debug)]
 pub struct AflConfig {
     /// The location of the afl-showmap program.
-    show_map: PathBuf,
+    pub show_map: PathBuf,
 
     /// The command that AFL uses to invoke the target program.
-    target_command: Vec<OsString>,
+    pub target_command: Vec<OsString>,
 
     /// Do we need to pass data to standard input?
-    use_standard_input: bool,
+    pub use_standard_input: bool,
 
     /// Are we using AFL's QEMU mode?
-    use_qemu_mode: bool,
+    pub use_qemu_mode: bool,
 
     /// The fuzzer instance's queue of test cases.
-    queue: PathBuf,
+    pub queue: PathBuf,
 }
 
 /// Possible results of afl-showmap.
@@ -245,6 +246,8 @@ pub enum AflShowmapResult {
     Hang,
     /// The target crashed.
     Crash,
+    /// Ignore the afl-showmap result (e.g. on showmap errors)
+    Ignore,
 }
 
 impl AflConfig {
@@ -258,14 +261,14 @@ impl AflConfig {
             )
         })?;
         let mut afl_stats = String::new();
-        afl_stats_file
-            .read_to_string(&mut afl_stats)
-            .with_context(|| {
+        afl_stats_file.read_to_string(&mut afl_stats).with_context(
+            || {
                 format!(
                     "Failed to read the fuzzer's stats at {}",
                     afl_stats_file_path.display()
                 )
-            })?;
+            },
+        )?;
         let afl_command: Vec<_> = afl_stats
             .lines()
             .find(|&l| l.starts_with("command_line"))
@@ -281,17 +284,15 @@ impl AflConfig {
             .skip_while(|s| **s != "--")
             .map(OsString::from)
             .collect();
-        let afl_binary_dir = Path::new(
-            afl_command
-                .get(0)
-                .expect("The AFL command is unexpectedly short"),
-        )
-        .parent()
-        .unwrap();
+        let afl_binary_dir = Path::new(afl_command.get(0).expect(
+            "The AFL command is unexpectedly short",
+        )).parent()
+            .unwrap();
 
         Ok(AflConfig {
             show_map: afl_binary_dir.join("afl-showmap"),
-            use_standard_input: !afl_target_command.contains(&"@@".into()),
+            use_standard_input: !afl_target_command.contains(&"@@".into()) &&
+                !afl_command.contains(&"-f".into()),
             use_qemu_mode: afl_command.contains(&"-Q".into()),
             target_command: afl_target_command,
             queue: fuzzer_output.as_ref().join("queue"),
@@ -337,6 +338,7 @@ impl AflConfig {
             .args(&["-t", "5000", "-m", "none", "-b", "-o"])
             .arg(testcase_bitmap.as_ref())
             .args(insert_input_file(&self.target_command, &testcase))
+            .env("AFL_MAP_SIZE", "65535")  // req for afl++
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .stdin(if self.use_standard_input {
@@ -351,35 +353,33 @@ impl AflConfig {
         if self.use_standard_input {
             io::copy(
                 &mut File::open(&testcase)?,
-                afl_show_map_child
-                    .stdin
-                    .as_mut()
-                    .expect("Failed to open the stardard input of afl-showmap"),
-            )
-            .context("Failed to pipe the test input to afl-showmap")?;
+                afl_show_map_child.stdin.as_mut().expect(
+                    "Failed to open the stardard input of afl-showmap",
+                ),
+            ).context("Failed to pipe the test input to afl-showmap")?;
         }
 
-        let afl_show_map_status = afl_show_map_child
-            .wait()
-            .context("Failed to wait for afl-showmap")?;
+        let afl_show_map_status = afl_show_map_child.wait().context(
+            "Failed to wait for afl-showmap",
+        )?;
         log::debug!("afl-showmap returned {}", &afl_show_map_status);
-        match afl_show_map_status
-            .code()
-            .expect("No exit code available for afl-showmap")
-        {
-            0 => {
+        match afl_show_map_status.code() {
+            Some(0) => {
                 let map = AflMap::load(&testcase_bitmap).with_context(|| {
                     format!(
                         "Failed to read the AFL bitmap that \
                          afl-showmap should have generated at {}",
                         testcase_bitmap.as_ref().display()
                     )
-                })?;
-                Ok(AflShowmapResult::Success(Box::new(map)))
+                });
+                match map {
+                    Ok(m) => Ok(AflShowmapResult::Success(Box::new(m))),
+                    _ => Ok(AflShowmapResult::Ignore),
+                }
             }
-            1 => Ok(AflShowmapResult::Hang),
-            2 => Ok(AflShowmapResult::Crash),
-            unexpected => panic!("Unexpected return code {} from afl-showmap", unexpected),
+            Some(1) => Ok(AflShowmapResult::Hang),
+            Some(2) => Ok(AflShowmapResult::Crash),
+            _ => Ok(AflShowmapResult::Ignore),
         }
     }
 }
@@ -392,6 +392,9 @@ pub struct SymCC {
 
     /// The cumulative bitmap for branch pruning.
     bitmap: PathBuf,
+
+    /// Actually use the bitmap?
+    use_bitmap: bool,
 
     /// The place to store the current input.
     input_file: PathBuf,
@@ -414,12 +417,13 @@ pub struct SymCCResult {
 
 impl SymCC {
     /// Create a new SymCC configuration.
-    pub fn new(output_dir: PathBuf, command: &[String]) -> Self {
+    pub fn new(output_dir: PathBuf, command: &[String], use_bitmap: bool) -> Self {
         let input_file = output_dir.join(".cur_input");
 
         SymCC {
             use_standard_input: !command.contains(&String::from("@@")),
             bitmap: output_dir.join("bitmap"),
+            use_bitmap,
             command: insert_input_file(command, &input_file),
             input_file,
         }
@@ -475,13 +479,17 @@ impl SymCC {
 
         let mut analysis_command = Command::new("timeout");
         analysis_command
-            .args(&["-k", "5", &TIMEOUT.to_string()])
+            .args(&["-k", "15", &TIMEOUT.to_string()])
             .args(&self.command)
             .env("SYMCC_ENABLE_LINEARIZATION", "1")
             .env("SYMCC_AFL_COVERAGE_MAP", &self.bitmap)
             .env("SYMCC_OUTPUT_DIR", output_dir.as_ref())
             .stdout(Stdio::null())
             .stderr(Stdio::piped()); // capture SMT logs
+
+        if self.use_bitmap {
+            analysis_command.env("SYMCC_AFL_COVERAGE_MAP", &self.bitmap);
+        }
 
         if self.use_standard_input {
             analysis_command.stdin(Stdio::piped());
@@ -502,17 +510,13 @@ impl SymCC {
                         self.input_file.display()
                     )
                 })?,
-                child
-                    .stdin
-                    .as_mut()
-                    .expect("Failed to pipe to the child's standard input"),
-            )
-            .context("Failed to pipe the test input to SymCC")?;
+                child.stdin.as_mut().expect(
+                    "Failed to pipe to the child's standard input",
+                ),
+            ).context("Failed to pipe the test input to SymCC")?;
         }
 
-        let result = child
-            .wait_with_output()
-            .context("Failed to wait for SymCC")?;
+        let result = child.wait_with_output().context("Failed to wait for SymCC")?;
         let total_time = start.elapsed();
         let killed = match result.status.code() {
             Some(code) => {

@@ -22,6 +22,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, Instant};
+use std::ffi::OsString;
 use structopt::StructOpt;
 use symcc::{AflConfig, AflMap, AflShowmapResult, SymCC, TestcaseDir};
 use tempfile::tempdir;
@@ -49,6 +50,18 @@ struct CLI {
     /// Enable verbose logging
     #[structopt(short = "v")]
     verbose: bool,
+
+    /// Wait until sync target shows up
+    #[structopt(short = "W")]
+    wait_for_sync: bool,
+
+    /// force -Q qemu_mode
+    #[structopt(short = "Q")]
+    force_qemu_mode: bool,
+
+    /// Minimum ID in the sync fuzzer queue (restart option workaround)
+    #[structopt(short = "S", default_value("0"), required(false))]
+    start_id: u32,
 
     /// Program under test
     command: Vec<String>,
@@ -114,8 +127,8 @@ impl Stats {
             )?;
 
             if self.total_time.as_secs() > 0 {
-                let solver_share =
-                    st.as_millis() as f64 / self.total_time.as_millis() as f64 * 100_f64;
+                let solver_share = st.as_millis() as f64 / self.total_time.as_millis() as f64 *
+                    100_f64;
                 writeln!(
                     out,
                     "Solver time share (successful executions): {:.2}% (-> {:.2}% in execution)",
@@ -194,8 +207,9 @@ impl State {
         fs::create_dir(&symcc_dir).with_context(|| {
             format!("Failed to create SymCC's directory {}", symcc_dir.display())
         })?;
-        let symcc_queue =
-            TestcaseDir::new(symcc_dir.join("queue")).context("Failed to create SymCC's queue")?;
+        let symcc_queue = TestcaseDir::new(symcc_dir.join("queue")).context(
+            "Failed to create SymCC's queue",
+        )?;
         let symcc_hangs = TestcaseDir::new(symcc_dir.join("hangs"))?;
         let symcc_crashes = TestcaseDir::new(symcc_dir.join("crashes"))?;
         let stats_file = File::create(symcc_dir.join("stats"))?;
@@ -222,22 +236,31 @@ impl State {
     ) -> Result<()> {
         log::info!("Running on input {}", input.as_ref().display());
 
-        let tmp_dir = tempdir()
-            .context("Failed to create a temporary directory for this execution of SymCC")?;
+        let tmp_dir = tempdir().context(
+            "Failed to create a temporary directory for this execution of SymCC",
+        )?;
 
         let mut num_interesting = 0u64;
         let mut num_total = 0u64;
 
-        let symcc_result = symcc
-            .run(&input, tmp_dir.path().join("output"))
-            .context("Failed to run SymCC")?;
+        let symcc_result = symcc.run(&input, tmp_dir.path().join("output")).context(
+            "Failed to run SymCC",
+        )?;
         for new_test in symcc_result.test_cases.iter() {
-            let res = process_new_testcase(&new_test, &input, &tmp_dir, &afl_config, self)?;
 
-            num_total += 1;
-            if res == TestcaseResult::New {
-                log::debug!("Test case is interesting");
-                num_interesting += 1;
+            if afl_config.use_qemu_mode {
+                let res = process_new_testcase(&new_test, &input, &tmp_dir, &afl_config, self);
+
+                let res = match res {
+                    Ok(result) => result,
+                    Err(_) => continue,
+                };
+
+                num_total += 1;
+                if res == TestcaseResult::New {
+                    log::debug!("Test case is interesting");
+                    num_interesting += 1;
+                }
             }
         }
 
@@ -273,45 +296,103 @@ fn main() -> Result<()> {
         })
         .init();
 
-    if !options.output_dir.is_dir() {
-        log::error!(
-            "The directory {} does not exist!",
-            options.output_dir.display()
-        );
-        return Ok(());
-    }
-
+    let mut errors = 1;
     let afl_queue = options.output_dir.join(&options.fuzzer_name).join("queue");
-    if !afl_queue.is_dir() {
-        log::error!("The AFL queue {} does not exist!", afl_queue.display());
-        return Ok(());
-    }
-
     let symcc_dir = options.output_dir.join(&options.name);
-    if symcc_dir.is_dir() {
-        log::error!(
-            "{} already exists; we do not currently support resuming",
-            symcc_dir.display()
-        );
-        return Ok(());
+    let mut afl_config = AflConfig {
+        use_standard_input: true,
+        use_qemu_mode: false,
+        target_command: vec![],
+        show_map: PathBuf::new(),
+        queue: PathBuf::new(),
+    };
+
+    while errors != 0 {
+
+        errors = 0;
+
+        if !options.output_dir.is_dir() {
+            log::error!(
+                "The directory {} does not exist!",
+                options.output_dir.display()
+            );
+            errors += 1;
+            //return Ok(());
+        }
+
+        if !afl_queue.is_dir() {
+            log::error!("The AFL queue {} does not exist!", afl_queue.display());
+            errors += 1;
+            //return Ok(());
+        }
+
+        match AflConfig::load(options.output_dir.join(&options.fuzzer_name)) {
+            Ok(result) => afl_config = result,
+            Err(_) => {
+                log::error!("Could not load afl-fuzz fuzzer_stats");
+                errors += 1
+            }
+        }
+
+        if errors > 0 {
+            if !options.wait_for_sync {
+                return Ok(());
+            }
+            log::error!("waiting for afl-fuzz to start for 5 seconds ...");
+            thread::sleep(Duration::from_secs(5));
+        }
     }
 
-    let symcc = SymCC::new(symcc_dir.clone(), &options.command);
-    log::debug!("SymCC configuration: {:?}", &symcc);
-    let afl_config = AflConfig::load(options.output_dir.join(&options.fuzzer_name))?;
+    if symcc_dir.is_dir() {
+        log::error!("{} already exists; removing ...", symcc_dir.display());
+        fs::remove_dir_all(&symcc_dir)?;
+    }
+
+    if options.force_qemu_mode && !afl_config.use_qemu_mode {
+        // We need to overwrite the binary afl-showmap is running as the one
+        // in the afl config is an instrumented one
+        if options.command[0].contains("symqemu") {
+            afl_config.target_command[1] = OsString::from(options.command[1].clone())
+                .to_os_string();
+        }
+        afl_config.use_qemu_mode = true;
+    }
     log::debug!("AFL configuration: {:?}", &afl_config);
+
+    let symcc = SymCC::new(
+        symcc_dir.clone(),
+        &options.command,
+        afl_config.use_qemu_mode,
+    );
+    log::debug!("SymCC configuration: {:?}", &symcc);
+
     let mut state = State::initialize(symcc_dir)?;
 
     loop {
         match afl_config
             .best_new_testcase(&state.processed_files)
-            .context("Failed to check for new test cases")?
-        {
+            .context("Failed to check for new test cases")? {
             None => {
                 log::debug!("Waiting for new test cases...");
                 thread::sleep(Duration::from_secs(5));
             }
-            Some(input) => state.test_input(&input, &symcc, &afl_config)?,
+            Some(input) => {
+                let filename = input.file_name().unwrap().to_string_lossy();
+                if filename.starts_with("id:") {
+                    let id_str = filename.get(3..9).unwrap();
+                    let id = id_str.parse().unwrap_or(0);
+                    if id >= options.start_id {
+                        state.test_input(&input, &symcc, &afl_config)?
+                    } else {
+                        log::info!("Skipping input {} because it has a low ID", input.display());
+                        state.processed_files.insert(input.to_path_buf());
+                    }
+                } else {
+                    log::info!("Skipping invalid input name {}", input.display());
+                    state.processed_files.insert(input.to_path_buf());
+                }
+            }
+
         }
 
         if state.last_stats_output.elapsed().as_secs() > STATS_INTERVAL_SEC {
@@ -351,16 +432,22 @@ fn process_new_testcase(
                 "Failed to check whether test case {} is interesting",
                 &testcase.as_ref().display()
             )
-        })? {
+        })
+        .unwrap_or(AflShowmapResult::Ignore) {
+        AflShowmapResult::Ignore => {
+            log::info!("afl-showmap error'ed, ignoring");
+            Ok(TestcaseResult::Uninteresting)
+        }
         AflShowmapResult::Success(testcase_bitmap) => {
             let interesting = state.current_bitmap.merge(&testcase_bitmap);
             if interesting {
-                symcc::copy_testcase(&testcase, &mut state.queue, parent).with_context(|| {
-                    format!(
-                        "Failed to enqueue the new test case {}",
-                        testcase.as_ref().display()
-                    )
-                })?;
+                symcc::copy_testcase(&testcase, &mut state.queue, parent)
+                    .with_context(|| {
+                        format!(
+                            "Failed to enqueue the new test case {}",
+                            testcase.as_ref().display()
+                        )
+                    })?;
 
                 Ok(TestcaseResult::New)
             } else {
@@ -380,12 +467,13 @@ fn process_new_testcase(
                 testcase.as_ref().display()
             );
             symcc::copy_testcase(&testcase, &mut state.crashes, &parent)?;
-            symcc::copy_testcase(&testcase, &mut state.queue, &parent).with_context(|| {
-                format!(
-                    "Failed to enqueue the new test case {}",
-                    testcase.as_ref().display()
-                )
-            })?;
+            symcc::copy_testcase(&testcase, &mut state.queue, &parent)
+                .with_context(|| {
+                    format!(
+                        "Failed to enqueue the new test case {}",
+                        testcase.as_ref().display()
+                    )
+                })?;
             Ok(TestcaseResult::Crash)
         }
     }
