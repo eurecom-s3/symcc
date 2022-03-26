@@ -13,7 +13,7 @@
 # SymCC. If not, see <https://www.gnu.org/licenses/>.
 
 #
-# The build stage
+# The base image
 #
 FROM ubuntu:20.04 AS builder
 
@@ -55,6 +55,11 @@ RUN if git submodule status | grep "^-">/dev/null ; then \
     git submodule update; \
     fi
 
+
+#
+# Build SymCC with the simple backend
+#
+FROM builder AS builder_simple
 WORKDIR /symcc_build_simple
 RUN cmake -G Ninja \
         -DQSYM_BACKEND=OFF \
@@ -63,7 +68,30 @@ RUN cmake -G Ninja \
         /symcc_source \
     && ninja check
 
+#
+# Build libc++ with SymCC using the simple backend
+#
+FROM builder_simple AS builder_libcxx
+WORKDIR /libcxx_symcc
+RUN export SYMCC_REGULAR_LIBCXX=yes SYMCC_NO_SYMBOLIC_INPUT=yes \
+  && mkdir /libcxx_symcc_build \
+  && cd /libcxx_symcc_build \
+  && cmake -G Ninja /llvm_source/llvm \
+  -DLLVM_ENABLE_PROJECTS="libcxx;libcxxabi" \
+  -DLLVM_TARGETS_TO_BUILD="X86" \
+  -DLLVM_DISTRIBUTION_COMPONENTS="cxx;cxxabi;cxx-headers" \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX=/libcxx_symcc_install \
+  -DCMAKE_C_COMPILER=/symcc_build_simple/symcc \
+  -DCMAKE_CXX_COMPILER=/symcc_build_simple/sym++ \
+  && ninja distribution \
+  && ninja install-distribution
+
+
+#
 # Build SymCC with the Qsym backend
+#
+FROM builder_libcxx AS builder_qsym
 WORKDIR /symcc_build
 RUN cmake -G Ninja \
         -DQSYM_BACKEND=ON \
@@ -73,21 +101,6 @@ RUN cmake -G Ninja \
     && ninja check \
     && cargo install --path /symcc_source/util/symcc_fuzzing_helper
 
-# Build libc++ with SymCC using the simple backend
-WORKDIR /libcxx_symcc
-RUN export SYMCC_REGULAR_LIBCXX=yes SYMCC_NO_SYMBOLIC_INPUT=yes \
-    && mkdir /libcxx_symcc_build \
-    && cd /libcxx_symcc_build \
-    && cmake -G Ninja /llvm_source/llvm \
-         -DLLVM_ENABLE_PROJECTS="libcxx;libcxxabi" \
-         -DLLVM_TARGETS_TO_BUILD="X86" \
-         -DLLVM_DISTRIBUTION_COMPONENTS="cxx;cxxabi;cxx-headers" \
-         -DCMAKE_BUILD_TYPE=Release \
-         -DCMAKE_INSTALL_PREFIX=/libcxx_symcc_install \
-         -DCMAKE_C_COMPILER=/symcc_build_simple/symcc \
-         -DCMAKE_CXX_COMPILER=/symcc_build_simple/sym++ \
-    && ninja distribution \
-    && ninja install-distribution
 
 #
 # The final image
@@ -106,11 +119,11 @@ RUN apt-get update \
     && useradd -m -s /bin/bash ubuntu \
     && echo 'ubuntu ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/ubuntu
 
-COPY --from=builder /symcc_build /symcc_build
-COPY --from=builder /root/.cargo/bin/symcc_fuzzing_helper /symcc_build/
+COPY --from=builder_qsym /symcc_build /symcc_build
+COPY --from=builder_qsym /root/.cargo/bin/symcc_fuzzing_helper /symcc_build/
 COPY util/pure_concolic_execution.sh /symcc_build/
-COPY --from=builder /libcxx_symcc_install /libcxx_symcc_install
-COPY --from=builder /afl /afl
+COPY --from=builder_qsym /libcxx_symcc_install /libcxx_symcc_install
+COPY --from=builder_qsym /afl /afl
 
 ENV PATH /symcc_build:$PATH
 ENV AFL_PATH /afl

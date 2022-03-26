@@ -361,6 +361,10 @@ int SYM(fgetc)(FILE *stream) {
   return result;
 }
 
+int SYM(getchar)(void) {
+  return SYM(getc)(stdin);
+}
+
 int SYM(ungetc)(int c, FILE *stream) {
   auto result = ungetc(c, stream);
   _sym_set_return_expression(_sym_get_parameter_expression(0));

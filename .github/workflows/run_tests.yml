@@ -1,0 +1,17 @@
+name: Compile and test SymCC
+on: [push, pull_request]
+jobs:
+  build_and_test_symcc:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup docker compilation environment
+        run: docker build --target builder  -t symcc .
+      - name: Build and test SymCC with simple backend
+        run: docker build --target builder_simple  -t symcc .
+      - name: Build libcxx using SymCC simple backend
+        run: docker build --target builder_libcxx  -t symcc .
+      - name: Build and test SymCC with Qsym backend
+        run: docker build --target builder_qsym  -t symcc .
+      - name: Creation of the final SymCC docker image with Qsym backend and libcxx
+        run: docker build  -t symcc .
