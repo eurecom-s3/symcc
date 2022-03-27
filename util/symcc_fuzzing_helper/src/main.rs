@@ -32,7 +32,7 @@ const STATS_INTERVAL_SEC: u64 = 60;
 // inputs.
 
 #[derive(Debug, StructOpt)]
-#[clap(about = "Make SymCC collaborate with AFL.", no_version)]
+#[clap(about = "Make SymCC collaborate with AFL.")]
 struct Opt {
     /// The name of the fuzzer to work with
     #[clap(short = 'a')]
