@@ -22,7 +22,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, Instant};
-use clap::{self, StructOpt};
+use structopt::StructOpt;
 use symcc::{AflConfig, AflMap, AflShowmapResult, SymCC, TestcaseDir};
 use tempfile::tempdir;
 
@@ -32,22 +32,22 @@ const STATS_INTERVAL_SEC: u64 = 60;
 // inputs.
 
 #[derive(Debug, StructOpt)]
-#[clap(about = "Make SymCC collaborate with AFL.", no_version)]
-struct Opt {
+#[structopt(about = "Make SymCC collaborate with AFL.", no_version)]
+struct CLI {
     /// The name of the fuzzer to work with
-    #[clap(short = 'a')]
+    #[structopt(short = "a")]
     fuzzer_name: String,
 
     /// The AFL output directory
-    #[clap(short = 'o')]
+    #[structopt(short = "o")]
     output_dir: PathBuf,
 
     /// Name to use for SymCC
-    #[clap(short = 'n')]
+    #[structopt(short = "n")]
     name: String,
 
     /// Enable verbose logging
-    #[clap(short = 'v')]
+    #[structopt(short = "v")]
     verbose: bool,
 
     /// Program under test
@@ -264,7 +264,7 @@ impl State {
 }
 
 fn main() -> Result<()> {
-    let options = Opt::parse();
+    let options = CLI::from_args();
     env_logger::builder()
         .filter_level(if options.verbose {
             log::LevelFilter::Debug
