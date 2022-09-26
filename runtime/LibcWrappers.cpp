@@ -31,6 +31,7 @@
 #include <Runtime.h>
 #include <utmpx.h>
 #include <stdio.h>
+#include <utmp.h>
 
 #define SYM(x) x##_symbolized
 
@@ -273,7 +274,7 @@ size_t SYM(fread_unlocked)(void *ptr, size_t size, size_t nmemb, FILE *stream)
     tryAlternative(size, _sym_get_parameter_expression(1), SYM(fread_unlocked));
     tryAlternative(nmemb, _sym_get_parameter_expression(2), SYM(fread_unlocked));
 
-    auto result = fread(ptr, size, nmemb, stream);
+    auto result = fread_unlocked(ptr, size, nmemb, stream);
     _sym_set_return_expression(nullptr);
 
     if (fileno(stream) == inputFileDescriptor)
@@ -376,18 +377,23 @@ int SYM(fseeko64)(FILE *stream, uint64_t offset, int whence) {
   return result;
 }
 
-struct utmpx *SYM(getutxent)()
+struct utmp *SYM(getutent)()
 {
-    auto *result = getutxent();
+    auto *result = getutent();
     _sym_set_return_expression(nullptr);
 
     // Reading symbolic input.
-    ReadWriteShadow shadow(result, sizeof (struct utmpx));
+    ReadWriteShadow shadow(result, sizeof (struct utmp));
     std::generate(shadow.begin(), shadow.end(),
                   []()
                   { return _sym_get_input_byte(inputOffset++); });
 
     return result;
+}
+
+struct utmpx *SYM(getutxent)()
+{
+    return (utmpx *)SYM(getutent)();
 }
 
 ssize_t SYM(getline)(char **ptr, size_t *n, FILE *stream)
@@ -435,7 +441,7 @@ int SYM(getc)(FILE *stream) {
 
 int SYM(getc_unlocked)(FILE *stream)
 {
-    auto result = getc(stream);
+    auto result = getc_unlocked(stream);
     if (result == EOF)
     {
         _sym_set_return_expression(nullptr);
