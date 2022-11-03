@@ -305,9 +305,9 @@ SymExpr _sym_extract_helper(SymExpr expr, size_t first_bit, size_t last_bit) {
 
 size_t _sym_bits_helper(SymExpr expr) { return expr->bits(); }
 
-SymExpr _sym_build_bool_to_bits(SymExpr expr, uint8_t bits) {
+SymExpr _sym_build_bool_to_bit(SymExpr expr) {
   return registerExpression(
-      g_expr_builder->boolToBit(allocatedExpressions.at(expr), bits));
+      g_expr_builder->boolToBit(allocatedExpressions.at(expr), 1));
 }
 
 //
