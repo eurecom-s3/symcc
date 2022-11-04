@@ -77,8 +77,8 @@ find_package(LLVM REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake from ${LLVM_DIR}")
 
-if (${LLVM_VERSION_MAJOR} LESS 8 OR ${LLVM_VERSION_MAJOR} GREATER 12)
-  message(WARNING "The software has been developed for LLVM 8 through 12; \
+if (${LLVM_VERSION_MAJOR} LESS 8 OR ${LLVM_VERSION_MAJOR} GREATER 13)
+  message(WARNING "The software has been developed for LLVM 8 through 13; \
 it is unlikely to work with other versions!")
 endif()
 
@@ -113,6 +113,12 @@ find_program(CLANGPP_BINARY "clang++"
   DOC "The clang binary to use in the sym++ wrapper script.")
 if (NOT CLANG_BINARY)
   message(FATAL_ERROR "Clang not found; please make sure that the version corresponding to your LLVM installation is available.")
+endif()
+
+if (${LLVM_VERSION_MAJOR} LESS 13)
+  set(CLANG_LOAD_PASS "-Xclang -load -Xclang ")
+else()
+  set(CLANG_LOAD_PASS "-fpass-plugin=")
 endif()
 
 configure_file("compiler/symcc.in" "symcc" @ONLY)

@@ -37,5 +37,6 @@ int main() {
   // QSYM: New testcase
   if (r == -1) printf("Bingo!\n");
   else printf("Ok\n");
+  // ANY: Ok
   return r;
 }
