@@ -380,6 +380,14 @@ void Symbolizer::visitSelectInst(SelectInst &I) {
                                        {I.getCondition(), false},
                                        {getTargetPreferredInt(&I), false}});
   registerSymbolicComputation(runtimeCall);
+  if (getSymbolicExpression(I.getTrueValue()) 
+    ||  getSymbolicExpression(I.getFalseValue())) {
+    auto *data = IRB.CreateSelect(
+      I.getCondition(), 
+      getSymbolicExpressionOrNull(I.getTrueValue()),
+      getSymbolicExpressionOrNull(I.getFalseValue()));
+    symbolicExpressions[&I] = data;
+  }
 }
 
 void Symbolizer::visitCmpInst(CmpInst &I) {
