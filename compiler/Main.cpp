@@ -18,6 +18,12 @@
 #if LLVM_VERSION_MAJOR >= 13
 #include <llvm/Passes/PassBuilder.h>
 #include <llvm/Passes/PassPlugin.h>
+
+#if LLVM_VERSION_MAJOR >= 14
+#include <llvm/Passes/OptimizationLevel.h>
+#else
+using OptimizationLevel = llvm::PassBuilder::OptimizationLevel;
+#endif
 #endif
 
 #include "Pass.h"
@@ -56,11 +62,11 @@ PassPluginLibraryInfo getSymbolizePluginInfo() {
             // before the vectorizer. (There doesn't seem to be a way to run
             // module passes at the start of the vectorizer, hence the split.)
             PB.registerPipelineStartEPCallback(
-                [](ModulePassManager &PM, PassBuilder::OptimizationLevel) {
+                [](ModulePassManager &PM, OptimizationLevel) {
                   PM.addPass(SymbolizePass());
                 });
             PB.registerVectorizerStartEPCallback(
-                [](FunctionPassManager &PM, PassBuilder::OptimizationLevel) {
+                [](FunctionPassManager &PM, OptimizationLevel) {
                   PM.addPass(SymbolizePass());
                 });
           }};
