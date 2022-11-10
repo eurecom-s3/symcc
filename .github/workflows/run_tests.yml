@@ -15,3 +15,29 @@ jobs:
         run: docker build --target builder_qsym  -t symcc .
       - name: Creation of the final SymCC docker image with Qsym backend and libcxx
         run: docker build  -t symcc .
+  llvm_compatibility:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        llvm_version: [11, 12, 13, 14]
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - name: Install dependencies
+        run: |
+          sudo apt-get install -y \
+            llvm-${{ matrix.llvm_version }}-dev \
+            libz3-dev \
+            python2
+      - name: Build SymCC with the QSYM backend
+        run: |
+          mkdir build
+          cd build
+          cmake \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DZ3_TRUST_SYSTEM_VERSION=ON \
+            -DQSYM_BACKEND=ON \
+            -DLLVM_DIR=/usr/lib/llvm-${{ matrix.llvm_version }}/cmake \
+            ..
+          make
