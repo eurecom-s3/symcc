@@ -77,8 +77,8 @@ find_package(LLVM REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake from ${LLVM_DIR}")
 
-if (${LLVM_VERSION_MAJOR} LESS 8 OR ${LLVM_VERSION_MAJOR} GREATER 14)
-  message(WARNING "The software has been developed for LLVM 8 through 14; \
+if (${LLVM_VERSION_MAJOR} LESS 8 OR ${LLVM_VERSION_MAJOR} GREATER 15)
+  message(WARNING "The software has been developed for LLVM 8 through 15; \
 it is unlikely to work with other versions!")
 endif()
 
