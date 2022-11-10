@@ -380,12 +380,11 @@ void Symbolizer::visitSelectInst(SelectInst &I) {
                                        {I.getCondition(), false},
                                        {getTargetPreferredInt(&I), false}});
   registerSymbolicComputation(runtimeCall);
-  if (getSymbolicExpression(I.getTrueValue()) 
-    ||  getSymbolicExpression(I.getFalseValue())) {
+  if (getSymbolicExpression(I.getTrueValue()) ||
+      getSymbolicExpression(I.getFalseValue())) {
     auto *data = IRB.CreateSelect(
-      I.getCondition(), 
-      getSymbolicExpressionOrNull(I.getTrueValue()),
-      getSymbolicExpressionOrNull(I.getFalseValue()));
+        I.getCondition(), getSymbolicExpressionOrNull(I.getTrueValue()),
+        getSymbolicExpressionOrNull(I.getFalseValue()));
     symbolicExpressions[&I] = data;
   }
 }
@@ -724,20 +723,15 @@ void Symbolizer::visitCastInst(CastInst &I) {
   if (I.getSrcTy()->getIntegerBitWidth() == 1) {
 
     SymbolicComputation symbolicComputation;
-    symbolicComputation.merge(
-      forceBuildRuntimeCall(
-        IRB, runtime.buildBoolToBit,
-        {{I.getOperand(0), true}})
-    );
-    symbolicComputation.merge(
-      forceBuildRuntimeCall(
+    symbolicComputation.merge(forceBuildRuntimeCall(IRB, runtime.buildBoolToBit,
+                                                    {{I.getOperand(0), true}}));
+    symbolicComputation.merge(forceBuildRuntimeCall(
         IRB, target,
         {{symbolicComputation.lastInstruction, false},
-         {IRB.getInt8(I.getDestTy()->getIntegerBitWidth() - 1), false}})
-    );
+         {IRB.getInt8(I.getDestTy()->getIntegerBitWidth() - 1), false}}));
 
     registerSymbolicComputation(symbolicComputation, &I);
-  
+
   } else {
     auto symbolicCast =
         buildRuntimeCall(IRB, target,
@@ -777,7 +771,9 @@ void Symbolizer::visitInsertValueInst(InsertValueInst &I) {
        {IRB.getInt64(aggregateMemberOffset(I.getAggregateOperand()->getType(),
                                            I.getIndices())),
         false},
-       {IRB.getInt8(isLittleEndian(I.getInsertedValueOperand()->getType()) ? 1 : 0), false}});
+       {IRB.getInt8(isLittleEndian(I.getInsertedValueOperand()->getType()) ? 1
+                                                                           : 0),
+        false}});
   registerSymbolicComputation(insert, &I);
 }
 

@@ -17,16 +17,14 @@
 //
 // Check that select instruction is propagating the symbolic value (issue #109)
 
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 
-char bar(char a, char b, char c) {
-  return (a == 0xA) ? b : c;
-}
+char bar(char a, char b, char c) { return (a == 0xA) ? b : c; }
 
 int main() {
-  char input[3] = { 0 };
+  char input[3] = {0};
   read(0, &input, sizeof(input));
   // SIMPLE: Trying to solve
   // SIMPLE: Found diverging input
@@ -41,7 +39,9 @@ int main() {
   // QSYM-COUNT-2: SMT
   // QSYM: New testcase
   // ANY: KO
-  if (r == 0xB) printf("OK!\n");
-  else printf("KO\n");
+  if (r == 0xB)
+    printf("OK!\n");
+  else
+    printf("KO\n");
   return 0;
 }
