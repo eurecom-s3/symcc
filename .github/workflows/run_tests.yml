@@ -1,5 +1,5 @@
 name: Compile and test SymCC
-on: [push, pull_request]
+on: [pull_request]
 jobs:
   build_and_test_symcc:
     runs-on: ubuntu-20.04
