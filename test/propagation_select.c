@@ -34,8 +34,8 @@ int main() {
   char r = bar(input[0], input[1], input[2]);
   // SIMPLE: Trying to solve
   // SIMPLE: Found diverging input
-  // SIMPLE: stdin2 -> #x0b
-  // SIMPLE: stdin0 -> #x00
+  // SIMPLE-DAG: stdin2 -> #x0b
+  // SIMPLE-DAG: stdin0 -> #x00
   // QSYM-COUNT-2: SMT
   // QSYM: New testcase
   // ANY: KO
