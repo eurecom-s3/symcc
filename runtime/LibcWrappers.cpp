@@ -18,6 +18,7 @@
 #include <cstring>
 #include <iostream>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include <arpa/inet.h>
@@ -56,13 +57,28 @@ template <typename E, typename F>
 void tryAlternative(E *value, SymExpr valueExpr, F caller) {
   tryAlternative(reinterpret_cast<intptr_t>(value), valueExpr, caller);
 }
+
+void maybeSetInputFile(const char *path, int fd) {
+  auto *fileInput = std::get_if<FileInput>(&g_config.input);
+  if (fileInput == nullptr)
+    return;
+
+  if (strstr(path, fileInput->fileName.c_str()) == nullptr)
+    return;
+
+  if (inputFileDescriptor != -1)
+    std::cerr << "Warning: input file opened multiple times; this is not yet "
+                 "supported"
+              << std::endl;
+
+  inputFileDescriptor = fd;
+  inputOffset = 0;
+}
+
 } // namespace
 
 void initLibcWrappers() {
-  if (g_config.fullyConcrete)
-    return;
-
-  if (g_config.inputFile.empty()) {
+  if (std::holds_alternative<StdinInput>(g_config.input)) {
     // Symbolic data comes from standard input.
     inputFileDescriptor = 0;
   }
@@ -111,15 +127,8 @@ int SYM(open)(const char *path, int oflag, mode_t mode) {
   auto result = open(path, oflag, mode);
   _sym_set_return_expression(nullptr);
 
-  if (result >= 0 && !g_config.fullyConcrete && !g_config.inputFile.empty() &&
-      strstr(path, g_config.inputFile.c_str()) != nullptr) {
-    if (inputFileDescriptor != -1)
-      std::cerr << "Warning: input file opened multiple times; this is not yet "
-                   "supported"
-                << std::endl;
-    inputFileDescriptor = result;
-    inputOffset = 0;
-  }
+  if (result >= 0)
+    maybeSetInputFile(path, result);
 
   return result;
 }
@@ -136,9 +145,8 @@ ssize_t SYM(read)(int fildes, void *buf, size_t nbyte) {
 
   if (fildes == inputFileDescriptor) {
     // Reading symbolic input.
-    ReadWriteShadow shadow(buf, result);
-    std::generate(shadow.begin(), shadow.end(),
-                  []() { return _sym_get_input_byte(inputOffset++); });
+    _sym_make_symbolic(buf, result, inputOffset);
+    inputOffset += result;
   } else if (!isConcrete(buf, result)) {
     ReadWriteShadow shadow(buf, result);
     std::fill(shadow.begin(), shadow.end(), nullptr);
@@ -193,16 +201,8 @@ FILE *SYM(fopen)(const char *pathname, const char *mode) {
   auto *result = fopen(pathname, mode);
   _sym_set_return_expression(nullptr);
 
-  if (result != nullptr && !g_config.fullyConcrete &&
-      !g_config.inputFile.empty() &&
-      strstr(pathname, g_config.inputFile.c_str()) != nullptr) {
-    if (inputFileDescriptor != -1)
-      std::cerr << "Warning: input file opened multiple times; this is not yet "
-                   "supported"
-                << std::endl;
-    inputFileDescriptor = fileno(result);
-    inputOffset = 0;
-  }
+  if (result != nullptr)
+    maybeSetInputFile(pathname, fileno(result));
 
   return result;
 }
@@ -211,16 +211,8 @@ FILE *SYM(fopen64)(const char *pathname, const char *mode) {
   auto *result = fopen64(pathname, mode);
   _sym_set_return_expression(nullptr);
 
-  if (result != nullptr && !g_config.fullyConcrete &&
-      !g_config.inputFile.empty() &&
-      strstr(pathname, g_config.inputFile.c_str()) != nullptr) {
-    if (inputFileDescriptor != -1)
-      std::cerr << "Warning: input file opened multiple times; this is not yet "
-                   "supported"
-                << std::endl;
-    inputFileDescriptor = fileno(result);
-    inputOffset = 0;
-  }
+  if (result != nullptr)
+    maybeSetInputFile(pathname, fileno(result));
 
   return result;
 }
@@ -235,9 +227,8 @@ size_t SYM(fread)(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 
   if (fileno(stream) == inputFileDescriptor) {
     // Reading symbolic input.
-    ReadWriteShadow shadow(ptr, result * size);
-    std::generate(shadow.begin(), shadow.end(),
-                  []() { return _sym_get_input_byte(inputOffset++); });
+    _sym_make_symbolic(ptr, result * size, inputOffset);
+    inputOffset += result * size;
   } else if (!isConcrete(ptr, result * size)) {
     ReadWriteShadow shadow(ptr, result * size);
     std::fill(shadow.begin(), shadow.end(), nullptr);
@@ -255,9 +246,9 @@ char *SYM(fgets)(char *str, int n, FILE *stream) {
 
   if (fileno(stream) == inputFileDescriptor) {
     // Reading symbolic input.
-    ReadWriteShadow shadow(str, sizeof(char) * strlen(str));
-    std::generate(shadow.begin(), shadow.end(),
-                  []() { return _sym_get_input_byte(inputOffset++); });
+    const auto length = sizeof(char) * strlen(str);
+    _sym_make_symbolic(str, length, inputOffset);
+    inputOffset += length;
   } else if (!isConcrete(str, sizeof(char) * strlen(str))) {
     ReadWriteShadow shadow(str, sizeof(char) * strlen(str));
     std::fill(shadow.begin(), shadow.end(), nullptr);
@@ -338,7 +329,7 @@ int SYM(getc)(FILE *stream) {
 
   if (fileno(stream) == inputFileDescriptor)
     _sym_set_return_expression(_sym_build_zext(
-        _sym_get_input_byte(inputOffset++), sizeof(int) * 8 - 8));
+        _sym_get_input_byte(inputOffset++, result), sizeof(int) * 8 - 8));
   else
     _sym_set_return_expression(nullptr);
 
@@ -354,16 +345,14 @@ int SYM(fgetc)(FILE *stream) {
 
   if (fileno(stream) == inputFileDescriptor)
     _sym_set_return_expression(_sym_build_zext(
-        _sym_get_input_byte(inputOffset++), sizeof(int) * 8 - 8));
+        _sym_get_input_byte(inputOffset++, result), sizeof(int) * 8 - 8));
   else
     _sym_set_return_expression(nullptr);
 
   return result;
 }
 
-int SYM(getchar)(void) {
-  return SYM(getc)(stdin);
-}
+int SYM(getchar)(void) { return SYM(getc)(stdin); }
 
 int SYM(ungetc)(int c, FILE *stream) {
   auto result = ungetc(c, stream);

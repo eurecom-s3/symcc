@@ -178,7 +178,7 @@ Z3_ast _sym_build_float(double value, int is_double) {
   return result;
 }
 
-Z3_ast _sym_get_input_byte(size_t offset) {
+Z3_ast _sym_get_input_byte(size_t offset, uint8_t) {
   static std::vector<SymExpr> stdinBytes;
 
   if (offset < stdinBytes.size())

@@ -34,6 +34,7 @@
 #include <iterator>
 #include <map>
 #include <unordered_set>
+#include <variant>
 
 #if HAVE_FILESYSTEM
 #include <filesystem>
@@ -46,6 +47,7 @@
 #endif
 
 // C
+#include <cstdint>
 #include <cstdio>
 
 // Qsym
@@ -77,11 +79,6 @@ namespace {
 /// Indicate whether the runtime has been initialized.
 std::atomic_flag g_initialized = ATOMIC_FLAG_INIT;
 
-/// The file that contains out input.
-std::string inputFileName;
-
-void deleteInputFile() { std::remove(inputFileName.c_str()); }
-
 /// A mapping of all expressions that we have ever received from Qsym to the
 /// corresponding shared pointers on the heap.
 ///
@@ -105,6 +102,34 @@ SymExpr registerExpression(const qsym::ExprRef &expr) {
   return rawExpr;
 }
 
+/// A Qsym solver that doesn't require the entire input on initialization.
+class EnhancedQsymSolver : public qsym::Solver {
+  // Warning!
+  //
+  // We can't override methods of qsym::Solver. None of them are declared
+  // virtual, and the Qsym code refers to the solver with a pointer of type
+  // qsym::Solver*, so it will always choose the implementation of the base
+  // class. What we can do, though, is add new functions that access the data
+  // members of the base class.
+  //
+  // Subclassing the Qsym solver is ugly but helps us to avoid making too many
+  // changes in the Qsym codebase.
+
+public:
+  EnhancedQsymSolver()
+      : qsym::Solver("/dev/null", g_config.outputDir, g_config.aflCoverageMap) {
+  }
+
+  void pushInputByte(size_t offset, uint8_t value) {
+    if (inputs_.size() <= offset)
+      inputs_.resize(offset + 1);
+
+    inputs_[offset] = value;
+  }
+};
+
+EnhancedQsymSolver *g_enhanced_solver;
+
 } // namespace
 
 using namespace qsym;
@@ -122,7 +147,7 @@ void _sym_initialize(void) {
   loadConfig();
   initLibcWrappers();
   std::cerr << "This is SymCC running with the QSYM backend" << std::endl;
-  if (g_config.fullyConcrete) {
+  if (std::holds_alternative<NoInput>(g_config.input)) {
     std::cerr
         << "Performing fully concrete execution (i.e., without symbolic input)"
         << std::endl;
@@ -138,42 +163,9 @@ void _sym_initialize(void) {
     exit(-1);
   }
 
-  // Qsym requires the full input in a file
-  if (g_config.inputFile.empty()) {
-    std::cerr << "Reading program input until EOF (use Ctrl+D in a terminal)..."
-              << std::endl;
-    std::istreambuf_iterator<char> in_begin(std::cin), in_end;
-    std::vector<char> inputData(in_begin, in_end);
-    inputFileName = std::tmpnam(nullptr);
-    std::ofstream inputFile(inputFileName, std::ios::trunc);
-    std::copy(inputData.begin(), inputData.end(),
-              std::ostreambuf_iterator<char>(inputFile));
-    inputFile.close();
-
-#ifdef DEBUG_RUNTIME
-    std::cerr << "Loaded input:" << std::endl;
-    std::copy(inputData.begin(), inputData.end(),
-              std::ostreambuf_iterator<char>(std::cerr));
-    std::cerr << std::endl;
-#endif
-
-    atexit(deleteInputFile);
-
-    // Restore some semblance of standard input
-    auto *newStdin = freopen(inputFileName.c_str(), "r", stdin);
-    if (newStdin == nullptr) {
-      perror("Failed to reopen stdin");
-      exit(-1);
-    }
-  } else {
-    inputFileName = g_config.inputFile;
-    std::cerr << "Making data read from " << inputFileName << " as symbolic"
-              << std::endl;
-  }
-
   g_z3_context = new z3::context{};
-  g_solver =
-      new Solver(inputFileName, g_config.outputDir, g_config.aflCoverageMap);
+  g_enhanced_solver = new EnhancedQsymSolver{};
+  g_solver = g_enhanced_solver; // for Qsym-internal use
   g_expr_builder = g_config.pruning ? PruneExprBuilder::create()
                                     : SymbolicExprBuilder::create();
 }
@@ -289,7 +281,8 @@ void _sym_push_path_constraint(SymExpr constraint, int taken,
   g_solver->addJcc(allocatedExpressions.at(constraint), taken != 0, site_id);
 }
 
-SymExpr _sym_get_input_byte(size_t offset) {
+SymExpr _sym_get_input_byte(size_t offset, uint8_t value) {
+  g_enhanced_solver->pushInputByte(offset, value);
   return registerExpression(g_expr_builder->createRead(offset));
 }
 
