@@ -60,7 +60,12 @@ environment variables.
 
 - SYMCC_INPUT_FILE (default empty): When empty, SymCC treats data read from
   standard input as symbolic; when set to a file name, any data read from that
-  file is considered symbolic.
+  file is considered symbolic. Ignored if SYMCC_NO_SYMBOLIC_INPUT is set to 1.
+
+- SYMCC_MEMORY_INPUT=0/1 (default 0): When set to 1, expect the program under
+  test to communicate symbolic inputs with one or more calls to
+  symcc_make_symbolic. Can't be combined with SYMCC_INPUT_FILE. Ignored if
+  SYMCC_NO_SYMBOLIC_INPUT is set to 1.
 
 - SYMCC_LOG_FILE (default empty): When set to a file name, SymCC creates the
   file (or overwrites any existing file!) and uses it to log backend activity
