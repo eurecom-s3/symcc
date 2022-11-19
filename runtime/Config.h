@@ -16,16 +16,31 @@
 #define CONFIG_H
 
 #include <string>
+#include <variant>
+
+/// Marker struct for fully concrete execution.
+struct NoInput {};
+
+/// Marker struct for symbolic input from stdin.
+struct StdinInput {};
+
+/// Marker struct for symbolic input via _sym_make_symbolic.
+struct MemoryInput {};
+
+/// Configuration for symbolic input from a file.
+struct FileInput {
+  /// The name of input file.
+  std::string fileName;
+};
 
 struct Config {
-  /// Should we allow symbolic data in the program?
-  bool fullyConcrete = false;
+  using InputConfig = std::variant<NoInput, StdinInput, MemoryInput, FileInput>;
+
+  /// The configuration for our symbolic input.
+  InputConfig input = StdinInput{};
 
   /// The directory for storing new outputs.
   std::string outputDir = "/tmp/output";
-
-  /// The input file, if any.
-  std::string inputFile;
 
   /// The file to log constraint solving information to.
   std::string logFile = "";

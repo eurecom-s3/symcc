@@ -15,6 +15,7 @@
 mod symcc;
 
 use anyhow::{Context, Result};
+use clap::{self, StructOpt};
 use std::collections::HashSet;
 use std::fs;
 use std::fs::File;
@@ -22,7 +23,6 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, Instant};
-use clap::{self, StructOpt};
 use symcc::{AflConfig, AflMap, AflShowmapResult, SymCC, TestcaseDir};
 use tempfile::tempdir;
 
@@ -33,7 +33,7 @@ const STATS_INTERVAL_SEC: u64 = 60;
 
 #[derive(Debug, StructOpt)]
 #[clap(about = "Make SymCC collaborate with AFL.")]
-struct Opt {
+struct CLI {
     /// The name of the fuzzer to work with
     #[clap(short = 'a')]
     fuzzer_name: String,
@@ -275,7 +275,7 @@ impl State {
 }
 
 fn main() -> Result<()> {
-    let options = Opt::parse();
+    let options = CLI::parse();
     env_logger::builder()
         .filter_level(if options.verbose {
             log::LevelFilter::Debug

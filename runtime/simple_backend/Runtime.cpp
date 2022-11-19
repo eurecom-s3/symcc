@@ -178,7 +178,7 @@ Z3_ast _sym_build_float(double value, int is_double) {
   return result;
 }
 
-Z3_ast _sym_get_input_byte(size_t offset) {
+Z3_ast _sym_get_input_byte(size_t offset, uint8_t) {
   static std::vector<SymExpr> stdinBytes;
 
   if (offset < stdinBytes.size())
@@ -407,10 +407,10 @@ Z3_ast _sym_build_float_to_unsigned_integer(Z3_ast expr, uint8_t bits) {
       g_context, Z3_mk_fpa_round_toward_zero(g_context), expr, bits));
 }
 
-Z3_ast _sym_build_bool_to_bits(Z3_ast expr, uint8_t bits) {
+Z3_ast _sym_build_bool_to_bit(Z3_ast expr) {
   return registerExpression(Z3_mk_ite(g_context, expr,
-                                      _sym_build_integer(1, bits),
-                                      _sym_build_integer(0, bits)));
+                                      _sym_build_integer(1, 1),
+                                      _sym_build_integer(0, 1)));
 }
 
 void _sym_push_path_constraint(Z3_ast constraint, int taken,

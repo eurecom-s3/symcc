@@ -34,10 +34,14 @@ using namespace llvm;
 #define DEBUG(X) ((void)0)
 #endif
 
-char SymbolizePass::ID = 0;
+char SymbolizeLegacyPass::ID = 0;
 
-bool SymbolizePass::doInitialization(Module &M) {
-  DEBUG(errs() << "Symbolizer module init\n");
+namespace {
+
+static constexpr char kSymCtorName[] = "__sym_ctor";
+
+bool instrumentModule(Module &M) {
+  DEBUG(errs() << "Symbolizer module instrumentation\n");
 
   // Redirect calls to external functions to the corresponding wrappers and
   // rename internal functions.
@@ -56,7 +60,7 @@ bool SymbolizePass::doInitialization(Module &M) {
   return true;
 }
 
-bool SymbolizePass::runOnFunction(Function &F) {
+bool instrumentFunction(Function &F) {
   auto functionName = F.getName();
   if (functionName == kSymCtorName)
     return false;
@@ -87,3 +91,27 @@ bool SymbolizePass::runOnFunction(Function &F) {
 
   return true;
 }
+
+} // namespace
+
+bool SymbolizeLegacyPass::doInitialization(Module &M) {
+  return instrumentModule(M);
+}
+
+bool SymbolizeLegacyPass::runOnFunction(Function &F) {
+  return instrumentFunction(F);
+}
+
+#if LLVM_VERSION_MAJOR >= 13
+
+PreservedAnalyses SymbolizePass::run(Function &F, FunctionAnalysisManager &) {
+  return instrumentFunction(F) ? PreservedAnalyses::none()
+                               : PreservedAnalyses::all();
+}
+
+PreservedAnalyses SymbolizePass::run(Module &M, ModuleAnalysisManager &) {
+  return instrumentModule(M) ? PreservedAnalyses::none()
+                             : PreservedAnalyses::all();
+}
+
+#endif

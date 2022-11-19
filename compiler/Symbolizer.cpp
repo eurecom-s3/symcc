@@ -380,6 +380,13 @@ void Symbolizer::visitSelectInst(SelectInst &I) {
                                        {I.getCondition(), false},
                                        {getTargetPreferredInt(&I), false}});
   registerSymbolicComputation(runtimeCall);
+  if (getSymbolicExpression(I.getTrueValue()) ||
+      getSymbolicExpression(I.getFalseValue())) {
+    auto *data = IRB.CreateSelect(
+        I.getCondition(), getSymbolicExpressionOrNull(I.getTrueValue()),
+        getSymbolicExpressionOrNull(I.getFalseValue()));
+    symbolicExpressions[&I] = data;
+  }
 }
 
 void Symbolizer::visitCmpInst(CmpInst &I) {
@@ -696,30 +703,36 @@ void Symbolizer::visitCastInst(CastInst &I) {
 
   IRBuilder<> IRB(&I);
 
+  SymFnT target;
+
+  switch (I.getOpcode()) {
+  case Instruction::SExt:
+    target = runtime.buildSExt;
+    break;
+  case Instruction::ZExt:
+    target = runtime.buildZExt;
+    break;
+  default:
+    llvm_unreachable("Unknown cast opcode");
+  }
+
   // LLVM bitcode represents Boolean values as i1. In Z3, those are a not a
   // bit-vector sort, so trying to cast one into a bit vector of any length
   // raises an error. The run-time library provides a dedicated conversion
   // function for this case.
   if (I.getSrcTy()->getIntegerBitWidth() == 1) {
-    auto boolToBitConversion = buildRuntimeCall(
-        IRB, runtime.buildBoolToBits,
-        {{I.getOperand(0), true},
-         {IRB.getInt8(I.getDestTy()->getIntegerBitWidth()), false}});
-    registerSymbolicComputation(boolToBitConversion, &I);
+
+    SymbolicComputation symbolicComputation;
+    symbolicComputation.merge(forceBuildRuntimeCall(IRB, runtime.buildBoolToBit,
+                                                    {{I.getOperand(0), true}}));
+    symbolicComputation.merge(forceBuildRuntimeCall(
+        IRB, target,
+        {{symbolicComputation.lastInstruction, false},
+         {IRB.getInt8(I.getDestTy()->getIntegerBitWidth() - 1), false}}));
+
+    registerSymbolicComputation(symbolicComputation, &I);
+
   } else {
-    SymFnT target;
-
-    switch (I.getOpcode()) {
-    case Instruction::SExt:
-      target = runtime.buildSExt;
-      break;
-    case Instruction::ZExt:
-      target = runtime.buildZExt;
-      break;
-    default:
-      llvm_unreachable("Unknown cast opcode");
-    }
-
     auto symbolicCast =
         buildRuntimeCall(IRB, target,
                          {{I.getOperand(0), true},
@@ -758,7 +771,9 @@ void Symbolizer::visitInsertValueInst(InsertValueInst &I) {
        {IRB.getInt64(aggregateMemberOffset(I.getAggregateOperand()->getType(),
                                            I.getIndices())),
         false},
-       {IRB.getInt8(isLittleEndian(I.getInsertedValueOperand()->getType()) ? 1 : 0), false}});
+       {IRB.getInt8(isLittleEndian(I.getInsertedValueOperand()->getType()) ? 1
+                                                                           : 0),
+        false}});
   registerSymbolicComputation(insert, &I);
 }
 

@@ -50,5 +50,6 @@ int main(int argc, char* argv[]) {
     }
     x = ntohl(x);
     fprintf(stderr, "%d\n", fac(x));
+    // ANY: 120
     return 0;
 }

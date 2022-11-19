@@ -39,4 +39,4 @@ target_include_directories(SymRuntime PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/..
   ${Z3_C_INCLUDE_DIRS})
 
-set_target_properties(SymRuntime PROPERTIES COMPILE_FLAGS "-Werror")
+set_target_properties(SymRuntime PROPERTIES COMPILE_FLAGS "-Werror -Wno-error=deprecated-declarations")

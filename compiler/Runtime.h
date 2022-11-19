@@ -49,7 +49,7 @@ struct Runtime {
   SymFnT buildBoolAnd{};
   SymFnT buildBoolOr{};
   SymFnT buildBoolXor{};
-  SymFnT buildBoolToBits{};
+  SymFnT buildBoolToBit{};
   SymFnT pushPathConstraint{};
   SymFnT getParameterExpression{};
   SymFnT setParameterExpression{};
