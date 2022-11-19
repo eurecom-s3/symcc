@@ -116,7 +116,7 @@ RSymExpr _rsym_build_bits_to_float(RSymExpr expr, bool to_double);
 RSymExpr _rsym_build_float_to_bits(RSymExpr expr);
 RSymExpr _rsym_build_float_to_signed_integer(RSymExpr expr, uint8_t bits);
 RSymExpr _rsym_build_float_to_unsigned_integer(RSymExpr expr, uint8_t bits);
-RSymExpr _rsym_build_bool_to_bit(RSymExpr expr, uint8_t bits);
+RSymExpr _rsym_build_bool_to_bit(RSymExpr expr);
 
 /*
  * Bit-array helpers
