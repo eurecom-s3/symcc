@@ -116,7 +116,7 @@ RSymExpr _rsym_build_bits_to_float(RSymExpr expr, bool to_double);
 RSymExpr _rsym_build_float_to_bits(RSymExpr expr);
 RSymExpr _rsym_build_float_to_signed_integer(RSymExpr expr, uint8_t bits);
 RSymExpr _rsym_build_float_to_unsigned_integer(RSymExpr expr, uint8_t bits);
-RSymExpr _rsym_build_bool_to_bits(RSymExpr expr, uint8_t bits);
+RSymExpr _rsym_build_bool_to_bit(RSymExpr expr, uint8_t bits);
 
 /*
  * Bit-array helpers
@@ -129,7 +129,7 @@ RSymExpr _rsym_extract_helper(RSymExpr expr, size_t first_bit, size_t last_bit);
  */
 void _rsym_push_path_constraint(RSymExpr constraint, bool taken,
                                 uintptr_t site_id);
-RSymExpr _rsym_get_input_byte(size_t offset);
+RSymExpr _rsym_get_input_byte(size_t offset, uint8_t value);
 
 /*
  * Call-stack tracing

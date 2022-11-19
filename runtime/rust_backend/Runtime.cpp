@@ -123,8 +123,8 @@ SymExpr _sym_build_float(double value, int is_double) {
       symexpr(_rsym_build_float(value, is_double), is_double ? 64 : 32));
 }
 
-SymExpr _sym_get_input_byte(size_t offset) {
-  return registerExpression(symexpr(_rsym_get_input_byte(offset), 8));
+SymExpr _sym_get_input_byte(size_t offset, uint8_t value) {
+  return registerExpression(symexpr(_rsym_get_input_byte(offset, value), 8));
 }
 
 SymExpr _sym_build_null_pointer(void) {
@@ -280,9 +280,9 @@ SymExpr _sym_build_float_to_unsigned_integer(SymExpr expr, uint8_t bits) {
       _rsym_build_float_to_unsigned_integer(symexpr_id(expr), bits), bits));
 }
 
-SymExpr _sym_build_bool_to_bits(SymExpr expr, uint8_t bits) {
+SymExpr _sym_build_bool_to_bit(SymExpr expr, uint8_t bits) {
   return registerExpression(
-      symexpr(_rsym_build_bool_to_bits(symexpr_id(expr), bits), bits));
+      symexpr(_rsym_build_bool_to_bit(symexpr_id(expr), bits), bits));
 }
 
 void _sym_push_path_constraint(SymExpr constraint, int taken,
