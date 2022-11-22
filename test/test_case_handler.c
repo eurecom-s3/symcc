@@ -21,15 +21,15 @@
 #define MAGIC 0xab
 
 void symcc_make_symbolic(void *start, size_t byte_length);
-typedef void (*TestCaseHandler)(const uint8_t *, size_t);
+typedef void (*TestCaseHandler)(const void *, size_t);
 void symcc_set_test_case_handler(TestCaseHandler handler);
 
 int solved = 0;
 int num_test_cases = 0;
 
-void handle_test_case(const uint8_t *data, size_t data_length) {
+void handle_test_case(const void *data, size_t data_length) {
   num_test_cases++;
-  if (data_length == 1 && data[0] == MAGIC)
+  if (data_length == 1 && ((const uint8_t *)data)[0] == MAGIC)
     solved = 1;
 }
 
