@@ -13,7 +13,7 @@
 // SymCC. If not, see <https://www.gnu.org/licenses/>.
 
 //
-// Definitions that we need for the Qsym backend
+// Definitions that we need for the QSYM backend
 //
 
 #include "Runtime.h"
@@ -50,7 +50,7 @@
 #include <cstdint>
 #include <cstdio>
 
-// Qsym
+// QSYM
 #include <afl_trace_map.h>
 #include <call_stack_manager.h>
 #include <expr_builder.h>
@@ -79,7 +79,7 @@ namespace {
 /// Indicate whether the runtime has been initialized.
 std::atomic_flag g_initialized = ATOMIC_FLAG_INIT;
 
-/// A mapping of all expressions that we have ever received from Qsym to the
+/// A mapping of all expressions that we have ever received from QSYM to the
 /// corresponding shared pointers on the heap.
 ///
 /// We can't expect C clients to handle std::shared_ptr, so we maintain a single
@@ -102,18 +102,24 @@ SymExpr registerExpression(const qsym::ExprRef &expr) {
   return rawExpr;
 }
 
-/// A Qsym solver that doesn't require the entire input on initialization.
+/// The user-provided test case handler, if any.
+///
+/// If the user doesn't register a handler, we use QSYM's default behavior of
+/// writing the test case to a file in the output directory.
+TestCaseHandler g_test_case_handler = nullptr;
+
+/// A QSYM solver that doesn't require the entire input on initialization.
 class EnhancedQsymSolver : public qsym::Solver {
   // Warning!
   //
-  // We can't override methods of qsym::Solver. None of them are declared
-  // virtual, and the Qsym code refers to the solver with a pointer of type
-  // qsym::Solver*, so it will always choose the implementation of the base
-  // class. What we can do, though, is add new functions that access the data
-  // members of the base class.
+  // Before we can override methods of qsym::Solver, we need to declare them
+  // virtual because the QSYM code refers to the solver with a pointer of type
+  // qsym::Solver*; for non-virtual methods, it will always choose the
+  // implementation of the base class. Beware that making a method virtual adds
+  // a small performance overhead and requires us to change QSYM code.
   //
-  // Subclassing the Qsym solver is ugly but helps us to avoid making too many
-  // changes in the Qsym codebase.
+  // Subclassing the QSYM solver is ugly but helps us to avoid making too many
+  // changes in the QSYM codebase.
 
 public:
   EnhancedQsymSolver()
@@ -125,6 +131,15 @@ public:
       inputs_.resize(offset + 1);
 
     inputs_[offset] = value;
+  }
+
+  void saveValues(const std::string &suffix) override {
+    if (auto handler = g_test_case_handler) {
+      auto values = getConcreteValues();
+      handler(values.data(), values.size());
+    } else {
+      Solver::saveValues(suffix);
+    }
   }
 };
 
@@ -165,13 +180,13 @@ void _sym_initialize(void) {
 
   g_z3_context = new z3::context{};
   g_enhanced_solver = new EnhancedQsymSolver{};
-  g_solver = g_enhanced_solver; // for Qsym-internal use
+  g_solver = g_enhanced_solver; // for QSYM-internal use
   g_expr_builder = g_config.pruning ? PruneExprBuilder::create()
                                     : SymbolicExprBuilder::create();
 }
 
 SymExpr _sym_build_integer(uint64_t value, uint8_t bits) {
-  // Qsym's API takes uintptr_t, so we need to be careful when compiling for
+  // QSYM's API takes uintptr_t, so we need to be careful when compiling for
   // 32-bit systems: the compiler would helpfully truncate our uint64_t to fit
   // into 32 bits.
   if constexpr (sizeof(uint64_t) == sizeof(uintptr_t)) {
@@ -304,7 +319,7 @@ SymExpr _sym_build_bool_to_bit(SymExpr expr) {
 }
 
 //
-// Floating-point operations (unsupported in Qsym)
+// Floating-point operations (unsupported in QSYM)
 //
 
 #define UNSUPPORTED(prototype)                                                 \
@@ -416,4 +431,12 @@ void _sym_collect_garbage() {
                    .count()
             << " milliseconds)" << std::endl;
 #endif
+}
+
+//
+// Test-case handling
+//
+
+void symcc_set_test_case_handler(TestCaseHandler handler) {
+  g_test_case_handler = handler;
 }
