@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cassert>
+#include <cstdio>
 #include <cstring>
 #include <iostream>
 #include <set>
@@ -408,8 +409,7 @@ Z3_ast _sym_build_float_to_unsigned_integer(Z3_ast expr, uint8_t bits) {
 }
 
 Z3_ast _sym_build_bool_to_bit(Z3_ast expr) {
-  return registerExpression(Z3_mk_ite(g_context, expr,
-                                      _sym_build_integer(1, 1),
+  return registerExpression(Z3_mk_ite(g_context, expr, _sym_build_integer(1, 1),
                                       _sym_build_integer(0, 1)));
 }
 
@@ -543,4 +543,14 @@ void _sym_collect_garbage() {
                    .count()
             << " milliseconds)" << std::endl;
 #endif
+}
+
+/* Test-case handling */
+void symcc_set_test_case_handler(TestCaseHandler) {
+  // The simple backend doesn't support test-case handlers. However, let's not
+  // make this a fatal error; otherwise, users would have to change their
+  // programs to make them work with the simple backend.
+  fprintf(
+      g_log,
+      "Warning: test-case handlers aren't supported in the simple backend\n");
 }
