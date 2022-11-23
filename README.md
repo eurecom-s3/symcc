@@ -286,7 +286,8 @@ Lesser General Public License along with SymCC. If not, see
 The following pieces of software have additional or alternate copyrights,
 licenses, and/or restrictions:
 
-| Program | Directory                   |
-| ---     | ---                         |
-| QSYM    | `runtime/qsym_backend/qsym` |
+| Program       | Directory                   |
+|---------------|-----------------------------|
+| QSYM          | `runtime/qsym_backend/qsym` |
+| SymCC runtime | `runtime`                   |
 
