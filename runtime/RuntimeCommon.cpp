@@ -199,6 +199,17 @@ SymExpr _sym_build_insert(SymExpr target, SymExpr to_insert, uint64_t offset,
   return result;
 }
 
+SymExpr _sym_build_zero_bytes(size_t length) {
+  auto zero_byte = _sym_build_integer(0, 8);
+
+  auto result = zero_byte;
+  for (size_t i = 1; i < length; i++) {
+    result = _sym_concat_helper(result, zero_byte);
+  }
+
+  return result;
+}
+
 void _sym_register_expression_region(SymExpr *start, size_t length) {
   registerExpressionRegion({start, length});
 }

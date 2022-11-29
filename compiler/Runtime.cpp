@@ -147,6 +147,7 @@ Runtime::Runtime(Module &M) {
       import(M, "_sym_read_memory", ptrT, intPtrType, intPtrType, int8T);
   writeMemory = import(M, "_sym_write_memory", voidT, intPtrType, intPtrType,
                        ptrT, int8T);
+  buildZeroBytes = import(M, "_sym_build_zero_bytes", ptrT, intPtrType);
   buildInsert =
       import(M, "_sym_build_insert", ptrT, ptrT, ptrT, IRB.getInt64Ty(), int8T);
   buildExtract = import(M, "_sym_build_extract", ptrT, ptrT, IRB.getInt64Ty(),
@@ -163,7 +164,7 @@ bool isInterceptedFunction(const Function &f) {
       "malloc",   "calloc",  "mmap",    "mmap64", "open",   "read",    "lseek",
       "lseek64",  "fopen",   "fopen64", "fread",  "fseek",  "fseeko",  "rewind",
       "fseeko64", "getc",    "ungetc",  "memcpy", "memset", "strncpy", "strchr",
-      "memcmp",   "memmove", "ntohl",   "fgets",  "fgetc", "getchar"};
+      "memcmp",   "memmove", "ntohl",   "fgets",  "fgetc",  "getchar"};
 
   return (kInterceptedFunctions.count(f.getName()) > 0);
 }

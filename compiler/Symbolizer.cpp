@@ -887,15 +887,26 @@ CallInst *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
     // member. However, this would put an additional burden on the handling of
     // cast instructions, because expressions would have to be converted
     // between different representations according to the type.
+    //
+    // Unfortunately, the hack doesn't work when the entire structure is
+    // "undef"; writing it to memory is a well-defined bitcode operation, but
+    // the symbolic expression for the memory region will just be null because
+    // it's entirely concrete. We create an all-zeros expression for it instead.
 
-    auto *memory = IRB.CreateAlloca(V->getType());
-    IRB.CreateStore(V, memory);
-    return IRB.CreateCall(
-        runtime.readMemory,
-        {IRB.CreatePtrToInt(memory, intPtrType),
-         ConstantInt::get(intPtrType,
-                          dataLayout.getTypeStoreSize(V->getType())),
-         IRB.getInt8(0)});
+    if (isa<UndefValue>(V)) {
+      return IRB.CreateCall(
+          runtime.buildZeroBytes,
+          {ConstantInt::get(intPtrType,
+                            dataLayout.getTypeStoreSize(valueType))});
+    } else {
+      auto *memory = IRB.CreateAlloca(valueType);
+      IRB.CreateStore(V, memory);
+      return IRB.CreateCall(
+          runtime.readMemory,
+          {IRB.CreatePtrToInt(memory, intPtrType),
+           ConstantInt::get(intPtrType, dataLayout.getTypeStoreSize(valueType)),
+           IRB.getInt8(0)});
+    }
   }
 
   llvm_unreachable("Unhandled type for constant expression");
