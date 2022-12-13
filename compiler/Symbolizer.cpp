@@ -477,6 +477,11 @@ void Symbolizer::visitLoadInst(LoadInst &I) {
   if (dataType->isFloatingPointTy()) {
     data = IRB.CreateCall(runtime.buildBitsToFloat,
                           {data, IRB.getInt1(dataType->isDoubleTy())});
+  } else if (dataType->isIntegerTy() && dataType->getIntegerBitWidth() == 1) {
+    /* convert from byte back to a bool (i1) */
+    data = IRB.CreateCall(runtime.buildTrunc,
+                          {data, ConstantInt::get(IRB.getInt8Ty(), 1)});
+    data = IRB.CreateCall(runtime.buildBitToBool, {data});
   }
 
   symbolicExpressions[&I] = data;
@@ -491,6 +496,12 @@ void Symbolizer::visitStoreInst(StoreInst &I) {
   auto *dataType = I.getValueOperand()->getType();
   if (dataType->isFloatingPointTy()) {
     data = IRB.CreateCall(runtime.buildFloatToBits, data);
+  } else if (dataType->isIntegerTy() && dataType->getIntegerBitWidth() == 1) {
+    /* convert from i1 (bool) to a byte */
+    data = IRB.CreateCall(runtime.buildBoolToBit, {data});
+    data = IRB.CreateCall(
+        runtime.buildZExt,
+        {data, ConstantInt::get(IRB.getInt8Ty(), 7 /* 1 byte */)});
   }
 
   IRB.CreateCall(
@@ -619,11 +630,25 @@ void Symbolizer::visitBitCastInst(BitCastInst &I) {
 
 void Symbolizer::visitTruncInst(TruncInst &I) {
   IRBuilder<> IRB(&I);
-  auto trunc = buildRuntimeCall(
+
+  if (getSymbolicExpression(I.getOperand(0)) == nullptr)
+    return;
+
+  SymbolicComputation symbolicComputation;
+  symbolicComputation.merge(forceBuildRuntimeCall(
       IRB, runtime.buildTrunc,
       {{I.getOperand(0), true},
-       {IRB.getInt8(I.getDestTy()->getIntegerBitWidth()), false}});
-  registerSymbolicComputation(trunc, &I);
+       {IRB.getInt8(I.getDestTy()->getIntegerBitWidth()), false}}));
+
+  if (I.getDestTy()->isIntegerTy() &&
+      I.getDestTy()->getIntegerBitWidth() == 1) {
+    // convert from byte back to a bool (i1)
+    symbolicComputation.merge(
+        forceBuildRuntimeCall(IRB, runtime.buildBitToBool,
+                              {{symbolicComputation.lastInstruction, false}}));
+  }
+
+  registerSymbolicComputation(symbolicComputation, &I);
 }
 
 void Symbolizer::visitIntToPtrInst(IntToPtrInst &I) {
