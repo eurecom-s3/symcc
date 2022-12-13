@@ -231,3 +231,7 @@ void symcc_make_symbolic(void *start, size_t byte_length) {
   _sym_make_symbolic(start, byte_length, inputOffset);
   inputOffset += byte_length;
 }
+
+SymExpr _sym_build_bit_to_bool(SymExpr expr) {
+  return _sym_build_equal(expr, _sym_build_integer(0, _sym_bits_helper(expr)));
+}

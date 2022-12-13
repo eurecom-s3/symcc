@@ -123,6 +123,7 @@ SymExpr _sym_build_float_to_bits(SymExpr expr);
 SymExpr _sym_build_float_to_signed_integer(SymExpr expr, uint8_t bits);
 SymExpr _sym_build_float_to_unsigned_integer(SymExpr expr, uint8_t bits);
 SymExpr _sym_build_bool_to_bit(SymExpr expr);
+SymExpr _sym_build_bit_to_bool(SymExpr expr);
 
 /*
  * Bit-array helpers
