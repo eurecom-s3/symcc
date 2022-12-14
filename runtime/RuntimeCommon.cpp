@@ -233,5 +233,6 @@ void symcc_make_symbolic(void *start, size_t byte_length) {
 }
 
 SymExpr _sym_build_bit_to_bool(SymExpr expr) {
-  return _sym_build_equal(expr, _sym_build_integer(0, _sym_bits_helper(expr)));
+  return _sym_build_not_equal(expr,
+                              _sym_build_integer(0, _sym_bits_helper(expr)));
 }
