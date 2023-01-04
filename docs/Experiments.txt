@@ -40,7 +40,7 @@ you have exported CC=symcc, CXX=sym++ and SYMCC_NO_SYMBOLIC_INPUT=1, first
 download the code, then build it using its own build system, finally unset
 SYMCC_NO_SYMBOLIC_INPUT and analyze the program in concert with AFL (which
 requires building a second time for AFL, see docs/Fuzzing.txt). We used AFL
-2.56b and built the targets with AFL_USE_ASAN=1. Note that the fuzzing helper is
+2.56b and built the targets with AFL_USE_ASan=1. Note that the fuzzing helper is
 already installed in the Docker container.
 
 OpenJPEG [4]: we used revision 1f1e9682, built with CMake as described in the
@@ -61,7 +61,7 @@ tcpdump: we built both tcpdump [7] and libpcap [8]; in order to make the former
   and analyzed "tcpdump/tcpdump -e -r @@"; the corpus consisted of just a single
   dummy file containing the character "A".
 
-All experiments used one AFL master process, one secondary AFL process, and one
+All experiments used one AFL main process, one secondary AFL process, and one
 SymCC process. We let them run for 24 hours and repeated each of them 30 times
 to create the graphs in the paper; AFL map density was extracted from the
 secondary AFL process' "plot_data" file, column "map_size".

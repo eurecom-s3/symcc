@@ -50,7 +50,7 @@ $ tcpdump -e -r <pcap_file>
 Compile tcpdump and libpcap, the library it uses for pcap reading, once with
 SymCC and once with one of AFL's compiler wrappers (e.g., afl-clang). In order
 to detect memory corruptions, enable address sanitizer in the AFL-instrumented
-version by exporting AFL_USE_ASAN=1 before compiling:
+version by exporting AFL_USE_ASan=1 before compiling:
 
 $ git clone https://github.com/the-tcpdump-group/libpcap.git
 $ git clone https://github.com/the-tcpdump-group/tcpdump.git
@@ -66,7 +66,7 @@ $ make
 $ cd ..
 
 $ mkdir afl_build; cd afl_build
-$ export AFL_USE_ASAN=1
+$ export AFL_USE_ASan=1
 $ cp -r ../{libpcap,tcpdump} .
 $ cd libpcap
 $ CC=/path/to/afl-clang ./configure
@@ -88,10 +88,10 @@ AFL:
 $ mkdir corpus
 $ echo A > corpus/dummy
 
-Then launch one AFL master and one AFL secondary instance, both writing their
+Then launch one AFL main and one AFL secondary instance, both writing their
 outputs to the arbitrarily named directory "afl_out":
 
-$ afl-fuzz -M afl-master -i corpus -o afl_out -m none -- afl_build/tcpdump/tcpdump -e -r @@
+$ afl-fuzz -M afl-main -i corpus -o afl_out -m none -- afl_build/tcpdump/tcpdump -e -r @@
 $ afl-fuzz -S afl-secondary -i corpus -o afl_out -m none -- afl_build/tcpdump/tcpdump -e -r @@
 
 For simplicity, we disable memory limits (with "-m none"); be sure to read AFL's
@@ -109,7 +109,7 @@ you should see the counter "imported" in the "path geometry" section increase
 after a short time - this means that the fuzzer instances and SymCC are
 exchanging inputs. Crashes will be stored in afl_out/*/crashes as usual.
 
-It is possible to run SymCC with only an AFL master or only a secondary AFL
+It is possible to run SymCC with only an AFL main or only a secondary AFL
 instance; see the AFL docs for the implications. Moreover, the number of fuzzer
 and SymCC instances can be increased - just make sure that each has a unique
 name.
