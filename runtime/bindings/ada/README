@@ -1,0 +1,36 @@
+
+
+                                  Ada bindings
+
+
+This directory contains Ada bindings for the SymCC runtime. To use them in your
+Ada code, you can either point gprbuild here directly (e.g., by setting
+GPR_PROJECT_PATH appropriately), or you can install them in the system:
+
+$ gprbuild -Psymcc
+$ gprinstall -Psymcc
+
+Either way, you'll then be able to include SymCC in your project definition
+(i.e., the .gpr file for your project):
+
+  with "symcc";
+
+This will let you use the bindings in your Ada code, for example:
+
+  with SymCC; use SymCC;
+
+  --  ...
+
+  --  Register a procedure that receives new program inputs.
+  SymCC_Set_Test_Case_Handler (My_Handler);
+
+  --  Tell SymCC where to find the input in memory. Note that the variable needs
+  --  to be declared with the "aliased" keyword.
+  SymCC_Make_Symbolic (Input'Address, Input'Size / System.Storage_Unit);
+
+  --  Run your code on the input; SymCC will follow the computations
+  --  symbolically and call My_Handler whenever it produces a new test input.
+  My_Code_Under_Test (Input);
+
+See the doc comments in symcc.ads for details, or generate HTML documentation
+with "gnatdoc -Psymcc".
