@@ -474,11 +474,15 @@ void Symbolizer::visitLoadInst(LoadInst &I) {
        ConstantInt::get(intPtrType, dataLayout.getTypeStoreSize(dataType)),
        ConstantInt::get(IRB.getInt8Ty(), isLittleEndian(dataType) ? 1 : 0)});
 
+  // Make sure that the expression corresponding to the loaded value is of
+  // bit-vector kind. Shortcutting the runtime calls that we emit here (e.g.,
+  // for floating-point values) is tricky, so instead we make sure that any
+  // runtime function we call can handle null expressions.
+
   if (dataType->isFloatingPointTy()) {
     data = IRB.CreateCall(runtime.buildBitsToFloat,
                           {data, IRB.getInt1(dataType->isDoubleTy())});
   } else if (dataType->isIntegerTy() && dataType->getIntegerBitWidth() == 1) {
-    /* convert from byte back to a bool (i1) */
     data = IRB.CreateCall(runtime.buildTrunc,
                           {data, ConstantInt::get(IRB.getInt8Ty(), 1)});
     data = IRB.CreateCall(runtime.buildBitToBool, {data});
@@ -492,12 +496,16 @@ void Symbolizer::visitStoreInst(StoreInst &I) {
 
   tryAlternative(IRB, I.getPointerOperand());
 
+  // Make sure that the expression corresponding to the stored value is of
+  // bit-vector kind. Shortcutting the runtime calls that we emit here (e.g.,
+  // for floating-point values) is tricky, so instead we make sure that any
+  // runtime function we call can handle null expressions.
+
   auto *data = getSymbolicExpressionOrNull(I.getValueOperand());
   auto *dataType = I.getValueOperand()->getType();
   if (dataType->isFloatingPointTy()) {
     data = IRB.CreateCall(runtime.buildFloatToBits, data);
   } else if (dataType->isIntegerTy() && dataType->getIntegerBitWidth() == 1) {
-    /* convert from i1 (bool) to a byte */
     data = IRB.CreateCall(runtime.buildBoolToBit, {data});
     data = IRB.CreateCall(
         runtime.buildZExt,
