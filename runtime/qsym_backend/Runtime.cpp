@@ -275,16 +275,25 @@ SymExpr _sym_build_not(SymExpr expr) {
 }
 
 SymExpr _sym_build_sext(SymExpr expr, uint8_t bits) {
+  if (expr == nullptr)
+    return nullptr;
+
   return registerExpression(g_expr_builder->createSExt(
       allocatedExpressions.at(expr), bits + expr->bits()));
 }
 
 SymExpr _sym_build_zext(SymExpr expr, uint8_t bits) {
+  if (expr == nullptr)
+    return nullptr;
+
   return registerExpression(g_expr_builder->createZExt(
       allocatedExpressions.at(expr), bits + expr->bits()));
 }
 
 SymExpr _sym_build_trunc(SymExpr expr, uint8_t bits) {
+  if (expr == nullptr)
+    return nullptr;
+
   return registerExpression(
       g_expr_builder->createTrunc(allocatedExpressions.at(expr), bits));
 }
@@ -315,6 +324,9 @@ SymExpr _sym_extract_helper(SymExpr expr, size_t first_bit, size_t last_bit) {
 size_t _sym_bits_helper(SymExpr expr) { return expr->bits(); }
 
 SymExpr _sym_build_bool_to_bit(SymExpr expr) {
+  if (expr == nullptr)
+    return nullptr;
+
   return registerExpression(
       g_expr_builder->boolToBit(allocatedExpressions.at(expr), 1));
 }

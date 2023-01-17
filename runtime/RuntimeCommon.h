@@ -3,7 +3,10 @@
 // This header defines the interface of the run-time library. It is not actually
 // used anywhere because the compiler pass inserts calls to the library
 // functions at the level of LLVM bitcode, but it serves as documentation of the
-// intended interface.
+// intended interface. Unless documented otherwise, functions taking symbolic
+// expressions can't handle null values (i.e., they shouldn't be called for
+// concrete values); exceptions are made if it's too difficult to check for
+// concreteness in bitcode.
 //
 // Whoever uses this file has to define the type "SymExpr" first; we use it to
 // keep this header independent of the back-end implementation.
@@ -25,6 +28,9 @@
 
 #ifndef RUNTIMECOMMON_H
 #define RUNTIMECOMMON_H
+
+/* Marker for expression parameters which may be null. */
+#define nullable
 
 #ifdef __cplusplus
 #include <cstddef>
@@ -112,9 +118,9 @@ SymExpr _sym_build_float_unordered_not_equal(SymExpr a, SymExpr b);
 /*
  * Casts
  */
-SymExpr _sym_build_sext(SymExpr expr, uint8_t bits);
-SymExpr _sym_build_zext(SymExpr expr, uint8_t bits);
-SymExpr _sym_build_trunc(SymExpr expr, uint8_t bits);
+SymExpr _sym_build_sext(nullable SymExpr expr, uint8_t bits);
+SymExpr _sym_build_zext(nullable SymExpr expr, uint8_t bits);
+SymExpr _sym_build_trunc(nullable SymExpr expr, uint8_t bits);
 SymExpr _sym_build_bswap(SymExpr expr);
 SymExpr _sym_build_int_to_float(SymExpr value, int is_double, int is_signed);
 SymExpr _sym_build_float_to_float(SymExpr expr, int to_double);
@@ -122,8 +128,8 @@ SymExpr _sym_build_bits_to_float(SymExpr expr, int to_double);
 SymExpr _sym_build_float_to_bits(SymExpr expr);
 SymExpr _sym_build_float_to_signed_integer(SymExpr expr, uint8_t bits);
 SymExpr _sym_build_float_to_unsigned_integer(SymExpr expr, uint8_t bits);
-SymExpr _sym_build_bool_to_bit(SymExpr expr);
-SymExpr _sym_build_bit_to_bool(SymExpr expr);
+SymExpr _sym_build_bool_to_bit(nullable SymExpr expr);
+SymExpr _sym_build_bit_to_bool(nullable SymExpr expr);
 
 /*
  * Bit-array helpers
@@ -135,15 +141,15 @@ size_t _sym_bits_helper(SymExpr expr);
 /*
  * Function-call helpers
  */
-void _sym_set_parameter_expression(uint8_t index, SymExpr expr);
+void _sym_set_parameter_expression(uint8_t index, nullable SymExpr expr);
 SymExpr _sym_get_parameter_expression(uint8_t index);
-void _sym_set_return_expression(SymExpr expr);
+void _sym_set_return_expression(nullable SymExpr expr);
 SymExpr _sym_get_return_expression(void);
 
 /*
  * Constraint handling
  */
-void _sym_push_path_constraint(SymExpr constraint, int taken,
+void _sym_push_path_constraint(nullable SymExpr constraint, int taken,
                                uintptr_t site_id);
 SymExpr _sym_get_input_byte(size_t offset, uint8_t concrete_value);
 void _sym_make_symbolic(void *data, size_t byte_length, size_t input_offset);
@@ -152,7 +158,7 @@ void _sym_make_symbolic(void *data, size_t byte_length, size_t input_offset);
  * Memory management
  */
 SymExpr _sym_read_memory(uint8_t *addr, size_t length, bool little_endian);
-void _sym_write_memory(uint8_t *addr, size_t length, SymExpr expr,
+void _sym_write_memory(uint8_t *addr, size_t length, nullable SymExpr expr,
                        bool little_endian);
 void _sym_memcpy(uint8_t *dest, const uint8_t *src, size_t length);
 void _sym_memset(uint8_t *memory, SymExpr value, size_t length);
@@ -195,5 +201,7 @@ void symcc_set_test_case_handler(TestCaseHandler handler);
 #ifdef __cplusplus
 }
 #endif
+
+#undef nullable
 
 #endif
