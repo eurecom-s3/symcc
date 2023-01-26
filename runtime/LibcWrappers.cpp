@@ -13,6 +13,22 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with SymCC. If not, see <https://www.gnu.org/licenses/>.
 
+//
+// Libc wrappers
+//
+// This file contains the wrappers around libc functions which add symbolic
+// computations; using the wrappers frees instrumented code from having to link
+// against an instrumented libc.
+//
+// We define a wrapper for function X with SYM(X), which just changes the name
+// "X" to something predictable and hopefully unique. It is then up to the
+// compiler pass to replace calls of X with calls of SYM(X).
+//
+// In general, the wrappers ask the solver to generate alternative parameter
+// values, then call the wrapped function, create and store symbolic expressions
+// matching the libc function's semantics, and finally return the wrapped
+// function's result.
+
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
@@ -389,6 +405,20 @@ void *SYM(memset)(void *s, int c, size_t n) {
   return result;
 }
 
+void SYM(bzero)(void *s, size_t n) {
+  bzero(s, n);
+
+  // No return value, hence no corresponding expression.
+  _sym_set_return_expression(nullptr);
+
+  tryAlternative(s, _sym_get_parameter_expression(0), SYM(bzero));
+  tryAlternative(n, _sym_get_parameter_expression(1), SYM(bzero));
+
+  // Concretize the memory region, which now is all zeros.
+  ReadWriteShadow shadow(s, n);
+  std::fill(shadow.begin(), shadow.end(), nullptr);
+}
+
 void *SYM(memmove)(void *dest, const void *src, size_t n) {
   tryAlternative(dest, _sym_get_parameter_expression(0), SYM(memmove));
   tryAlternative(src, _sym_get_parameter_expression(1), SYM(memmove));
@@ -400,6 +430,22 @@ void *SYM(memmove)(void *dest, const void *src, size_t n) {
 
   _sym_set_return_expression(_sym_get_parameter_expression(0));
   return result;
+}
+
+void SYM(bcopy)(const void *src, void *dest, size_t n) {
+  tryAlternative(src, _sym_get_parameter_expression(0), SYM(bcopy));
+  tryAlternative(dest, _sym_get_parameter_expression(1), SYM(bcopy));
+  tryAlternative(n, _sym_get_parameter_expression(2), SYM(bcopy));
+
+  bcopy(src, dest, n);
+
+  // bcopy is mostly equivalent to memmove, so we can use our symbolic version
+  // of memmove to copy any symbolic expressions over to the destination.
+  _sym_memmove(static_cast<uint8_t *>(dest), static_cast<const uint8_t *>(src),
+               n);
+
+  // void function, so there is no return value and hence no expression for it.
+  _sym_set_return_expression(nullptr);
 }
 
 char *SYM(strncpy)(char *dest, const char *src, size_t n) {
@@ -482,6 +528,43 @@ int SYM(memcmp)(const void *a, const void *b, size_t n) {
 
   _sym_push_path_constraint(allEqual, result == 0,
                             reinterpret_cast<uintptr_t>(SYM(memcmp)));
+  return result;
+}
+
+int SYM(bcmp)(const void *a, const void *b, size_t n) {
+  tryAlternative(a, _sym_get_parameter_expression(0), SYM(bcmp));
+  tryAlternative(b, _sym_get_parameter_expression(1), SYM(bcmp));
+  tryAlternative(n, _sym_get_parameter_expression(2), SYM(bcmp));
+
+  auto result = bcmp(a, b, n);
+
+  // bcmp returns zero if the input regions are equal and an unspecified
+  // non-zero value otherwise. Instead of expressing this symbolically, we
+  // directly ask the solver for an alternative solution (assuming that the
+  // result is used for a conditional branch later), and return a concrete
+  // value.
+  _sym_set_return_expression(nullptr);
+
+  // The result of the comparison depends on whether the input regions are equal
+  // byte by byte. Construct the corresponding expression, but only if there is
+  // at least one symbolic byte in either of the regions; otherwise, the result
+  // is concrete.
+
+  if (isConcrete(a, n) && isConcrete(b, n))
+    return result;
+
+  auto aShadowIt = ReadOnlyShadow(a, n).begin_non_null();
+  auto bShadowIt = ReadOnlyShadow(b, n).begin_non_null();
+  auto *allEqual = _sym_build_equal(*aShadowIt, *bShadowIt);
+  for (size_t i = 1; i < n; i++) {
+    ++aShadowIt;
+    ++bShadowIt;
+    allEqual =
+        _sym_build_bool_and(allEqual, _sym_build_equal(*aShadowIt, *bShadowIt));
+  }
+
+  _sym_push_path_constraint(allEqual, result == 0,
+                            reinterpret_cast<uintptr_t>(SYM(bcmp)));
   return result;
 }
 
