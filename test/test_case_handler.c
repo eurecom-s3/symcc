@@ -20,7 +20,7 @@
 
 #define MAGIC 0xab
 
-void symcc_make_symbolic(void *start, size_t byte_length);
+void symcc_make_symbolic(const void *start, size_t byte_length);
 typedef void (*TestCaseHandler)(const void *, size_t);
 void symcc_set_test_case_handler(TestCaseHandler handler);
 
