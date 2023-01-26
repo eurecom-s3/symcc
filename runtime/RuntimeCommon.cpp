@@ -74,6 +74,10 @@ void _sym_memset(uint8_t *memory, SymExpr value, size_t length) {
 }
 
 void _sym_memmove(uint8_t *dest, const uint8_t *src, size_t length) {
+  // Unless both the source and the destination are fully concrete memory
+  // regions, we need to copy the symbolic expressions over. (In the case where
+  // only the destination is symbolic, this means making it concrete.)
+
   if (isConcrete(src, length) && isConcrete(dest, length))
     return;
 
