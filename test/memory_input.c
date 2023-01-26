@@ -18,7 +18,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-void symcc_make_symbolic(void *start, size_t byte_length);
+void symcc_make_symbolic(const void *start, size_t byte_length);
 
 uint64_t g_value = 0xaaaabbbbccccdddd;
 

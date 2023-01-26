@@ -214,15 +214,16 @@ void _sym_register_expression_region(SymExpr *start, size_t length) {
   registerExpressionRegion({start, length});
 }
 
-void _sym_make_symbolic(void *data, size_t byte_length, size_t input_offset) {
+void _sym_make_symbolic(const void *data, size_t byte_length,
+                        size_t input_offset) {
   ReadWriteShadow shadow(data, byte_length);
-  uint8_t *data_bytes = reinterpret_cast<uint8_t *>(data);
+  const uint8_t *data_bytes = reinterpret_cast<const uint8_t *>(data);
   std::generate(shadow.begin(), shadow.end(), [&, i = 0]() mutable {
     return _sym_get_input_byte(input_offset++, data_bytes[i++]);
   });
 }
 
-void symcc_make_symbolic(void *start, size_t byte_length) {
+void symcc_make_symbolic(const void *start, size_t byte_length) {
   if (!std::holds_alternative<MemoryInput>(g_config.input))
     throw std::runtime_error{"Calls to symcc_make_symbolic aren't allowed when "
                              "SYMCC_MEMORY_INPUT isn't set"};
