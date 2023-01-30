@@ -21,13 +21,13 @@ FROM ubuntu:20.04 AS builder
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y \
         cargo \
-        clang-10 \
+        clang-12 \
         cmake \
         g++ \
         git \
         libz3-dev \
-        llvm-10-dev \
-        llvm-10-tools \
+        llvm-12-dev \
+        llvm-12-tools \
         ninja-build \
         python2 \
         python3-pip \
@@ -42,7 +42,7 @@ RUN git clone -b v2.56b https://github.com/google/AFL.git afl \
 
 # Download the LLVM sources already so that we don't need to get them again when
 # SymCC changes
-RUN git clone -b llvmorg-10.0.1 --depth 1 https://github.com/llvm/llvm-project.git /llvm_source
+RUN git clone -b llvmorg-12.0.0 --depth 1 https://github.com/llvm/llvm-project.git /llvm_source
 
 # Build a version of SymCC with the simple backend to compile libc++
 COPY . /symcc_source
