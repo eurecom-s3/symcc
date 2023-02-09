@@ -216,7 +216,7 @@ DEF_BINARY_EXPR_BUILDER(unsigned_div, bvudiv)
 DEF_BINARY_EXPR_BUILDER(signed_div, bvsdiv)
 DEF_BINARY_EXPR_BUILDER(unsigned_rem, bvurem)
 DEF_BINARY_EXPR_BUILDER(signed_rem, bvsrem)
-DEF_BINARY_EXPR_BUILDER(shift_left, bvshl)
+// DEF_BINARY_EXPR_BUILDER(shift_left, bvshl)
 DEF_BINARY_EXPR_BUILDER(logical_shift_right, bvlshr)
 DEF_BINARY_EXPR_BUILDER(arithmetic_shift_right, bvashr)
 
@@ -242,6 +242,10 @@ DEF_BINARY_EXPR_BUILDER(float_ordered_less_equal, fpa_leq)
 DEF_BINARY_EXPR_BUILDER(float_ordered_equal, fpa_eq)
 
 #undef DEF_BINARY_EXPR_BUILDER
+
+SymExpr _sym_build_shift_left(SymExpr a, SymExpr b) {
+  return registerExpression(Z3_mk_bvshl(g_context, a, Z3_mk_bvand(g_context, b, _sym_build_integer(31, 32))));
+}
 
 Z3_ast _sym_build_fp_add(Z3_ast a, Z3_ast b) {
   return registerExpression(Z3_mk_fpa_add(g_context, g_rounding_mode, a, b));
