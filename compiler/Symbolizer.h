@@ -142,6 +142,14 @@ private:
     unsigned operandIndex;
     llvm::Instruction *user;
 
+    Input() = default;
+
+    Input(llvm::Value *concrete, unsigned idx, llvm::Instruction *user)
+        : concreteValue(concrete), operandIndex(idx), user(user) {
+      assert(getSymbolicOperand()->getType() ==
+             llvm::Type::getInt8PtrTy(user->getContext()));
+    }
+
     llvm::Value *getSymbolicOperand() const {
       return user->getOperand(operandIndex);
     }
@@ -186,7 +194,7 @@ private:
           << "\n...ending at " << *computation.lastInstruction
           << "\n...with inputs:\n";
       for (const auto &input : computation.inputs) {
-        out << '\t' << *input.concreteValue << '\n';
+        out << '\t' << *input.concreteValue << " => " << *input.user << '\n';
       }
       return out;
     }

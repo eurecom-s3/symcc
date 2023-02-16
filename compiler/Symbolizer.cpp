@@ -285,6 +285,32 @@ void Symbolizer::handleIntrinsicCall(CallBase &I) {
     break;
   }
 
+// Overflow arithmetic
+#define DEF_OVF_ARITH_BUILDER(intrinsic_op, runtime_name)                      \
+  case Intrinsic::s##intrinsic_op##_with_overflow:                             \
+  case Intrinsic::u##intrinsic_op##_with_overflow: {                           \
+    IRBuilder<> IRB(&I);                                                       \
+                                                                               \
+    bool isSigned =                                                            \
+        I.getIntrinsicID() == Intrinsic::s##intrinsic_op##_with_overflow;      \
+    auto overflow = buildRuntimeCall(                                          \
+        IRB, runtime.build##runtime_name,                                      \
+        {{I.getOperand(0), true},                                              \
+         {I.getOperand(1), true},                                              \
+         {IRB.getInt1(isSigned), false},                                       \
+         {IRB.getInt1(dataLayout.isLittleEndian() ? 1 : 0), false}});          \
+    registerSymbolicComputation(overflow, &I);                                 \
+                                                                               \
+    break;                                                                     \
+  }
+
+    DEF_OVF_ARITH_BUILDER(add, AddOverflow)
+    DEF_OVF_ARITH_BUILDER(sub, SubOverflow)
+    DEF_OVF_ARITH_BUILDER(mul, MulOverflow)
+
+#undef DEF_OVF_ARITH_BUILDER
+
+// Saturating arithmetic
 #define DEF_SAT_ARITH_BUILDER(intrinsic_op, runtime_name)                      \
   case Intrinsic::intrinsic_op##_sat: {                                        \
     IRBuilder<> IRB(&I);                                                       \
@@ -1017,7 +1043,7 @@ Symbolizer::forceBuildRuntimeCall(IRBuilder<> &IRB, SymFnT function,
   for (unsigned i = 0; i < args.size(); i++) {
     const auto &[arg, symbolic] = args[i];
     if (symbolic)
-      inputs.push_back({arg, i, call});
+      inputs.push_back(Input(arg, i, call));
   }
 
   return SymbolicComputation(call, call, inputs);
@@ -1034,7 +1060,7 @@ void Symbolizer::tryAlternative(IRBuilder<> &IRB, Value *V) {
         runtime.pushPathConstraint,
         {destAssertion, IRB.getInt1(true), getTargetPreferredInt(V)});
     registerSymbolicComputation(SymbolicComputation(
-        concreteDestExpr, pushAssertion, {{V, 0, destAssertion}}));
+        concreteDestExpr, pushAssertion, {Input(V, 0, destAssertion)}));
   }
 }
 

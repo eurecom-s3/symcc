@@ -73,6 +73,16 @@ SymExpr _sym_build_logical_shift_right(SymExpr a, SymExpr b);
 SymExpr _sym_build_arithmetic_shift_right(SymExpr a, SymExpr b);
 
 /*
+ * Arithmetic with overflow
+ */
+SymExpr _sym_build_add_overflow(SymExpr a, SymExpr b, bool is_signed,
+                                bool little_endian);
+SymExpr _sym_build_sub_overflow(SymExpr a, SymExpr b, bool is_signed,
+                                bool little_endian);
+SymExpr _sym_build_mul_overflow(SymExpr a, SymExpr b, bool is_signed,
+                                bool little_endian);
+
+/*
  * Saturating integer arithmetic and shifts
  */
 SymExpr _sym_build_sadd_sat(SymExpr a, SymExpr b);

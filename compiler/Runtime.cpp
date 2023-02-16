@@ -74,6 +74,15 @@ Runtime::Runtime(Module &M) {
   pushPathConstraint = import(M, "_sym_push_path_constraint", voidT, ptrT,
                               IRB.getInt1Ty(), intPtrType);
 
+  // Overflow arithmetic
+  buildAddOverflow = import(M, "_sym_build_add_overflow", ptrT, ptrT, ptrT,
+                            IRB.getInt1Ty(), IRB.getInt1Ty());
+  buildSubOverflow = import(M, "_sym_build_sub_overflow", ptrT, ptrT, ptrT,
+                            IRB.getInt1Ty(), IRB.getInt1Ty());
+  buildMulOverflow = import(M, "_sym_build_mul_overflow", ptrT, ptrT, ptrT,
+                            IRB.getInt1Ty(), IRB.getInt1Ty());
+
+  // Saturating arithmetic
   buildSAddSat = import(M, "_sym_build_sadd_sat", ptrT, ptrT, ptrT);
   buildUAddSat = import(M, "_sym_build_uadd_sat", ptrT, ptrT, ptrT);
   buildSSubSat = import(M, "_sym_build_ssub_sat", ptrT, ptrT, ptrT);

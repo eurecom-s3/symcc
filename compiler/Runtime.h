@@ -51,6 +51,9 @@ struct Runtime {
   SymFnT buildBoolXor{};
   SymFnT buildBoolToBit{};
   SymFnT buildBitToBool{};
+  SymFnT buildAddOverflow{};
+  SymFnT buildSubOverflow{};
+  SymFnT buildMulOverflow{};
   SymFnT buildSAddSat{};
   SymFnT buildUAddSat{};
   SymFnT buildSSubSat{};
