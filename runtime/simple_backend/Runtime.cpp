@@ -81,7 +81,7 @@ void handle_z3_error(Z3_context c [[maybe_unused]], Z3_error_code e) {
 }
 #endif
 
-Z3_ast build_variable(const char *name, uint8_t bits) {
+SymExpr build_variable(const char *name, uint8_t bits) {
   Z3_symbol sym = Z3_mk_string_symbol(g_context, name);
   auto *sort = Z3_mk_bv_sort(g_context, bits);
   Z3_inc_ref(g_context, (Z3_ast)sort);
@@ -94,7 +94,7 @@ Z3_ast build_variable(const char *name, uint8_t bits) {
 /// The set of all expressions we have ever passed to client code.
 std::set<SymExpr> allocatedExpressions;
 
-SymExpr registerExpression(Z3_ast expr) {
+SymExpr registerExpression(SymExpr expr) {
   if (allocatedExpressions.count(expr) == 0) {
     // We don't know this expression yet. Record it and increase the reference
     // counter.
@@ -439,13 +439,13 @@ void _sym_push_path_constraint(Z3_ast constraint, int taken,
      "true" or "false", there is no point in trying to solve the negation or *
      pushing the constraint to the solver... */
 
-  if (Z3_is_eq_ast(g_context, constraint, Z3_mk_true(g_context))) {
+  if (Z3_is_eq_ast(g_context, constraint, g_true)) {
     assert(taken && "We have taken an impossible branch");
     Z3_dec_ref(g_context, constraint);
     return;
   }
 
-  if (Z3_is_eq_ast(g_context, constraint, Z3_mk_false(g_context))) {
+  if (Z3_is_eq_ast(g_context, constraint, g_false)) {
     assert(!taken && "We have taken an impossible branch");
     Z3_dec_ref(g_context, constraint);
     return;

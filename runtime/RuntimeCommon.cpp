@@ -363,6 +363,73 @@ SymExpr _sym_build_ushl_sat(SymExpr a, SymExpr b) {
       _sym_build_shift_left(a, b));
 }
 
+SymExpr _sym_build_add_overflow(SymExpr a, SymExpr b, bool is_signed,
+                                bool little_endian) {
+  size_t bits = _sym_bits_helper(a);
+  SymExpr overflow = [&]() {
+    if (is_signed) {
+      // Check if the additions are different
+      SymExpr add_sext =
+          _sym_build_add(_sym_build_sext(a, 1), _sym_build_sext(b, 1));
+      return _sym_build_not_equal(add_sext,
+                                  _sym_build_sext(_sym_build_add(a, b), 1));
+    } else {
+      // Check if the addition overflowed into the extra bit
+      SymExpr add_zext =
+          _sym_build_add(_sym_build_zext(a, 1), _sym_build_zext(b, 1));
+      return _sym_build_equal(_sym_extract_helper(add_zext, bits, bits),
+                              _sym_build_true());
+    }
+  }();
+
+  return buildOverflowResult(_sym_build_add(a, b), overflow, little_endian);
+}
+
+SymExpr _sym_build_sub_overflow(SymExpr a, SymExpr b, bool is_signed,
+                                bool little_endian) {
+  size_t bits = _sym_bits_helper(a);
+  SymExpr overflow = [&]() {
+    if (is_signed) {
+      // Check if the subtractions are different
+      SymExpr sub_sext =
+          _sym_build_sub(_sym_build_sext(a, 1), _sym_build_sext(b, 1));
+      return _sym_build_not_equal(sub_sext,
+                                  _sym_build_sext(_sym_build_sub(a, b), 1));
+    } else {
+      // Check if the subtraction overflowed into the extra bit
+      SymExpr sub_zext =
+          _sym_build_sub(_sym_build_zext(a, 1), _sym_build_zext(b, 1));
+      return _sym_build_equal(_sym_extract_helper(sub_zext, bits, bits),
+                              _sym_build_true());
+    }
+  }();
+
+  return buildOverflowResult(_sym_build_sub(a, b), overflow, little_endian);
+}
+
+SymExpr _sym_build_mul_overflow(SymExpr a, SymExpr b, bool is_signed,
+                                bool little_endian) {
+  size_t bits = _sym_bits_helper(a);
+  SymExpr overflow = [&]() {
+    if (is_signed) {
+      // Check if the multiplications are different
+      SymExpr mul_sext =
+          _sym_build_mul(_sym_build_sext(a, bits), _sym_build_sext(b, bits));
+      return _sym_build_not_equal(mul_sext,
+                                  _sym_build_sext(_sym_build_mul(a, b), bits));
+    } else {
+      // Check if the multiplication overflowed into the extra bit
+      SymExpr mul_zext =
+          _sym_build_mul(_sym_build_zext(a, bits), _sym_build_zext(b, bits));
+      return _sym_build_equal(
+          _sym_extract_helper(mul_zext, 2 * bits - 1, 2 * bits - 1),
+          _sym_build_true());
+    }
+  }();
+
+  return buildOverflowResult(_sym_build_mul(a, b), overflow, little_endian);
+}
+
 void _sym_register_expression_region(SymExpr *start, size_t length) {
   registerExpressionRegion({start, length});
 }
