@@ -205,12 +205,12 @@ private:
   llvm::CallInst *createValueExpression(llvm::Value *V, llvm::IRBuilder<> &IRB);
 
   /// Get the (already created) symbolic expression for a value.
-  llvm::Value *getSymbolicExpression(llvm::Value *V) {
+  llvm::Value *getSymbolicExpression(llvm::Value *V) const {
     auto exprIt = symbolicExpressions.find(V);
     return (exprIt != symbolicExpressions.end()) ? exprIt->second : nullptr;
   }
 
-  llvm::Value *getSymbolicExpressionOrNull(llvm::Value *V) {
+  llvm::Value *getSymbolicExpressionOrNull(llvm::Value *V) const {
     auto *expr = getSymbolicExpression(V);
     if (expr == nullptr)
       return llvm::ConstantPointerNull::get(
@@ -223,9 +223,9 @@ private:
   }
 
   /// Like buildRuntimeCall, but the call is always generated.
-  SymbolicComputation
-  forceBuildRuntimeCall(llvm::IRBuilder<> &IRB, SymFnT function,
-                        llvm::ArrayRef<std::pair<llvm::Value *, bool>> args);
+  SymbolicComputation forceBuildRuntimeCall(
+      llvm::IRBuilder<> &IRB, SymFnT function,
+      llvm::ArrayRef<std::pair<llvm::Value *, bool>> args) const;
 
   /// Create a call to the specified function in the run-time library.
   ///
@@ -238,7 +238,7 @@ private:
   /// instruction is emitted and the function returns null.
   std::optional<SymbolicComputation>
   buildRuntimeCall(llvm::IRBuilder<> &IRB, SymFnT function,
-                   llvm::ArrayRef<std::pair<llvm::Value *, bool>> args) {
+                   llvm::ArrayRef<std::pair<llvm::Value *, bool>> args) const {
     if (std::all_of(args.begin(), args.end(),
                     [this](std::pair<llvm::Value *, bool> arg) {
                       return (getSymbolicExpression(arg.first) == nullptr);
@@ -252,7 +252,7 @@ private:
   /// Convenience overload that treats all arguments as symbolic.
   std::optional<SymbolicComputation>
   buildRuntimeCall(llvm::IRBuilder<> &IRB, SymFnT function,
-                   llvm::ArrayRef<llvm::Value *> symbolicArgs) {
+                   llvm::ArrayRef<llvm::Value *> symbolicArgs) const {
     std::vector<std::pair<llvm::Value *, bool>> args;
     for (const auto &arg : symbolicArgs) {
       args.emplace_back(arg, true);
@@ -306,6 +306,27 @@ private:
   /// Compute the offset of a member in a (possibly nested) aggregate.
   uint64_t aggregateMemberOffset(llvm::Type *aggregateType,
                                  llvm::ArrayRef<unsigned> indices) const;
+
+  /// Emit code that converts the bit-vector expression represented by I to an
+  /// expression that is appropriate for T; return the instruction that computes
+  /// the result (which may be I if no conversion is needed).
+  ///
+  /// The solver doesn't represent all values as bit vectors. For example,
+  /// floating-point values and Booleans are of separate kinds, so we emit code
+  /// that changes the solver kind of the expression to whatever is needed.
+  llvm::Instruction *convertBitVectorExprForType(llvm::IRBuilder<> &IRB,
+                                                 llvm::Instruction *I,
+                                                 llvm::Type *T) const;
+
+  /// Emit code that converts the expression in I to a bit-vector expression.
+  /// Return the SymbolicComputation representing the conversion (if a
+  /// conversion is necessary); the last instruction computes the result.
+  ///
+  /// This is the inverse operation of convertBitVectorExprForType (see details
+  /// there).
+  std::optional<SymbolicComputation>
+  convertExprForTypeToBitVectorExpr(llvm::IRBuilder<> &IRB,
+                                    llvm::Value *V) const;
 
   const Runtime runtime;
 

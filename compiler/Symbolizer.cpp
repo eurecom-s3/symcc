@@ -536,21 +536,7 @@ void Symbolizer::visitLoadInst(LoadInst &I) {
        ConstantInt::get(intPtrType, dataLayout.getTypeStoreSize(dataType)),
        IRB.getInt1(isLittleEndian(dataType) ? 1 : 0)});
 
-  // Make sure that the expression corresponding to the loaded value is of
-  // bit-vector kind. Shortcutting the runtime calls that we emit here (e.g.,
-  // for floating-point values) is tricky, so instead we make sure that any
-  // runtime function we call can handle null expressions.
-
-  if (dataType->isFloatingPointTy()) {
-    data = IRB.CreateCall(runtime.buildBitsToFloat,
-                          {data, IRB.getInt1(dataType->isDoubleTy())});
-  } else if (dataType->isIntegerTy() && dataType->getIntegerBitWidth() == 1) {
-    data = IRB.CreateCall(runtime.buildTrunc,
-                          {data, ConstantInt::get(IRB.getInt8Ty(), 1)});
-    data = IRB.CreateCall(runtime.buildBitToBool, {data});
-  }
-
-  symbolicExpressions[&I] = data;
+  symbolicExpressions[&I] = convertBitVectorExprForType(IRB, data, dataType);
 }
 
 void Symbolizer::visitStoreInst(StoreInst &I) {
@@ -563,22 +549,16 @@ void Symbolizer::visitStoreInst(StoreInst &I) {
   // for floating-point values) is tricky, so instead we make sure that any
   // runtime function we call can handle null expressions.
 
-  auto *data = getSymbolicExpressionOrNull(I.getValueOperand());
-  auto *dataType = I.getValueOperand()->getType();
-  if (dataType->isFloatingPointTy()) {
-    data = IRB.CreateCall(runtime.buildFloatToBits, data);
-  } else if (dataType->isIntegerTy() && dataType->getIntegerBitWidth() == 1) {
-    data = IRB.CreateCall(runtime.buildBoolToBit, {data});
-    data = IRB.CreateCall(
-        runtime.buildZExt,
-        {data, ConstantInt::get(IRB.getInt8Ty(), 7 /* 1 byte */)});
-  }
+  auto V = I.getValueOperand();
+  auto maybeConversion = convertExprForTypeToBitVectorExpr(IRB, V);
 
   IRB.CreateCall(
       runtime.writeMemory,
       {IRB.CreatePtrToInt(I.getPointerOperand(), intPtrType),
-       ConstantInt::get(intPtrType, dataLayout.getTypeStoreSize(dataType)),
-       data, IRB.getInt1(dataLayout.isLittleEndian() ? 1 : 0)});
+       ConstantInt::get(intPtrType, dataLayout.getTypeStoreSize(V->getType())),
+       maybeConversion ? maybeConversion->lastInstruction
+                       : getSymbolicExpressionOrNull(V),
+       IRB.getInt1(dataLayout.isLittleEndian() ? 1 : 0)});
 }
 
 void Symbolizer::visitGetElementPtrInst(GetElementPtrInst &I) {
@@ -860,37 +840,36 @@ void Symbolizer::visitInsertValueInst(InsertValueInst &I) {
   IRBuilder<> IRB(&I);
   auto target = I.getAggregateOperand();
   auto insertedValue = I.getInsertedValueOperand();
-  auto insertedValueType = insertedValue->getType();
 
   if (getSymbolicExpression(target) == nullptr &&
       getSymbolicExpression(insertedValue) == nullptr)
     return;
 
-  auto insertedValueExpr = getSymbolicExpressionOrNull(insertedValue);
+  // We may have to convert the expression to bit-vector kind...
+  auto maybeConversion = convertExprForTypeToBitVectorExpr(IRB, insertedValue);
 
-  // Floating-point values are a distinct kind in the solver, so we need to
-  // convert them to bit vectors before we can insert them into the expression
-  // for the aggregate.
-  Input symbolicInput;
-  if (insertedValueType->isFloatingPointTy()) {
-    auto floatConversion = IRB.CreateCall(
-        runtime.buildFloatToBits,
-        {insertedValueExpr, IRB.getInt1(insertedValueType->isDoubleTy())});
-    symbolicInput = {insertedValue, 0, floatConversion};
-    insertedValueExpr = floatConversion;
+  auto insert = IRB.CreateCall(
+      runtime.buildInsert,
+      {getSymbolicExpressionOrNull(target),
+       // If we had to convert the expression, use the result of the conversion.
+       maybeConversion ? maybeConversion->lastInstruction
+                       : getSymbolicExpressionOrNull(insertedValue),
+       IRB.getInt64(aggregateMemberOffset(target->getType(), I.getIndices())),
+       IRB.getInt1(isLittleEndian(insertedValue->getType()) ? 1 : 0)});
+  auto insertComputation =
+      SymbolicComputation(insert, insert, {Input(target, 0, insert)});
+
+  if (!maybeConversion) {
+    // If we didn't have to convert, then the inserted value is first used in
+    // the insertion.
+    insertComputation.inputs.push_back(Input(insertedValue, 1, insert));
+  } else {
+    // Otherwise, the full computation consists of the conversion followed by
+    // the insertion.
+    maybeConversion->merge(insertComputation);
   }
 
-  auto result = IRB.CreateCall(
-      runtime.buildInsert,
-      {getSymbolicExpressionOrNull(target), insertedValueExpr,
-       IRB.getInt64(aggregateMemberOffset(target->getType(), I.getIndices())),
-       IRB.getInt1(isLittleEndian(insertedValueType) ? 1 : 0)});
-
-  if (!insertedValueType->isFloatingPointTy())
-    symbolicInput = {insertedValue, 1, result};
-
-  registerSymbolicComputation(
-      {symbolicInput.user, result, {{target, 0, result}, symbolicInput}}, &I);
+  registerSymbolicComputation(maybeConversion.value_or(insertComputation));
 }
 
 void Symbolizer::visitExtractValueInst(ExtractValueInst &I) {
@@ -909,15 +888,8 @@ void Symbolizer::visitExtractValueInst(ExtractValueInst &I) {
        IRB.getInt64(dataLayout.getTypeStoreSize(resultType)),
        IRB.getInt1(isLittleEndian(resultType) ? 1 : 0)});
 
-  // Floating-point values are a distinct kind in the solver. Extracting from an
-  // aggregate gives us a bit vector, so we need to convert the expression to a
-  // float if it represents one.
-  auto result = resultType->isFloatingPointTy()
-                    ? IRB.CreateCall(runtime.buildBitsToFloat,
-                                     {extractedBits,
-                                      IRB.getInt1(resultType->isDoubleTy())})
-                    : extractedBits;
-
+  Instruction *result =
+      convertBitVectorExprForType(IRB, extractedBits, resultType);
   registerSymbolicComputation(
       {extractedBits, result, {{target, 0, extractedBits}}}, &I);
 }
@@ -1044,9 +1016,9 @@ CallInst *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
   llvm_unreachable("Unhandled type for constant expression");
 }
 
-Symbolizer::SymbolicComputation
-Symbolizer::forceBuildRuntimeCall(IRBuilder<> &IRB, SymFnT function,
-                                  ArrayRef<std::pair<Value *, bool>> args) {
+Symbolizer::SymbolicComputation Symbolizer::forceBuildRuntimeCall(
+    IRBuilder<> &IRB, SymFnT function,
+    ArrayRef<std::pair<Value *, bool>> args) const {
   std::vector<Value *> functionArgs;
   for (const auto &[arg, symbolic] : args) {
     functionArgs.push_back(symbolic ? getSymbolicExpressionOrNull(arg) : arg);
@@ -1099,4 +1071,41 @@ uint64_t Symbolizer::aggregateMemberOffset(Type *aggregateType,
   }
 
   return offset;
+}
+
+Instruction *Symbolizer::convertBitVectorExprForType(llvm::IRBuilder<> &IRB,
+                                                     Instruction *I,
+                                                     Type *T) const {
+  Instruction *result = I;
+
+  if (T->isFloatingPointTy()) {
+    result = IRB.CreateCall(runtime.buildBitsToFloat,
+                            {I, IRB.getInt1(T->isDoubleTy())});
+  } else if (T->isIntegerTy() && T->getIntegerBitWidth() == 1) {
+    result = IRB.CreateCall(runtime.buildTrunc,
+                            {I, ConstantInt::get(IRB.getInt8Ty(), 1)});
+    result = IRB.CreateCall(runtime.buildBitToBool, {result});
+  }
+
+  return result;
+}
+
+std::optional<Symbolizer::SymbolicComputation>
+Symbolizer::convertExprForTypeToBitVectorExpr(llvm::IRBuilder<> &IRB,
+                                              llvm::Value *V) const {
+  auto T = V->getType();
+
+  if (T->isFloatingPointTy()) {
+    return buildRuntimeCall(IRB, runtime.buildFloatToBits, {V});
+  } else if (T->isIntegerTy() && T->getIntegerBitWidth() == 1) {
+    if (auto computation = buildRuntimeCall(IRB, runtime.buildBoolToBit, {V})) {
+      computation->merge(
+          forceBuildRuntimeCall(IRB, runtime.buildZExt,
+                                {{computation->lastInstruction, false},
+                                 {IRB.getInt8(7 /* 1 byte */), false}}));
+      return computation;
+    }
+  }
+
+  return {};
 }
