@@ -19,7 +19,6 @@
 #include <algorithm>
 #include <cassert>
 #include <cstring>
-#include <iterator>
 #include <map>
 
 #include <Runtime.h>
@@ -59,12 +58,21 @@ extern std::map<uintptr_t, SymExpr *> g_shadow_pages;
 /// An iterator that walks over the shadow bytes corresponding to a memory
 /// region. If there is no shadow for any given memory address, it just returns
 /// null.
-class ReadShadowIterator
-    : public std::iterator<std::bidirectional_iterator_tag, SymExpr> {
+class ReadShadowIterator {
 public:
   explicit ReadShadowIterator(uintptr_t address)
-      : std::iterator<std::bidirectional_iterator_tag, SymExpr>(),
-        address_(address), shadow_(getShadow(address)) {}
+      : address_(address), shadow_(getShadow(address)) {}
+
+  // The STL requires iterator types to expose the following type definitions
+  // (see std::iterator_traits). Before C++17, it was possible to get them by
+  // deriving from std::iterator, which is just an empty template struct with
+  // five typedefs. However, std::iterator was deprecated in C++17 and hence its
+  // use causes a warning in recent compilers.
+  using iterator_category = std::bidirectional_iterator_tag;
+  using value_type = SymExpr;
+  using difference_type = ptrdiff_t;
+  using pointer = SymExpr *;
+  using reference = SymExpr &;
 
   ReadShadowIterator &operator++() {
     auto previousAddress = address_++;
