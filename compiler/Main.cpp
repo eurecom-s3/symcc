@@ -15,7 +15,6 @@
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/Scalar.h>
-#include <llvm/Transforms/Scalar/LowerAtomic.h>
 #include <llvm/Transforms/Scalar/Scalarizer.h>
 
 #if LLVM_VERSION_MAJOR >= 13
@@ -27,6 +26,12 @@
 #else
 using OptimizationLevel = llvm::PassBuilder::OptimizationLevel;
 #endif
+#endif
+
+#if LLVM_VERSION_MAJOR >= 15
+#include <llvm/Transforms/Scalar/LowerAtomicPass.h>
+#else
+#include <llvm/Transforms/Scalar/LowerAtomic.h>
 #endif
 
 #include "Pass.h"
