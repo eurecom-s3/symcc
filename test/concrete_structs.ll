@@ -29,7 +29,7 @@
 
 ; RUN: llc %s -o /dev/null
 ; RUN: %symcc %s -o %t
-; RUN: env SYMCC_MEMORY_INPUT=1 %t 2>&1
+; RUN: env SYMCC_MEMORY_INPUT=1 %t 2>&1 | %filecheck %s
 
 target triple = "x86_64-pc-linux-gnu"
 
@@ -63,6 +63,7 @@ failed:
 define i32 @main(i32 %argc, i8** %argv) {
   ; Register our test-case handler.
   call void @symcc_set_test_case_handler(void (i8*, i64)* @test_case_handler)
+  ; SIMPLE: Warning: test-case handlers
 
   ; Create a symbolic value that we can use to trigger the creation of struct
   ; expressions.
@@ -92,6 +93,7 @@ define i32 @main(i32 %argc, i8** %argv) {
   %value_loaded = load i32, i32* %value_address
   %is_forty_two = icmp eq i32 %value_loaded, %symbolic_value
   br i1 %is_forty_two, label %never_executed, label %done
+  ; QSYM: SMT
 
 never_executed:
   br label %done

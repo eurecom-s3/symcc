@@ -558,7 +558,7 @@ void Symbolizer::visitStoreInst(StoreInst &I) {
        ConstantInt::get(intPtrType, dataLayout.getTypeStoreSize(V->getType())),
        maybeConversion ? maybeConversion->lastInstruction
                        : getSymbolicExpressionOrNull(V),
-       IRB.getInt1(dataLayout.isLittleEndian() ? 1 : 0)});
+       IRB.getInt1(isLittleEndian(V->getType()) ? 1 : 0)});
 }
 
 void Symbolizer::visitGetElementPtrInst(GetElementPtrInst &I) {
@@ -869,7 +869,7 @@ void Symbolizer::visitInsertValueInst(InsertValueInst &I) {
     maybeConversion->merge(insertComputation);
   }
 
-  registerSymbolicComputation(maybeConversion.value_or(insertComputation));
+  registerSymbolicComputation(maybeConversion.value_or(insertComputation), &I);
 }
 
 void Symbolizer::visitExtractValueInst(ExtractValueInst &I) {
@@ -979,37 +979,77 @@ CallInst *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
         {IRB.CreatePtrToInt(V, IRB.getInt64Ty()), IRB.getInt8(ptrBits)});
   }
 
-  if (valueType->isStructTy()) {
+  if (auto structType = dyn_cast<StructType>(valueType)) {
     // In unoptimized code we may see structures in SSA registers. What we
     // want is a single bit-vector expression describing their contents, but
-    // unfortunately we can't take the address of a register. We fix the
-    // problem with a hack: we write the register to memory and initialize the
-    // expression from there.
+    // unfortunately we can't take the address of a register. What we do instead
+    // is to build the expression recursively by iterating over the elements of
+    // the structure.
     //
     // An alternative would be to change the representation of structures in
     // SSA registers to "shadow structures" that contain one expression per
     // member. However, this would put an additional burden on the handling of
     // cast instructions, because expressions would have to be converted
     // between different representations according to the type.
-    //
-    // Unfortunately, the hack doesn't work when the entire structure is
-    // "undef"; writing it to memory is a well-defined bitcode operation, but
-    // the symbolic expression for the memory region will just be null because
-    // it's entirely concrete. We create an all-zeros expression for it instead.
 
     if (isa<UndefValue>(V)) {
+      // This is just an optimization for completely undefined structs; we
+      // create an all-zeros expression without iterating over the elements.
       return IRB.CreateCall(
           runtime.buildZeroBytes,
           {ConstantInt::get(intPtrType,
                             dataLayout.getTypeStoreSize(valueType))});
     } else {
-      auto *memory = IRB.CreateAlloca(valueType);
-      IRB.CreateStore(V, memory);
-      return IRB.CreateCall(
-          runtime.readMemory,
-          {IRB.CreatePtrToInt(memory, intPtrType),
-           ConstantInt::get(intPtrType, dataLayout.getTypeStoreSize(valueType)),
-           IRB.getInt1(0)});
+      // Iterate over the elements of the struct and concatenate the
+      // corresponding expressions (along with any padding that might be
+      // needed).
+
+      auto structLayout = dataLayout.getStructLayout(structType);
+      auto constantStructValue = dyn_cast<ConstantStruct>(V);
+      size_t offset = 0; // The end of the expressed portion in bytes.
+      CallInst *expr = nullptr;
+      auto append = [&](CallInst *newExpr) {
+        expr = expr ? IRB.CreateCall(runtime.buildConcat, {expr, newExpr})
+                    : newExpr;
+      };
+
+      for (size_t i = 0; i < structType->getNumElements(); i++) {
+        // Build an expression for any padding preceding the current element.
+        if (auto padding = structLayout->getElementOffset(i) - offset;
+            padding > 0) {
+          append(IRB.CreateCall(runtime.buildZeroBytes,
+                                {ConstantInt::get(intPtrType, padding)}));
+        }
+
+        // Build the expression for the current element. If the struct is not a
+        // constant, we need to read the element with extractvalue.
+        auto elementExpr = createValueExpression(
+            constantStructValue ? constantStructValue->getAggregateElement(i)
+                                : IRB.CreateExtractValue(V, i),
+            IRB);
+
+        // If the element is represented in little-endian byte order in memory,
+        // swap the bytes.
+        auto elementType = structType->getElementType(i);
+        if (isLittleEndian(elementType) &&
+            dataLayout.getTypeStoreSize(elementType) > 1) {
+          elementExpr = IRB.CreateCall(runtime.buildBswap, {elementExpr});
+        }
+
+        append(elementExpr);
+
+        offset = structLayout->getElementOffset(i) +
+                 dataLayout.getTypeStoreSize(structType->getElementType(i));
+      }
+
+      // Insert padding at the end, if any.
+      if (auto finalPadding = dataLayout.getTypeStoreSize(structType) - offset;
+          finalPadding > 0) {
+        append(IRB.CreateCall(runtime.buildZeroBytes,
+                              {ConstantInt::get(intPtrType, finalPadding)}));
+      }
+
+      return expr;
     }
   }
 

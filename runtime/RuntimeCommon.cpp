@@ -226,7 +226,9 @@ SymExpr _sym_build_insert(SymExpr target, SymExpr to_insert, uint64_t offset,
 
   SymExpr beforeInsert =
       (offset == 0) ? nullptr : _sym_build_extract(target, 0, offset, false);
-  SymExpr newPiece = little_endian ? _sym_build_bswap(to_insert) : to_insert;
+  SymExpr newPiece = (little_endian && bitsToInsert > 8)
+                         ? _sym_build_bswap(to_insert)
+                         : to_insert;
   uint64_t afterLen =
       (_sym_bits_helper(target) / 8) - offset - (bitsToInsert / 8);
   SymExpr afterInsert =
