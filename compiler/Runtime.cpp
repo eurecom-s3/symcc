@@ -69,6 +69,9 @@ Runtime::Runtime(Module &M) {
   buildBoolXor = import(M, "_sym_build_bool_xor", ptrT, ptrT, ptrT);
   buildBoolToBit = import(M, "_sym_build_bool_to_bit", ptrT, ptrT);
   buildBitToBool = import(M, "_sym_build_bit_to_bool", ptrT, ptrT);
+  buildConcat =
+      import(M, "_sym_concat_helper", ptrT, ptrT,
+             ptrT); // doesn't follow naming convention for historic reasons
   pushPathConstraint =
       import(M, "_sym_push_path_constraint", voidT, ptrT, int1T, intPtrType);
 
