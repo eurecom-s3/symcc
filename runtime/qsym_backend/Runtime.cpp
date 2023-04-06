@@ -347,10 +347,27 @@ SymExpr _sym_build_bool_to_bit(SymExpr expr) {
 // Floating-point operations (unsupported in QSYM)
 //
 
+// Even if we don't generally support operations on floats in this backend, we
+// need dummy implementations of a few functions to help the parts of the
+// instrumentation that deal with structures; if structs contain floats, the
+// instrumentation expects to be able to create bit-vector expressions for
+// them.
+
+SymExpr _sym_build_float(double, int is_double) {
+  // We create an all-zeros bit vector, mainly to capture the length of the
+  // value. This is compatible with our dummy implementation of
+  // _sym_build_float_to_bits.
+  return registerExpression(
+      g_expr_builder->createConstant(0, is_double ? 64 : 32));
+}
+
+SymExpr _sym_build_float_to_bits(SymExpr expr) {
+  return expr;
+}
+
 #define UNSUPPORTED(prototype)                                                 \
   prototype { return nullptr; }
 
-UNSUPPORTED(SymExpr _sym_build_float(double, int))
 UNSUPPORTED(SymExpr _sym_build_fp_add(SymExpr, SymExpr))
 UNSUPPORTED(SymExpr _sym_build_fp_sub(SymExpr, SymExpr))
 UNSUPPORTED(SymExpr _sym_build_fp_mul(SymExpr, SymExpr))
@@ -375,7 +392,6 @@ UNSUPPORTED(SymExpr _sym_build_float_unordered_not_equal(SymExpr, SymExpr))
 UNSUPPORTED(SymExpr _sym_build_int_to_float(SymExpr, int, int))
 UNSUPPORTED(SymExpr _sym_build_float_to_float(SymExpr, int))
 UNSUPPORTED(SymExpr _sym_build_bits_to_float(SymExpr, int))
-UNSUPPORTED(SymExpr _sym_build_float_to_bits(SymExpr))
 UNSUPPORTED(SymExpr _sym_build_float_to_signed_integer(SymExpr, uint8_t))
 UNSUPPORTED(SymExpr _sym_build_float_to_unsigned_integer(SymExpr, uint8_t))
 
