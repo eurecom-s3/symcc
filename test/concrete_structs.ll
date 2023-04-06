@@ -33,7 +33,10 @@
 
 target triple = "x86_64-pc-linux-gnu"
 
-%struct_type = type { i8, i32, i8 }
+; The struct type which we'll create expressions for. Include a floating-point
+; value and a Boolean because they're represented with non-bitvector solver
+; variables (reproducing eurecom-s3/symcc#138).
+%struct_type = type { i8, i32, i8, float, i1 }
 
 ; Global variable to record whether we've found a solution. Since the simple
 ; backend doesn't support test-case handlers, we start with "true".
@@ -77,17 +80,13 @@ define i32 @main(i32 %argc, i8** %argv) {
   insertvalue %struct_type undef, i32 %symbolic_value, 1
 
   ; Struct with concrete value
-  insertvalue %struct_type { i8 1, i32 undef, i8 2 }, i32 %symbolic_value, 1
-
-  ; Struct with symbolic value
-  %symbolic_struct = insertvalue %struct_type undef, i8 %symbolic_byte, 0
-  insertvalue %struct_type %symbolic_struct, i32 %symbolic_value, 1
+  insertvalue %struct_type { i8 1, i32 undef, i8 2, float undef, i1 undef }, i32 %symbolic_value, 1
 
   ; Write a struct to memory and load one of its elements back into a register.
   ; It's important to also insert a symbolic value into the struct, so that we
   ; generate an expression in the first place.
   %struct_mem = alloca %struct_type
-  %struct_value = insertvalue %struct_type { i8 0, i32 42, i8 undef }, i8 %symbolic_byte, 2
+  %struct_value = insertvalue %struct_type { i8 0, i32 42, i8 undef, float undef, i1 undef }, i8 %symbolic_byte, 2
   store %struct_type %struct_value, %struct_type* %struct_mem
   %value_address = getelementptr %struct_type, %struct_type* %struct_mem, i32 0, i32 1
   %value_loaded = load i32, i32* %value_address
