@@ -550,7 +550,8 @@ void Symbolizer::visitStoreInst(StoreInst &I) {
   // runtime function we call can handle null expressions.
 
   auto V = I.getValueOperand();
-  auto maybeConversion = convertExprForTypeToBitVectorExpr(IRB, V);
+  auto maybeConversion =
+      convertExprForTypeToBitVectorExpr(IRB, V, getSymbolicExpression(V));
 
   IRB.CreateCall(
       runtime.writeMemory,
@@ -846,7 +847,8 @@ void Symbolizer::visitInsertValueInst(InsertValueInst &I) {
     return;
 
   // We may have to convert the expression to bit-vector kind...
-  auto maybeConversion = convertExprForTypeToBitVectorExpr(IRB, insertedValue);
+  auto maybeConversion = convertExprForTypeToBitVectorExpr(
+      IRB, insertedValue, getSymbolicExpressionOrNull(insertedValue));
 
   auto insert = IRB.CreateCall(
       runtime.buildInsert,
@@ -937,7 +939,7 @@ void Symbolizer::visitInstruction(Instruction &I) {
          << "; the result will be concretized\n";
 }
 
-CallInst *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
+Instruction *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
   auto *valueType = V->getType();
 
   if (isa<ConstantPointerNull>(V)) {
@@ -1007,8 +1009,8 @@ CallInst *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
       auto structLayout = dataLayout.getStructLayout(structType);
       auto constantStructValue = dyn_cast<ConstantStruct>(V);
       size_t offset = 0; // The end of the expressed portion in bytes.
-      CallInst *expr = nullptr;
-      auto append = [&](CallInst *newExpr) {
+      Instruction *expr = nullptr;
+      auto append = [&](Instruction *newExpr) {
         expr = expr ? IRB.CreateCall(runtime.buildConcat, {expr, newExpr})
                     : newExpr;
       };
@@ -1023,10 +1025,17 @@ CallInst *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
 
         // Build the expression for the current element. If the struct is not a
         // constant, we need to read the element with extractvalue.
-        auto elementExpr = createValueExpression(
-            constantStructValue ? constantStructValue->getAggregateElement(i)
-                                : IRB.CreateExtractValue(V, i),
-            IRB);
+        auto element = constantStructValue
+                           ? constantStructValue->getAggregateElement(i)
+                           : IRB.CreateExtractValue(V, i);
+        auto elementExpr = createValueExpression(element, IRB);
+
+        // The expression may be of a different kind than bit vector; in this
+        // case, we need to convert it.
+        if (auto conversion =
+                convertExprForTypeToBitVectorExpr(IRB, element, elementExpr)) {
+          elementExpr = conversion->lastInstruction;
+        }
 
         // If the element is represented in little-endian byte order in memory,
         // swap the bytes.
@@ -1131,21 +1140,22 @@ Instruction *Symbolizer::convertBitVectorExprForType(llvm::IRBuilder<> &IRB,
 }
 
 std::optional<Symbolizer::SymbolicComputation>
-Symbolizer::convertExprForTypeToBitVectorExpr(llvm::IRBuilder<> &IRB,
-                                              llvm::Value *V) const {
+Symbolizer::convertExprForTypeToBitVectorExpr(IRBuilder<> &IRB, Value *V,
+                                              Value *Expr) const {
+  if (Expr == nullptr)
+    return {};
+
   auto T = V->getType();
 
   if (T->isFloatingPointTy()) {
-    return buildRuntimeCall(IRB, runtime.buildFloatToBits, {V});
+    auto floatBits = IRB.CreateCall(runtime.buildFloatToBits, {Expr});
+    return SymbolicComputation(floatBits, floatBits, {Input(V, 0, floatBits)});
   } else if (T->isIntegerTy() && T->getIntegerBitWidth() == 1) {
-    if (auto computation = buildRuntimeCall(IRB, runtime.buildBoolToBit, {V})) {
-      computation->merge(
-          forceBuildRuntimeCall(IRB, runtime.buildZExt,
-                                {{computation->lastInstruction, false},
-                                 {IRB.getInt8(7 /* 1 byte */), false}}));
-      return computation;
-    }
+    auto bitExpr = IRB.CreateCall(runtime.buildBoolToBit, {Expr});
+    auto bitVectorExpr = IRB.CreateCall(runtime.buildZExt,
+                                        {bitExpr, IRB.getInt8(7 /* 1 byte */)});
+    return SymbolicComputation(bitExpr, bitVectorExpr, {Input(V, 0, bitExpr)});
+  } else {
+    return {};
   }
-
-  return {};
 }
