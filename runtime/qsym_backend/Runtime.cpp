@@ -137,6 +137,12 @@ public:
   void saveValues(const std::string &suffix) override {
     if (auto handler = g_test_case_handler) {
       auto values = getConcreteValues();
+      // The test-case handler may be instrumented, so let's call it with
+      // argument expressions to meet instrumented code's expectations.
+      // Otherwise, we might end up erroneously using whatever expression was
+      // last registered for a function parameter.
+      _sym_set_parameter_expression(0, nullptr);
+      _sym_set_parameter_expression(1, nullptr);
       handler(values.data(), values.size());
     } else {
       Solver::saveValues(suffix);
