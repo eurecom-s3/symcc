@@ -361,9 +361,7 @@ SymExpr _sym_build_float(double, int is_double) {
       g_expr_builder->createConstant(0, is_double ? 64 : 32));
 }
 
-SymExpr _sym_build_float_to_bits(SymExpr expr) {
-  return expr;
-}
+SymExpr _sym_build_float_to_bits(SymExpr expr) { return expr; }
 
 #define UNSUPPORTED(prototype)                                                 \
   prototype { return nullptr; }
