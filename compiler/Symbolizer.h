@@ -202,7 +202,8 @@ private:
   };
 
   /// Create an expression that represents the concrete value.
-  llvm::Instruction *createValueExpression(llvm::Value *V, llvm::IRBuilder<> &IRB);
+  llvm::Instruction *createValueExpression(llvm::Value *V,
+                                           llvm::IRBuilder<> &IRB);
 
   /// Get the (already created) symbolic expression for a value.
   llvm::Value *getSymbolicExpression(llvm::Value *V) const {
@@ -325,8 +326,8 @@ private:
   /// This is the inverse operation of convertBitVectorExprForType (see details
   /// there).
   std::optional<SymbolicComputation>
-  convertExprForTypeToBitVectorExpr(llvm::IRBuilder<> &IRB,
-                                    llvm::Value *V, llvm::Value *Expr) const;
+  convertExprForTypeToBitVectorExpr(llvm::IRBuilder<> &IRB, llvm::Value *V,
+                                    llvm::Value *Expr) const;
 
   const Runtime runtime;
 
