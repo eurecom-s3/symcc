@@ -51,6 +51,19 @@ struct Runtime {
   SymFnT buildBoolXor{};
   SymFnT buildBoolToBit{};
   SymFnT buildBitToBool{};
+  SymFnT buildAddOverflow{};
+  SymFnT buildSubOverflow{};
+  SymFnT buildMulOverflow{};
+  SymFnT buildSAddSat{};
+  SymFnT buildUAddSat{};
+  SymFnT buildSSubSat{};
+  SymFnT buildUSubSat{};
+  SymFnT buildSShlSat{};
+  SymFnT buildUShlSat{};
+  SymFnT buildFshl{};
+  SymFnT buildFshr{};
+  SymFnT buildAbs{};
+  SymFnT buildConcat{};
   SymFnT pushPathConstraint{};
   SymFnT getParameterExpression{};
   SymFnT setParameterExpression{};
@@ -75,6 +88,10 @@ struct Runtime {
   /// Mapping from binary operators to the functions that build the
   /// corresponding symbolic expressions.
   std::array<SymFnT, llvm::Instruction::BinaryOpsEnd> binaryOperatorHandlers{};
+
+  /// Mapping from unary operators to the functions that build the
+  /// corresponding symbolic expressions.
+  std::array<SymFnT, llvm::Instruction::UnaryOpsEnd> unaryOperatorHandlers{};
 };
 
 bool isInterceptedFunction(const llvm::Function &f);

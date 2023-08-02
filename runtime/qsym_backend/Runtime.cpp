@@ -137,6 +137,12 @@ public:
   void saveValues(const std::string &suffix) override {
     if (auto handler = g_test_case_handler) {
       auto values = getConcreteValues();
+      // The test-case handler may be instrumented, so let's call it with
+      // argument expressions to meet instrumented code's expectations.
+      // Otherwise, we might end up erroneously using whatever expression was
+      // last registered for a function parameter.
+      _sym_set_parameter_expression(0, nullptr);
+      _sym_set_parameter_expression(1, nullptr);
       handler(values.data(), values.size());
     } else {
       Solver::saveValues(suffix);
@@ -274,6 +280,12 @@ SymExpr _sym_build_not(SymExpr expr) {
       g_expr_builder->createNot(allocatedExpressions.at(expr)));
 }
 
+SymExpr _sym_build_ite(SymExpr cond, SymExpr a, SymExpr b) {
+  return registerExpression(g_expr_builder->createIte(
+      allocatedExpressions.at(cond), allocatedExpressions.at(a),
+      allocatedExpressions.at(b)));
+}
+
 SymExpr _sym_build_sext(SymExpr expr, uint8_t bits) {
   if (expr == nullptr)
     return nullptr;
@@ -335,16 +347,32 @@ SymExpr _sym_build_bool_to_bit(SymExpr expr) {
 // Floating-point operations (unsupported in QSYM)
 //
 
+// Even if we don't generally support operations on floats in this backend, we
+// need dummy implementations of a few functions to help the parts of the
+// instrumentation that deal with structures; if structs contain floats, the
+// instrumentation expects to be able to create bit-vector expressions for
+// them.
+
+SymExpr _sym_build_float(double, int is_double) {
+  // We create an all-zeros bit vector, mainly to capture the length of the
+  // value. This is compatible with our dummy implementation of
+  // _sym_build_float_to_bits.
+  return registerExpression(
+      g_expr_builder->createConstant(0, is_double ? 64 : 32));
+}
+
+SymExpr _sym_build_float_to_bits(SymExpr expr) { return expr; }
+
 #define UNSUPPORTED(prototype)                                                 \
   prototype { return nullptr; }
 
-UNSUPPORTED(SymExpr _sym_build_float(double, int))
 UNSUPPORTED(SymExpr _sym_build_fp_add(SymExpr, SymExpr))
 UNSUPPORTED(SymExpr _sym_build_fp_sub(SymExpr, SymExpr))
 UNSUPPORTED(SymExpr _sym_build_fp_mul(SymExpr, SymExpr))
 UNSUPPORTED(SymExpr _sym_build_fp_div(SymExpr, SymExpr))
 UNSUPPORTED(SymExpr _sym_build_fp_rem(SymExpr, SymExpr))
 UNSUPPORTED(SymExpr _sym_build_fp_abs(SymExpr))
+UNSUPPORTED(SymExpr _sym_build_fp_neg(SymExpr))
 UNSUPPORTED(SymExpr _sym_build_float_ordered_greater_than(SymExpr, SymExpr))
 UNSUPPORTED(SymExpr _sym_build_float_ordered_greater_equal(SymExpr, SymExpr))
 UNSUPPORTED(SymExpr _sym_build_float_ordered_less_than(SymExpr, SymExpr))
@@ -362,7 +390,6 @@ UNSUPPORTED(SymExpr _sym_build_float_unordered_not_equal(SymExpr, SymExpr))
 UNSUPPORTED(SymExpr _sym_build_int_to_float(SymExpr, int, int))
 UNSUPPORTED(SymExpr _sym_build_float_to_float(SymExpr, int))
 UNSUPPORTED(SymExpr _sym_build_bits_to_float(SymExpr, int))
-UNSUPPORTED(SymExpr _sym_build_float_to_bits(SymExpr))
 UNSUPPORTED(SymExpr _sym_build_float_to_signed_integer(SymExpr, uint8_t))
 UNSUPPORTED(SymExpr _sym_build_float_to_unsigned_integer(SymExpr, uint8_t))
 

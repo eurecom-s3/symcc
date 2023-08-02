@@ -81,7 +81,7 @@ void handle_z3_error(Z3_context c [[maybe_unused]], Z3_error_code e) {
 }
 #endif
 
-Z3_ast build_variable(const char *name, uint8_t bits) {
+SymExpr build_variable(const char *name, uint8_t bits) {
   Z3_symbol sym = Z3_mk_string_symbol(g_context, name);
   auto *sort = Z3_mk_bv_sort(g_context, bits);
   Z3_inc_ref(g_context, (Z3_ast)sort);
@@ -94,7 +94,7 @@ Z3_ast build_variable(const char *name, uint8_t bits) {
 /// The set of all expressions we have ever passed to client code.
 std::set<SymExpr> allocatedExpressions;
 
-SymExpr registerExpression(Z3_ast expr) {
+SymExpr registerExpression(SymExpr expr) {
   if (allocatedExpressions.count(expr) == 0) {
     // We don't know this expression yet. Record it and increase the reference
     // counter.
@@ -243,6 +243,10 @@ DEF_BINARY_EXPR_BUILDER(float_ordered_equal, fpa_eq)
 
 #undef DEF_BINARY_EXPR_BUILDER
 
+Z3_ast _sym_build_ite(Z3_ast cond, Z3_ast a, Z3_ast b) {
+  return registerExpression(Z3_mk_ite(g_context, cond, a, b));
+}
+
 Z3_ast _sym_build_fp_add(Z3_ast a, Z3_ast b) {
   return registerExpression(Z3_mk_fpa_add(g_context, g_rounding_mode, a, b));
 }
@@ -265,6 +269,10 @@ Z3_ast _sym_build_fp_rem(Z3_ast a, Z3_ast b) {
 
 Z3_ast _sym_build_fp_abs(Z3_ast a) {
   return registerExpression(Z3_mk_fpa_abs(g_context, a));
+}
+
+Z3_ast _sym_build_fp_neg(Z3_ast a) {
+  return registerExpression(Z3_mk_fpa_neg(g_context, a));
 }
 
 Z3_ast _sym_build_not(Z3_ast expr) {
@@ -419,8 +427,8 @@ Z3_ast _sym_build_float_to_unsigned_integer(Z3_ast expr, uint8_t bits) {
 Z3_ast _sym_build_bool_to_bit(Z3_ast expr) {
   if (expr == nullptr)
     return nullptr;
-  return registerExpression(Z3_mk_ite(g_context, expr, _sym_build_integer(1, 1),
-                                      _sym_build_integer(0, 1)));
+  return _sym_build_ite(expr, _sym_build_integer(1, 1),
+                        _sym_build_integer(0, 1));
 }
 
 void _sym_push_path_constraint(Z3_ast constraint, int taken,
@@ -435,13 +443,13 @@ void _sym_push_path_constraint(Z3_ast constraint, int taken,
      "true" or "false", there is no point in trying to solve the negation or *
      pushing the constraint to the solver... */
 
-  if (Z3_is_eq_ast(g_context, constraint, Z3_mk_true(g_context))) {
+  if (Z3_is_eq_ast(g_context, constraint, g_true)) {
     assert(taken && "We have taken an impossible branch");
     Z3_dec_ref(g_context, constraint);
     return;
   }
 
-  if (Z3_is_eq_ast(g_context, constraint, Z3_mk_false(g_context))) {
+  if (Z3_is_eq_ast(g_context, constraint, g_false)) {
     assert(!taken && "We have taken an impossible branch");
     Z3_dec_ref(g_context, constraint);
     return;
