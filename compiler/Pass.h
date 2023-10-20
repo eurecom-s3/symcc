@@ -29,8 +29,8 @@ public:
 
   SymbolizeLegacyPass() : FunctionPass(ID) {}
 
-  bool doInitialization(llvm::Module &M) override;
-  bool runOnFunction(llvm::Function &F) override;
+  virtual bool doInitialization(llvm::Module &M) override;
+  virtual bool runOnFunction(llvm::Function &F) override;
 };
 
 #if LLVM_VERSION_MAJOR >= 13
