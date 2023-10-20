@@ -66,6 +66,7 @@ RSymExpr _rsym_build_fp_mul(RSymExpr a, RSymExpr b);
 RSymExpr _rsym_build_fp_div(RSymExpr a, RSymExpr b);
 RSymExpr _rsym_build_fp_rem(RSymExpr a, RSymExpr b);
 RSymExpr _rsym_build_fp_abs(RSymExpr a);
+RSymExpr _rsym_build_fp_neg(RSymExpr a);
 
 /*
  * Boolean operations
@@ -87,6 +88,7 @@ RSymExpr _rsym_build_bool_or(RSymExpr a, RSymExpr b);
 RSymExpr _rsym_build_or(RSymExpr a, RSymExpr b);
 RSymExpr _rsym_build_bool_xor(RSymExpr a, RSymExpr b);
 RSymExpr _rsym_build_xor(RSymExpr a, RSymExpr b);
+RSymExpr _rsym_build_ite(RSymExpr cond, RSymExpr a, RSymExpr b);
 
 RSymExpr _rsym_build_float_ordered_greater_than(RSymExpr a, RSymExpr b);
 RSymExpr _rsym_build_float_ordered_greater_equal(RSymExpr a, RSymExpr b);

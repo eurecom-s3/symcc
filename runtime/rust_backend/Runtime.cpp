@@ -205,6 +205,7 @@ DEF_BINARY_BV_EXPR_BUILDER(fp_rem)
 #undef DEF_BINARY_BV_EXPR_BUILDER
 
 DEF_UNARY_EXPR_BUILDER(fp_abs)
+DEF_UNARY_EXPR_BUILDER(fp_neg)
 
 DEF_UNARY_EXPR_BUILDER(not )
 DEF_BINARY_BOOL_EXPR_BUILDER(not_equal)
@@ -226,6 +227,11 @@ DEF_BINARY_BOOL_EXPR_BUILDER(float_unordered_equal)
 DEF_BINARY_BOOL_EXPR_BUILDER(float_unordered_not_equal)
 
 #undef DEF_BINARY_BOOL_EXPR_BUILDER
+
+SymExpr _sym_build_ite(SymExpr cond, SymExpr a, SymExpr b) {
+  return registerExpression(symexpr(
+      _rsym_build_ite(symexpr_id(cond), symexpr_id(a), symexpr_id(b)), 0));
+}
 
 SymExpr _sym_build_sext(SymExpr expr, uint8_t bits) {
   return registerExpression(symexpr(_rsym_build_sext(symexpr_id(expr), bits),
