@@ -14,6 +14,25 @@
 
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
+#include <llvm/Transforms/Scalar.h>
+#include <llvm/Transforms/Scalar/Scalarizer.h>
+
+#if LLVM_VERSION_MAJOR >= 13
+#include <llvm/Passes/PassBuilder.h>
+#include <llvm/Passes/PassPlugin.h>
+
+#if LLVM_VERSION_MAJOR >= 14
+#include <llvm/Passes/OptimizationLevel.h>
+#else
+using OptimizationLevel = llvm::PassBuilder::OptimizationLevel;
+#endif
+#endif
+
+#if LLVM_VERSION_MAJOR >= 15
+#include <llvm/Transforms/Scalar/LowerAtomicPass.h>
+#else
+#include <llvm/Transforms/Scalar/LowerAtomic.h>
+#endif
 
 #if LLVM_VERSION_MAJOR >= 13
 #include <llvm/Passes/PassBuilder.h>
@@ -34,8 +53,12 @@ using namespace llvm;
 // Legacy pass registration (up to LLVM 13)
 //
 
+#if LLVM_VERSION_MAJOR <= 15
+
 void addSymbolizeLegacyPass(const PassManagerBuilder & /* unused */,
                             legacy::PassManagerBase &PM) {
+  PM.add(createScalarizerPass());
+  PM.add(createLowerAtomicPass());
   PM.add(new SymbolizeLegacyPass());
 }
 
@@ -46,6 +69,8 @@ static struct RegisterStandardPasses Y(PassManagerBuilder::EP_VectorizerStart,
                                        addSymbolizeLegacyPass);
 static struct RegisterStandardPasses
     Z(PassManagerBuilder::EP_EnabledOnOptLevel0, addSymbolizeLegacyPass);
+
+#endif
 
 //
 // New pass registration (LLVM 13 and above)
@@ -67,6 +92,8 @@ PassPluginLibraryInfo getSymbolizePluginInfo() {
                 });
             PB.registerVectorizerStartEPCallback(
                 [](FunctionPassManager &PM, OptimizationLevel) {
+                  PM.addPass(ScalarizerPass());
+                  PM.addPass(LowerAtomicPass());
                   PM.addPass(SymbolizePass());
                 });
           }};

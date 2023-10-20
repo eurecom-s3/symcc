@@ -18,34 +18,42 @@
 #include <stdint.h>
 #include <stdio.h>
 
-void symcc_make_symbolic(const void *start, size_t byte_length);
+#define MAGIC 0xab
 
-uint64_t g_value = 0xaaaabbbbccccdddd;
+void symcc_make_symbolic(const void *start, size_t byte_length);
+typedef void (*TestCaseHandler)(const void *, size_t);
+void symcc_set_test_case_handler(TestCaseHandler handler);
+
+int solved = 0;
+int num_test_cases = 0;
+
+void handle_test_case(const void *data, size_t data_length) {
+  num_test_cases++;
+  if (data_length == 1 && ((const uint8_t *)data)[0] == MAGIC)
+    solved = 1;
+}
 
 int main(int argc, char *argv[]) {
-  uint64_t x = 10;
-  uint8_t y = 0;
+  symcc_set_test_case_handler(handle_test_case);
+  // SIMPLE: Warning: test-case handlers
 
-  symcc_make_symbolic(&x, sizeof(x));
-  symcc_make_symbolic(&y, sizeof(y));
+  uint8_t input = 0;
+  symcc_make_symbolic(&input, sizeof(input));
 
-  fprintf(stderr, "%s\n", (x == g_value) ? "yes" : "no");
+  fprintf(stderr, "%s\n", (input == MAGIC) ? "yes" : "no");
   // SIMPLE: Trying to solve
   // SIMPLE: Found diverging input
-  // SIMPLE-DAG: #xaa
-  // SIMPLE-DAG: #xbb
-  // SIMPLE-DAG: #xcc
-  // SIMPLE-DAG: #xdd
-  // QSYM-COUNT-2: SMT
+  // SIMPLE: stdin0 -> #xab
+  // QSYM: SMT
   // ANY: no
 
-  fprintf(stderr, "%s\n", (y == 10) ? "yes" : "no");
-  // SIMPLE: Trying to solve
-  // SIMPLE: Found diverging input
-  // y should be part of the input, just after x
-  // SIMPLE: stdin8 -> #x0a
-  // QSYM-COUNT-2: SMT
-  // ANY: no
+  fprintf(stderr, "%d\n", solved);
+  // QSYM: 1
+  // SIMPLE: 0
+
+  fprintf(stderr, "%d\n", num_test_cases);
+  // QSYM: 1
+  // SIMPLE: 0
 
   return 0;
 }

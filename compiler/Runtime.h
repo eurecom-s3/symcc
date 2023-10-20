@@ -19,9 +19,9 @@
 #include <llvm/IR/Module.h>
 
 #if LLVM_VERSION_MAJOR >= 9 && LLVM_VERSION_MAJOR < 11
-  using SymFnT = llvm::Value *;
+using SymFnT = llvm::Value *;
 #else
-  using SymFnT = llvm::FunctionCallee;
+using SymFnT = llvm::FunctionCallee;
 #endif
 
 /// Runtime functions
@@ -50,6 +50,20 @@ struct Runtime {
   SymFnT buildBoolOr{};
   SymFnT buildBoolXor{};
   SymFnT buildBoolToBit{};
+  SymFnT buildBitToBool{};
+  SymFnT buildAddOverflow{};
+  SymFnT buildSubOverflow{};
+  SymFnT buildMulOverflow{};
+  SymFnT buildSAddSat{};
+  SymFnT buildUAddSat{};
+  SymFnT buildSSubSat{};
+  SymFnT buildUSubSat{};
+  SymFnT buildSShlSat{};
+  SymFnT buildUShlSat{};
+  SymFnT buildFshl{};
+  SymFnT buildFshr{};
+  SymFnT buildAbs{};
+  SymFnT buildConcat{};
   SymFnT pushPathConstraint{};
   SymFnT getParameterExpression{};
   SymFnT setParameterExpression{};
@@ -60,6 +74,7 @@ struct Runtime {
   SymFnT memmove{};
   SymFnT readMemory{};
   SymFnT writeMemory{};
+  SymFnT buildZeroBytes{};
   SymFnT buildInsert{};
   SymFnT buildExtract{};
   SymFnT notifyCall{};
@@ -68,13 +83,15 @@ struct Runtime {
 
   /// Mapping from icmp predicates to the functions that build the corresponding
   /// symbolic expressions.
-  std::array<SymFnT, llvm::CmpInst::BAD_ICMP_PREDICATE>
-      comparisonHandlers{};
+  std::array<SymFnT, llvm::CmpInst::BAD_ICMP_PREDICATE> comparisonHandlers{};
 
   /// Mapping from binary operators to the functions that build the
   /// corresponding symbolic expressions.
-  std::array<SymFnT, llvm::Instruction::BinaryOpsEnd>
-      binaryOperatorHandlers{};
+  std::array<SymFnT, llvm::Instruction::BinaryOpsEnd> binaryOperatorHandlers{};
+
+  /// Mapping from unary operators to the functions that build the
+  /// corresponding symbolic expressions.
+  std::array<SymFnT, llvm::Instruction::UnaryOpsEnd> unaryOperatorHandlers{};
 };
 
 bool isInterceptedFunction(const llvm::Function &f);

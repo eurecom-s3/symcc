@@ -180,15 +180,9 @@ void Symbolizer::handleIntrinsicCall(CallBase &I) {
   auto *callee = I.getCalledFunction();
 
   switch (callee->getIntrinsicID()) {
-  case Intrinsic::lifetime_start:
-  case Intrinsic::lifetime_end:
-  case Intrinsic::dbg_declare:
   case Intrinsic::dbg_value:
   case Intrinsic::is_constant:
   case Intrinsic::trap:
-  case Intrinsic::invariant_start:
-  case Intrinsic::invariant_end:
-  case Intrinsic::assume:
     // These are safe to ignore.
     break;
   case Intrinsic::memcpy: {
@@ -258,22 +252,13 @@ void Symbolizer::handleIntrinsicCall(CallBase &I) {
     registerSymbolicComputation(abs, &I);
     break;
   }
-  case Intrinsic::cttz:
-  case Intrinsic::ctpop:
-  case Intrinsic::ctlz: {
-    // Various bit-count operations. Expressing these symbolically is
-    // difficult, so for now we just concretize.
-
-    errs() << "Warning: losing track of symbolic expressions at bit-count "
-              "operation "
-           << I << "\n";
-    break;
-  }
-  case Intrinsic::returnaddress: {
+  case Intrinsic::returnaddress:
+  case Intrinsic::frameaddress:
+  case Intrinsic::addressofreturnaddress: {
     // Obtain the return address of the current function or one of its parents
     // on the stack. We just concretize.
 
-    errs() << "Warning: using concrete value for return address\n";
+    errs() << "Warning: using concrete value for return/frame address\n";
     break;
   }
   case Intrinsic::bswap: {
@@ -284,6 +269,74 @@ void Symbolizer::handleIntrinsicCall(CallBase &I) {
     registerSymbolicComputation(swapped, &I);
     break;
   }
+
+// Overflow arithmetic
+#define DEF_OVF_ARITH_BUILDER(intrinsic_op, runtime_name)                      \
+  case Intrinsic::s##intrinsic_op##_with_overflow:                             \
+  case Intrinsic::u##intrinsic_op##_with_overflow: {                           \
+    IRBuilder<> IRB(&I);                                                       \
+                                                                               \
+    bool isSigned =                                                            \
+        I.getIntrinsicID() == Intrinsic::s##intrinsic_op##_with_overflow;      \
+    auto overflow = buildRuntimeCall(                                          \
+        IRB, runtime.build##runtime_name,                                      \
+        {{I.getOperand(0), true},                                              \
+         {I.getOperand(1), true},                                              \
+         {IRB.getInt1(isSigned), false},                                       \
+         {IRB.getInt1(dataLayout.isLittleEndian() ? 1 : 0), false}});          \
+    registerSymbolicComputation(overflow, &I);                                 \
+                                                                               \
+    break;                                                                     \
+  }
+
+    DEF_OVF_ARITH_BUILDER(add, AddOverflow)
+    DEF_OVF_ARITH_BUILDER(sub, SubOverflow)
+    DEF_OVF_ARITH_BUILDER(mul, MulOverflow)
+
+#undef DEF_OVF_ARITH_BUILDER
+
+// Saturating arithmetic
+#define DEF_SAT_ARITH_BUILDER(intrinsic_op, runtime_name)                      \
+  case Intrinsic::intrinsic_op##_sat: {                                        \
+    IRBuilder<> IRB(&I);                                                       \
+    auto result = buildRuntimeCall(IRB, runtime.build##runtime_name,           \
+                                   {I.getOperand(0), I.getOperand(1)});        \
+    registerSymbolicComputation(result, &I);                                   \
+    break;                                                                     \
+  }
+
+    DEF_SAT_ARITH_BUILDER(sadd, SAddSat)
+    DEF_SAT_ARITH_BUILDER(uadd, UAddSat)
+    DEF_SAT_ARITH_BUILDER(ssub, SSubSat)
+    DEF_SAT_ARITH_BUILDER(usub, USubSat)
+#if LLVM_VERSION_MAJOR > 11
+    DEF_SAT_ARITH_BUILDER(sshl, SShlSat)
+    DEF_SAT_ARITH_BUILDER(ushl, UShlSat)
+#endif
+
+#undef DEF_SAT_ARITH_BUILDER
+
+  case Intrinsic::fshl:
+  case Intrinsic::fshr: {
+    IRBuilder<> IRB(&I);
+    auto funnelShift = buildRuntimeCall(
+        IRB,
+        I.getIntrinsicID() == Intrinsic::fshl ? runtime.buildFshl
+                                              : runtime.buildFshr,
+        {I.getOperand(0), I.getOperand(1), I.getOperand(2)});
+    registerSymbolicComputation(funnelShift, &I);
+    break;
+  }
+#if LLVM_VERSION_MAJOR > 11
+  case Intrinsic::abs: {
+    // Integer absolute value
+
+    IRBuilder<> IRB(&I);
+    auto abs = buildRuntimeCall(IRB, runtime.buildAbs, I.getOperand(0));
+    registerSymbolicComputation(abs, &I);
+    break;
+  }
+#endif
   default:
     errs() << "Warning: unhandled LLVM intrinsic " << callee->getName()
            << "; the result will be concretized\n";
@@ -366,6 +419,15 @@ void Symbolizer::visitBinaryOperator(BinaryOperator &I) {
   assert(handler && "Unable to handle binary operator");
   auto runtimeCall =
       buildRuntimeCall(IRB, handler, {I.getOperand(0), I.getOperand(1)});
+  registerSymbolicComputation(runtimeCall, &I);
+}
+
+void Symbolizer::visitUnaryOperator(UnaryOperator &I) {
+  IRBuilder<> IRB(&I);
+  SymFnT handler = runtime.unaryOperatorHandlers.at(I.getOpcode());
+
+  assert(handler && "Unable to handle unary operator");
+  auto runtimeCall = buildRuntimeCall(IRB, handler, I.getOperand(0));
   registerSymbolicComputation(runtimeCall, &I);
 }
 
@@ -472,14 +534,9 @@ void Symbolizer::visitLoadInst(LoadInst &I) {
       runtime.readMemory,
       {IRB.CreatePtrToInt(addr, intPtrType),
        ConstantInt::get(intPtrType, dataLayout.getTypeStoreSize(dataType)),
-       ConstantInt::get(IRB.getInt8Ty(), isLittleEndian(dataType) ? 1 : 0)});
+       IRB.getInt1(isLittleEndian(dataType) ? 1 : 0)});
 
-  if (dataType->isFloatingPointTy()) {
-    data = IRB.CreateCall(runtime.buildBitsToFloat,
-                          {data, IRB.getInt1(dataType->isDoubleTy())});
-  }
-
-  symbolicExpressions[&I] = data;
+  symbolicExpressions[&I] = convertBitVectorExprForType(IRB, data, dataType);
 }
 
 void Symbolizer::visitStoreInst(StoreInst &I) {
@@ -487,18 +544,22 @@ void Symbolizer::visitStoreInst(StoreInst &I) {
 
   tryAlternative(IRB, I.getPointerOperand());
 
-  auto *data = getSymbolicExpressionOrNull(I.getValueOperand());
-  auto *dataType = I.getValueOperand()->getType();
-  if (dataType->isFloatingPointTy()) {
-    data = IRB.CreateCall(runtime.buildFloatToBits, data);
-  }
+  // Make sure that the expression corresponding to the stored value is of
+  // bit-vector kind. Shortcutting the runtime calls that we emit here (e.g.,
+  // for floating-point values) is tricky, so instead we make sure that any
+  // runtime function we call can handle null expressions.
+
+  auto V = I.getValueOperand();
+  auto maybeConversion =
+      convertExprForTypeToBitVectorExpr(IRB, V, getSymbolicExpression(V));
 
   IRB.CreateCall(
       runtime.writeMemory,
       {IRB.CreatePtrToInt(I.getPointerOperand(), intPtrType),
-       ConstantInt::get(intPtrType, dataLayout.getTypeStoreSize(dataType)),
-       data,
-       ConstantInt::get(IRB.getInt8Ty(), dataLayout.isLittleEndian() ? 1 : 0)});
+       ConstantInt::get(intPtrType, dataLayout.getTypeStoreSize(V->getType())),
+       maybeConversion ? maybeConversion->lastInstruction
+                       : getSymbolicExpressionOrNull(V),
+       IRB.getInt1(isLittleEndian(V->getType()) ? 1 : 0)});
 }
 
 void Symbolizer::visitGetElementPtrInst(GetElementPtrInst &I) {
@@ -619,11 +680,25 @@ void Symbolizer::visitBitCastInst(BitCastInst &I) {
 
 void Symbolizer::visitTruncInst(TruncInst &I) {
   IRBuilder<> IRB(&I);
-  auto trunc = buildRuntimeCall(
+
+  if (getSymbolicExpression(I.getOperand(0)) == nullptr)
+    return;
+
+  SymbolicComputation symbolicComputation;
+  symbolicComputation.merge(forceBuildRuntimeCall(
       IRB, runtime.buildTrunc,
       {{I.getOperand(0), true},
-       {IRB.getInt8(I.getDestTy()->getIntegerBitWidth()), false}});
-  registerSymbolicComputation(trunc, &I);
+       {IRB.getInt8(I.getDestTy()->getIntegerBitWidth()), false}}));
+
+  if (I.getDestTy()->isIntegerTy() &&
+      I.getDestTy()->getIntegerBitWidth() == 1) {
+    // convert from byte back to a bool (i1)
+    symbolicComputation.merge(
+        forceBuildRuntimeCall(IRB, runtime.buildBitToBool,
+                              {{symbolicComputation.lastInstruction, false}}));
+  }
+
+  registerSymbolicComputation(symbolicComputation, &I);
 }
 
 void Symbolizer::visitIntToPtrInst(IntToPtrInst &I) {
@@ -764,30 +839,61 @@ void Symbolizer::visitPHINode(PHINode &I) {
 
 void Symbolizer::visitInsertValueInst(InsertValueInst &I) {
   IRBuilder<> IRB(&I);
-  auto insert = buildRuntimeCall(
-      IRB, runtime.buildInsert,
-      {{I.getAggregateOperand(), true},
-       {I.getInsertedValueOperand(), true},
-       {IRB.getInt64(aggregateMemberOffset(I.getAggregateOperand()->getType(),
-                                           I.getIndices())),
-        false},
-       {IRB.getInt8(isLittleEndian(I.getInsertedValueOperand()->getType()) ? 1
-                                                                           : 0),
-        false}});
-  registerSymbolicComputation(insert, &I);
+  auto target = I.getAggregateOperand();
+  auto insertedValue = I.getInsertedValueOperand();
+
+  if (getSymbolicExpression(target) == nullptr &&
+      getSymbolicExpression(insertedValue) == nullptr)
+    return;
+
+  // We may have to convert the expression to bit-vector kind...
+  auto maybeConversion = convertExprForTypeToBitVectorExpr(
+      IRB, insertedValue, getSymbolicExpressionOrNull(insertedValue));
+
+  auto insert = IRB.CreateCall(
+      runtime.buildInsert,
+      {getSymbolicExpressionOrNull(target),
+       // If we had to convert the expression, use the result of the conversion.
+       maybeConversion ? maybeConversion->lastInstruction
+                       : getSymbolicExpressionOrNull(insertedValue),
+       IRB.getInt64(aggregateMemberOffset(target->getType(), I.getIndices())),
+       IRB.getInt1(isLittleEndian(insertedValue->getType()) ? 1 : 0)});
+  auto insertComputation =
+      SymbolicComputation(insert, insert, {Input(target, 0, insert)});
+
+  if (!maybeConversion) {
+    // If we didn't have to convert, then the inserted value is first used in
+    // the insertion.
+    insertComputation.inputs.push_back(Input(insertedValue, 1, insert));
+  } else {
+    // Otherwise, the full computation consists of the conversion followed by
+    // the insertion.
+    maybeConversion->merge(insertComputation);
+  }
+
+  registerSymbolicComputation(maybeConversion.value_or(insertComputation), &I);
 }
 
 void Symbolizer::visitExtractValueInst(ExtractValueInst &I) {
   IRBuilder<> IRB(&I);
-  auto extract = buildRuntimeCall(
-      IRB, runtime.buildExtract,
-      {{I.getAggregateOperand(), true},
-       {IRB.getInt64(aggregateMemberOffset(I.getAggregateOperand()->getType(),
-                                           I.getIndices())),
-        false},
-       {IRB.getInt64(dataLayout.getTypeStoreSize(I.getType())), false},
-       {IRB.getInt8(isLittleEndian(I.getType()) ? 1 : 0), false}});
-  registerSymbolicComputation(extract, &I);
+  auto target = I.getAggregateOperand();
+  auto targetExpr = getSymbolicExpression(target);
+  auto resultType = I.getType();
+
+  if (targetExpr == nullptr)
+    return;
+
+  auto extractedBits = IRB.CreateCall(
+      runtime.buildExtract,
+      {targetExpr,
+       IRB.getInt64(aggregateMemberOffset(target->getType(), I.getIndices())),
+       IRB.getInt64(dataLayout.getTypeStoreSize(resultType)),
+       IRB.getInt1(isLittleEndian(resultType) ? 1 : 0)});
+
+  Instruction *result =
+      convertBitVectorExprForType(IRB, extractedBits, resultType);
+  registerSymbolicComputation(
+      {extractedBits, result, {{target, 0, extractedBits}}}, &I);
 }
 
 void Symbolizer::visitSwitchInst(SwitchInst &I) {
@@ -833,7 +939,7 @@ void Symbolizer::visitInstruction(Instruction &I) {
          << "; the result will be concretized\n";
 }
 
-CallInst *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
+Instruction *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
   auto *valueType = V->getType();
 
   if (isa<ConstantPointerNull>(V)) {
@@ -875,12 +981,12 @@ CallInst *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
         {IRB.CreatePtrToInt(V, IRB.getInt64Ty()), IRB.getInt8(ptrBits)});
   }
 
-  if (valueType->isStructTy()) {
+  if (auto structType = dyn_cast<StructType>(valueType)) {
     // In unoptimized code we may see structures in SSA registers. What we
     // want is a single bit-vector expression describing their contents, but
-    // unfortunately we can't take the address of a register. We fix the
-    // problem with a hack: we write the register to memory and initialize the
-    // expression from there.
+    // unfortunately we can't take the address of a register. What we do instead
+    // is to build the expression recursively by iterating over the elements of
+    // the structure.
     //
     // An alternative would be to change the representation of structures in
     // SSA registers to "shadow structures" that contain one expression per
@@ -888,22 +994,80 @@ CallInst *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
     // cast instructions, because expressions would have to be converted
     // between different representations according to the type.
 
-    auto *memory = IRB.CreateAlloca(V->getType());
-    IRB.CreateStore(V, memory);
-    return IRB.CreateCall(
-        runtime.readMemory,
-        {IRB.CreatePtrToInt(memory, intPtrType),
-         ConstantInt::get(intPtrType,
-                          dataLayout.getTypeStoreSize(V->getType())),
-         IRB.getInt8(0)});
+    if (isa<UndefValue>(V)) {
+      // This is just an optimization for completely undefined structs; we
+      // create an all-zeros expression without iterating over the elements.
+      return IRB.CreateCall(
+          runtime.buildZeroBytes,
+          {ConstantInt::get(intPtrType,
+                            dataLayout.getTypeStoreSize(valueType))});
+    } else {
+      // Iterate over the elements of the struct and concatenate the
+      // corresponding expressions (along with any padding that might be
+      // needed).
+
+      auto structLayout = dataLayout.getStructLayout(structType);
+      auto constantStructValue = dyn_cast<ConstantStruct>(V);
+      size_t offset = 0; // The end of the expressed portion in bytes.
+      Instruction *expr = nullptr;
+      auto append = [&](Instruction *newExpr) {
+        expr = expr ? IRB.CreateCall(runtime.buildConcat, {expr, newExpr})
+                    : newExpr;
+      };
+
+      for (size_t i = 0; i < structType->getNumElements(); i++) {
+        // Build an expression for any padding preceding the current element.
+        if (auto padding = structLayout->getElementOffset(i) - offset;
+            padding > 0) {
+          append(IRB.CreateCall(runtime.buildZeroBytes,
+                                {ConstantInt::get(intPtrType, padding)}));
+        }
+
+        // Build the expression for the current element. If the struct is not a
+        // constant, we need to read the element with extractvalue.
+        auto element = constantStructValue
+                           ? constantStructValue->getAggregateElement(i)
+                           : IRB.CreateExtractValue(V, i);
+        auto elementExpr = createValueExpression(element, IRB);
+
+        // The expression may be of a different kind than bit vector; in this
+        // case, we need to convert it.
+        if (auto conversion =
+                convertExprForTypeToBitVectorExpr(IRB, element, elementExpr)) {
+          elementExpr = conversion->lastInstruction;
+        }
+
+        // If the element is represented in little-endian byte order in memory,
+        // swap the bytes.
+        auto elementType = structType->getElementType(i);
+        if (isLittleEndian(elementType) &&
+            dataLayout.getTypeStoreSize(elementType) > 1) {
+          elementExpr = IRB.CreateCall(runtime.buildBswap, {elementExpr});
+        }
+
+        append(elementExpr);
+
+        offset = structLayout->getElementOffset(i) +
+                 dataLayout.getTypeStoreSize(structType->getElementType(i));
+      }
+
+      // Insert padding at the end, if any.
+      if (auto finalPadding = dataLayout.getTypeStoreSize(structType) - offset;
+          finalPadding > 0) {
+        append(IRB.CreateCall(runtime.buildZeroBytes,
+                              {ConstantInt::get(intPtrType, finalPadding)}));
+      }
+
+      return expr;
+    }
   }
 
   llvm_unreachable("Unhandled type for constant expression");
 }
 
-Symbolizer::SymbolicComputation
-Symbolizer::forceBuildRuntimeCall(IRBuilder<> &IRB, SymFnT function,
-                                  ArrayRef<std::pair<Value *, bool>> args) {
+Symbolizer::SymbolicComputation Symbolizer::forceBuildRuntimeCall(
+    IRBuilder<> &IRB, SymFnT function,
+    ArrayRef<std::pair<Value *, bool>> args) const {
   std::vector<Value *> functionArgs;
   for (const auto &[arg, symbolic] : args) {
     functionArgs.push_back(symbolic ? getSymbolicExpressionOrNull(arg) : arg);
@@ -914,7 +1078,7 @@ Symbolizer::forceBuildRuntimeCall(IRBuilder<> &IRB, SymFnT function,
   for (unsigned i = 0; i < args.size(); i++) {
     const auto &[arg, symbolic] = args[i];
     if (symbolic)
-      inputs.push_back({arg, i, call});
+      inputs.push_back(Input(arg, i, call));
   }
 
   return SymbolicComputation(call, call, inputs);
@@ -931,7 +1095,7 @@ void Symbolizer::tryAlternative(IRBuilder<> &IRB, Value *V) {
         runtime.pushPathConstraint,
         {destAssertion, IRB.getInt1(true), getTargetPreferredInt(V)});
     registerSymbolicComputation(SymbolicComputation(
-        concreteDestExpr, pushAssertion, {{V, 0, destAssertion}}));
+        concreteDestExpr, pushAssertion, {Input(V, 0, destAssertion)}));
   }
 }
 
@@ -956,4 +1120,42 @@ uint64_t Symbolizer::aggregateMemberOffset(Type *aggregateType,
   }
 
   return offset;
+}
+
+Instruction *Symbolizer::convertBitVectorExprForType(llvm::IRBuilder<> &IRB,
+                                                     Instruction *I,
+                                                     Type *T) const {
+  Instruction *result = I;
+
+  if (T->isFloatingPointTy()) {
+    result = IRB.CreateCall(runtime.buildBitsToFloat,
+                            {I, IRB.getInt1(T->isDoubleTy())});
+  } else if (T->isIntegerTy() && T->getIntegerBitWidth() == 1) {
+    result = IRB.CreateCall(runtime.buildTrunc,
+                            {I, ConstantInt::get(IRB.getInt8Ty(), 1)});
+    result = IRB.CreateCall(runtime.buildBitToBool, {result});
+  }
+
+  return result;
+}
+
+std::optional<Symbolizer::SymbolicComputation>
+Symbolizer::convertExprForTypeToBitVectorExpr(IRBuilder<> &IRB, Value *V,
+                                              Value *Expr) const {
+  if (Expr == nullptr)
+    return {};
+
+  auto T = V->getType();
+
+  if (T->isFloatingPointTy()) {
+    auto floatBits = IRB.CreateCall(runtime.buildFloatToBits, {Expr});
+    return SymbolicComputation(floatBits, floatBits, {Input(V, 0, floatBits)});
+  } else if (T->isIntegerTy() && T->getIntegerBitWidth() == 1) {
+    auto bitExpr = IRB.CreateCall(runtime.buildBoolToBit, {Expr});
+    auto bitVectorExpr = IRB.CreateCall(runtime.buildZExt,
+                                        {bitExpr, IRB.getInt8(7 /* 1 byte */)});
+    return SymbolicComputation(bitExpr, bitVectorExpr, {Input(V, 0, bitExpr)});
+  } else {
+    return {};
+  }
 }

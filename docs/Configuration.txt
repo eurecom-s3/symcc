@@ -56,7 +56,10 @@ environment variables.
   uninstrumented counterparts.
 
 - SYMCC_OUTPUT_DIR (default "/tmp/output"): This is the directory where SymCC
-  will store new inputs (QSYM backend only).
+  will store new inputs (QSYM backend only). If you prefer to handle them
+  programatically, make your program call symcc_set_test_case_handler; the
+  handler will be called instead of the default handler each time the backend
+  generates a new input.
 
 - SYMCC_INPUT_FILE (default empty): When empty, SymCC treats data read from
   standard input as symbolic; when set to a file name, any data read from that

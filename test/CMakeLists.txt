@@ -18,6 +18,13 @@ else()
   set(SYM_TEST_FILECHECK_ARGS "--check-prefix=SIMPLE --check-prefix=ANY")
 endif()
 
+if (${LLVM_VERSION_MAJOR} VERSION_GREATER_EQUAL 14)
+  # FileCheck used to be fine with unused prefixes when more than one prefix was
+  # defined. This changed in LLVM version 14, requiring the new option
+  # "--allow-unused-prefixes" (added in LLVM 13) to restore the old behavior.
+  set(SYM_TEST_FILECHECK_ARGS "${SYM_TEST_FILECHECK_ARGS} --allow-unused-prefixes")
+endif()
+
 configure_file("lit.site.cfg.in" "lit.site.cfg")
 
 add_custom_target(check

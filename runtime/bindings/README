@@ -1,0 +1,9 @@
+
+
+                                Runtime bindings
+
+
+This directory contains bindings to the user-facing functionality of the runtime
+(see runtime/RuntimeCommon.h). The bindings give target programs written in
+different languages access to runtime features like in-memory input or custom
+test-case handlers.
