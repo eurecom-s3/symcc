@@ -14,7 +14,7 @@
 
 #include <llvm/IR/LegacyPassManager.h>
 #if LLVM_VERSION_MAJOR <= 15
-  #include <llvm/Transforms/IPO/PassManagerBuilder.h>
+#include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #endif
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Scalar/Scalarizer.h>
