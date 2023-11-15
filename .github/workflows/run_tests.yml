@@ -42,3 +42,37 @@ jobs:
             -DLLVM_DIR=/usr/lib/llvm-${{ matrix.llvm_version }}/cmake \
             ..
           make
+  llvm_compatibility_latest_llvm:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        llvm_version: [16] # 17]
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - name: Add LLVM project deb repository
+        uses: myci-actions/add-deb-repo@11
+        with:
+          repo: deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-${{ matrix.llvm_version }} main
+          repo-name: llvm
+          update: false
+          keys-asc: https://apt.llvm.org/llvm-snapshot.gpg.key
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            llvm-${{ matrix.llvm_version }}-dev \
+            libz3-dev \
+            python2
+      - name: Build SymCC with the QSYM backend
+        run: |
+          mkdir build
+          cd build
+          cmake \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DZ3_TRUST_SYSTEM_VERSION=ON \
+            -DQSYM_BACKEND=ON \
+            -DLLVM_DIR=/usr/lib/llvm-${{ matrix.llvm_version }}/cmake \
+            ..
+          make
