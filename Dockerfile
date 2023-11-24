@@ -15,7 +15,7 @@
 #
 # The base image
 #
-FROM ubuntu:20.04 AS builder
+FROM ubuntu:22.04 AS builder
 
 # Install dependencies
 RUN apt-get update \
@@ -105,7 +105,7 @@ RUN cmake -G Ninja \
 #
 # The final image
 #
-FROM ubuntu:20.04
+FROM ubuntu:22.04
 
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y \
