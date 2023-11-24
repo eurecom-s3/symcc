@@ -83,7 +83,13 @@ target_include_directories(SymRuntime SYSTEM PRIVATE
 # We need to get the LLVM support component for llvm::APInt.
 llvm_map_components_to_libnames(QSYM_LLVM_DEPS support)
 
-target_link_libraries(SymRuntime ${Z3_LIBRARIES} ${QSYM_LLVM_DEPS})
+include(FetchContent)
+
+FetchContent_Declare(json URL https://github.com/nlohmann/json/releases/download/v3.11.2/json.tar.xz)
+FetchContent_MakeAvailable(json)
+
+
+target_link_libraries(SymRuntime ${Z3_LIBRARIES} ${QSYM_LLVM_DEPS} nlohmann_json::nlohmann_json)
 
 # We use std::filesystem, which has been added in C++17. Before its official
 # inclusion in the standard library, Clang shipped the feature first in
@@ -92,5 +98,5 @@ target_link_libraries(SymRuntime ${Z3_LIBRARIES} ${QSYM_LLVM_DEPS})
 # some current LTS distributions ship a GCC that requires libstdc++fs for
 # std::filesystem - we catch this case in order to enable users of such systems
 # to build with the default compiler.
-find_package(Filesystem COMPONENTS Final Experimental)
-target_link_libraries(SymRuntime std::filesystem)
+#find_package(Filesystem COMPONENTS Final Experimental)
+#target_link_libraries(SymRuntime std::filesystem)

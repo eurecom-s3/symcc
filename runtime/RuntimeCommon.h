@@ -211,6 +211,8 @@ void _sym_notify_basic_block(uintptr_t site_id);
  */
 const char *_sym_expr_to_string(SymExpr expr); // statically allocated
 bool _sym_feasible(SymExpr expr);
+void _sym_trace_execution(uintptr_t pc);
+void _sym_finalize_tracing(void);
 
 /*
  * Garbage collection

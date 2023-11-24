@@ -27,6 +27,7 @@
 #include "GarbageCollection.h"
 #include "RuntimeCommon.h"
 #include "Shadow.h"
+#include "Tracer.h"
 
 namespace {
 
@@ -485,4 +486,12 @@ SymExpr _sym_build_bit_to_bool(SymExpr expr) {
 
   return _sym_build_not_equal(expr,
                               _sym_build_integer(0, _sym_bits_helper(expr)));
+}
+
+void _sym_trace_execution(uintptr_t pc) {
+  Tracer::trace(pc);
+}
+
+void _sym_finalize_tracing() {
+  Tracer::writeTraceToDisk();
 }

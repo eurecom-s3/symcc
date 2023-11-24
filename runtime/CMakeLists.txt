@@ -34,7 +34,7 @@ set(SHARED_RUNTIME_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/RuntimeCommon.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/LibcWrappers.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Shadow.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/ShadowTrace.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/Tracer.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/GarbageCollection.cpp)
 
 if (${QSYM_BACKEND})
