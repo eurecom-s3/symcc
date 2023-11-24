@@ -15,16 +15,18 @@ compiler inserts code that computes symbolic expressions for each value in the
 program. The actual computation happens through calls to the support library at
 run time.
 
-To build the pass and the support library, make sure that LLVM 8, 9, 10 or 11
-and Z3 version 4.5 or later, as well as a C++ compiler with support for C++17
-are installed. "lit" is also needed which is not always packaged with LLVM.
+To build the pass and the support library, install LLVM (any version between 8
+and 17) and Z3 (version 4.5 or later), as well as a C++ compiler with support
+for C++17. LLVM lit is only needed to run the tests; if it's not packaged with
+your LLVM, you can get it with `pip install lit`.
 
-Under Ubuntu groovy the following one liner should install all required
+Under Ubuntu Groovy the following one liner should install all required
 packages:
 
 ```
 sudo apt install -y git cargo clang-10 cmake g++ git libz3-dev llvm-10-dev llvm-10-tools ninja-build python2 python3-pip zlib1g-dev && sudo pip3 install lit
 ```
+
 Alternatively, see below for using the provided Dockerfile, or the file
 `util/quicktest.sh` for exact steps to perform under Ubuntu (or use with the
 provided Vagrant file).
@@ -268,17 +270,24 @@ SymCC is free software: you can redistribute it and/or modify it under the terms
 of the GNU General Public License as published by the Free Software Foundation,
 either version 3 of the License, or (at your option) any later version.
 
+As an exception from the above, you can redistribute and/or modify the SymCC
+runtime under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation, either version 3 of the License, or (at your
+option) any later version. See #114 for the rationale.
+
 SymCC is distributed in the hope that it will be useful, but WITHOUT ANY
 WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
 PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License along with
-SymCC. If not, see <https://www.gnu.org/licenses/>.
+You should have received a copy of the GNU General Public License and the GNU
+Lesser General Public License along with SymCC. If not, see
+<https://www.gnu.org/licenses/>.
 
 The following pieces of software have additional or alternate copyrights,
 licenses, and/or restrictions:
 
-| Program | Directory                   |
-| ---     | ---                         |
-| QSYM    | `runtime/qsym_backend/qsym` |
+| Program       | Directory                   |
+|---------------|-----------------------------|
+| QSYM          | `runtime/qsym_backend/qsym` |
+| SymCC runtime | `runtime`                   |
 

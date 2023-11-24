@@ -1,16 +1,33 @@
-// This file is part of SymCC.
+// This file is part of the SymCC runtime.
 //
-// SymCC is free software: you can redistribute it and/or modify it under the
-// terms of the GNU General Public License as published by the Free Software
-// Foundation, either version 3 of the License, or (at your option) any later
-// version.
+// The SymCC runtime is free software: you can redistribute it and/or modify it
+// under the terms of the GNU Lesser General Public License as published by the
+// Free Software Foundation, either version 3 of the License, or (at your
+// option) any later version.
 //
-// SymCC is distributed in the hope that it will be useful, but WITHOUT ANY
-// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-// A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+// The SymCC runtime is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+// FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License
+// for more details.
 //
-// You should have received a copy of the GNU General Public License along with
-// SymCC. If not, see <https://www.gnu.org/licenses/>.
+// You should have received a copy of the GNU Lesser General Public License
+// along with SymCC. If not, see <https://www.gnu.org/licenses/>.
+
+//
+// Libc wrappers
+//
+// This file contains the wrappers around libc functions which add symbolic
+// computations; using the wrappers frees instrumented code from having to link
+// against an instrumented libc.
+//
+// We define a wrapper for function X with SYM(X), which just changes the name
+// "X" to something predictable and hopefully unique. It is then up to the
+// compiler pass to replace calls of X with calls of SYM(X).
+//
+// In general, the wrappers ask the solver to generate alternative parameter
+// values, then call the wrapped function, create and store symbolic expressions
+// matching the libc function's semantics, and finally return the wrapped
+// function's result.
 
 #include <cassert>
 #include <cstdio>
@@ -18,6 +35,7 @@
 #include <cstring>
 #include <iostream>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include <arpa/inet.h>
@@ -59,13 +77,28 @@ template <typename E, typename F>
 void tryAlternative(E *value, SymExpr valueExpr, F caller) {
   tryAlternative(reinterpret_cast<intptr_t>(value), valueExpr, caller);
 }
+
+void maybeSetInputFile(const char *path, int fd) {
+  auto *fileInput = std::get_if<FileInput>(&g_config.input);
+  if (fileInput == nullptr)
+    return;
+
+  if (strstr(path, fileInput->fileName.c_str()) == nullptr)
+    return;
+
+  if (inputFileDescriptor != -1)
+    std::cerr << "Warning: input file opened multiple times; this is not yet "
+                 "supported"
+              << std::endl;
+
+  inputFileDescriptor = fd;
+  inputOffset = 0;
+}
+
 } // namespace
 
 void initLibcWrappers() {
-  if (g_config.fullyConcrete)
-    return;
-
-  if (g_config.inputFile.empty()) {
+  if (std::holds_alternative<StdinInput>(g_config.input)) {
     // Symbolic data comes from standard input.
     inputFileDescriptor = 0;
   }
@@ -98,10 +131,31 @@ void *SYM(calloc)(size_t nmemb, size_t size) {
 void *SYM(mmap64)(void *addr, size_t len, int prot, int flags, int fildes,
                   uint64_t off) {
   auto *result = mmap64(addr, len, prot, flags, fildes, off);
+  _sym_set_return_expression(nullptr);
+
+  if (result == MAP_FAILED) // mmap failed
+    return result;
+
+  if (fildes == inputFileDescriptor) {
+    /* we update the inputOffset only when mmap() is reading from input file
+     * HACK! update inputOffset with off parameter sometimes will be dangerous
+     * We don't know whether there is read() before/after mmap,
+     * if there is, we have to fix this tricky method :P
+     */
+    inputOffset = off + len;
+    // Reading symbolic input.
+    ReadWriteShadow shadow(result, len);
+    uint8_t *resultBytes = (uint8_t *)result;
+    std::generate(shadow.begin(), shadow.end(), [resultBytes, i = 0]() mutable {
+      return _sym_get_input_byte(inputOffset, resultBytes[i++]);
+    });
+  } else if (!isConcrete(result, len)) {
+    ReadWriteShadow shadow(result, len);
+    std::fill(shadow.begin(), shadow.end(), nullptr);
+  }
 
   tryAlternative(len, _sym_get_parameter_expression(1), SYM(mmap64));
 
-  _sym_set_return_expression(nullptr);
   return result;
 }
 
@@ -114,15 +168,8 @@ int SYM(open)(const char *path, int oflag, mode_t mode) {
   auto result = open(path, oflag, mode);
   _sym_set_return_expression(nullptr);
 
-  if (result >= 0 && !g_config.fullyConcrete && !g_config.inputFile.empty() &&
-      strstr(path, g_config.inputFile.c_str()) != nullptr) {
-    if (inputFileDescriptor != -1)
-      std::cerr << "Warning: input file opened multiple times; this is not yet "
-                   "supported"
-                << std::endl;
-    inputFileDescriptor = result;
-    inputOffset = 0;
-  }
+  if (result >= 0)
+    maybeSetInputFile(path, result);
 
   return result;
 }
@@ -139,9 +186,8 @@ ssize_t SYM(read)(int fildes, void *buf, size_t nbyte) {
 
   if (fildes == inputFileDescriptor) {
     // Reading symbolic input.
-    ReadWriteShadow shadow(buf, result);
-    std::generate(shadow.begin(), shadow.end(),
-                  []() { return _sym_get_input_byte(inputOffset++); });
+    _sym_make_symbolic(buf, result, inputOffset);
+    inputOffset += result;
   } else if (!isConcrete(buf, result)) {
     ReadWriteShadow shadow(buf, result);
     std::fill(shadow.begin(), shadow.end(), nullptr);
@@ -215,16 +261,8 @@ FILE *SYM(fopen)(const char *pathname, const char *mode) {
   auto *result = fopen(pathname, mode);
   _sym_set_return_expression(nullptr);
 
-  if (result != nullptr && !g_config.fullyConcrete &&
-      !g_config.inputFile.empty() &&
-      strstr(pathname, g_config.inputFile.c_str()) != nullptr) {
-    if (inputFileDescriptor != -1)
-      std::cerr << "Warning: input file opened multiple times; this is not yet "
-                   "supported"
-                << std::endl;
-    inputFileDescriptor = fileno(result);
-    inputOffset = 0;
-  }
+  if (result != nullptr)
+    maybeSetInputFile(pathname, fileno(result));
 
   return result;
 }
@@ -233,16 +271,8 @@ FILE *SYM(fopen64)(const char *pathname, const char *mode) {
   auto *result = fopen64(pathname, mode);
   _sym_set_return_expression(nullptr);
 
-  if (result != nullptr && !g_config.fullyConcrete &&
-      !g_config.inputFile.empty() &&
-      strstr(pathname, g_config.inputFile.c_str()) != nullptr) {
-    if (inputFileDescriptor != -1)
-      std::cerr << "Warning: input file opened multiple times; this is not yet "
-                   "supported"
-                << std::endl;
-    inputFileDescriptor = fileno(result);
-    inputOffset = 0;
-  }
+  if (result != nullptr)
+    maybeSetInputFile(pathname, fileno(result));
 
   return result;
 }
@@ -257,9 +287,8 @@ size_t SYM(fread)(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 
   if (fileno(stream) == inputFileDescriptor) {
     // Reading symbolic input.
-    ReadWriteShadow shadow(ptr, result * size);
-    std::generate(shadow.begin(), shadow.end(),
-                  []() { return _sym_get_input_byte(inputOffset++); });
+    _sym_make_symbolic(ptr, result * size, inputOffset);
+    inputOffset += result * size;
   } else if (!isConcrete(ptr, result * size)) {
     ReadWriteShadow shadow(ptr, result * size);
     std::fill(shadow.begin(), shadow.end(), nullptr);
@@ -303,9 +332,9 @@ char *SYM(fgets)(char *str, int n, FILE *stream) {
 
   if (fileno(stream) == inputFileDescriptor) {
     // Reading symbolic input.
-    ReadWriteShadow shadow(str, sizeof(char) * strlen(str));
-    std::generate(shadow.begin(), shadow.end(),
-                  []() { return _sym_get_input_byte(inputOffset++); });
+    const auto length = sizeof(char) * strlen(str);
+    _sym_make_symbolic(str, length, inputOffset);
+    inputOffset += length;
   } else if (!isConcrete(str, sizeof(char) * strlen(str))) {
     ReadWriteShadow shadow(str, sizeof(char) * strlen(str));
     std::fill(shadow.begin(), shadow.end(), nullptr);
@@ -432,7 +461,7 @@ int SYM(getc)(FILE *stream) {
 
   if (fileno(stream) == inputFileDescriptor)
     _sym_set_return_expression(_sym_build_zext(
-        _sym_get_input_byte(inputOffset++), sizeof(int) * 8 - 8));
+        _sym_get_input_byte(inputOffset++, result), sizeof(int) * 8 - 8));
   else
     _sym_set_return_expression(nullptr);
 
@@ -466,16 +495,14 @@ int SYM(fgetc)(FILE *stream) {
 
   if (fileno(stream) == inputFileDescriptor)
     _sym_set_return_expression(_sym_build_zext(
-        _sym_get_input_byte(inputOffset++), sizeof(int) * 8 - 8));
+        _sym_get_input_byte(inputOffset++, result), sizeof(int) * 8 - 8));
   else
     _sym_set_return_expression(nullptr);
 
   return result;
 }
 
-int SYM(getchar)(void) {
-  return SYM(getc)(stdin);
-}
+int SYM(getchar)(void) { return SYM(getc)(stdin); }
 
 int SYM(ungetc)(int c, FILE *stream) {
   auto result = ungetc(c, stream);
@@ -511,6 +538,20 @@ void *SYM(memset)(void *s, int c, size_t n) {
   return result;
 }
 
+void SYM(bzero)(void *s, size_t n) {
+  bzero(s, n);
+
+  // No return value, hence no corresponding expression.
+  _sym_set_return_expression(nullptr);
+
+  tryAlternative(s, _sym_get_parameter_expression(0), SYM(bzero));
+  tryAlternative(n, _sym_get_parameter_expression(1), SYM(bzero));
+
+  // Concretize the memory region, which now is all zeros.
+  ReadWriteShadow shadow(s, n);
+  std::fill(shadow.begin(), shadow.end(), nullptr);
+}
+
 void *SYM(memmove)(void *dest, const void *src, size_t n) {
   tryAlternative(dest, _sym_get_parameter_expression(0), SYM(memmove));
   tryAlternative(src, _sym_get_parameter_expression(1), SYM(memmove));
@@ -522,6 +563,22 @@ void *SYM(memmove)(void *dest, const void *src, size_t n) {
 
   _sym_set_return_expression(_sym_get_parameter_expression(0));
   return result;
+}
+
+void SYM(bcopy)(const void *src, void *dest, size_t n) {
+  tryAlternative(src, _sym_get_parameter_expression(0), SYM(bcopy));
+  tryAlternative(dest, _sym_get_parameter_expression(1), SYM(bcopy));
+  tryAlternative(n, _sym_get_parameter_expression(2), SYM(bcopy));
+
+  bcopy(src, dest, n);
+
+  // bcopy is mostly equivalent to memmove, so we can use our symbolic version
+  // of memmove to copy any symbolic expressions over to the destination.
+  _sym_memmove(static_cast<uint8_t *>(dest), static_cast<const uint8_t *>(src),
+               n);
+
+  // void function, so there is no return value and hence no expression for it.
+  _sym_set_return_expression(nullptr);
 }
 
 char *SYM(strncpy)(char *dest, const char *src, size_t n) {
@@ -604,6 +661,43 @@ int SYM(memcmp)(const void *a, const void *b, size_t n) {
 
   _sym_push_path_constraint(allEqual, result == 0,
                             reinterpret_cast<uintptr_t>(SYM(memcmp)));
+  return result;
+}
+
+int SYM(bcmp)(const void *a, const void *b, size_t n) {
+  tryAlternative(a, _sym_get_parameter_expression(0), SYM(bcmp));
+  tryAlternative(b, _sym_get_parameter_expression(1), SYM(bcmp));
+  tryAlternative(n, _sym_get_parameter_expression(2), SYM(bcmp));
+
+  auto result = bcmp(a, b, n);
+
+  // bcmp returns zero if the input regions are equal and an unspecified
+  // non-zero value otherwise. Instead of expressing this symbolically, we
+  // directly ask the solver for an alternative solution (assuming that the
+  // result is used for a conditional branch later), and return a concrete
+  // value.
+  _sym_set_return_expression(nullptr);
+
+  // The result of the comparison depends on whether the input regions are equal
+  // byte by byte. Construct the corresponding expression, but only if there is
+  // at least one symbolic byte in either of the regions; otherwise, the result
+  // is concrete.
+
+  if (isConcrete(a, n) && isConcrete(b, n))
+    return result;
+
+  auto aShadowIt = ReadOnlyShadow(a, n).begin_non_null();
+  auto bShadowIt = ReadOnlyShadow(b, n).begin_non_null();
+  auto *allEqual = _sym_build_equal(*aShadowIt, *bShadowIt);
+  for (size_t i = 1; i < n; i++) {
+    ++aShadowIt;
+    ++bShadowIt;
+    allEqual =
+        _sym_build_bool_and(allEqual, _sym_build_equal(*aShadowIt, *bShadowIt));
+  }
+
+  _sym_push_path_constraint(allEqual, result == 0,
+                            reinterpret_cast<uintptr_t>(SYM(bcmp)));
   return result;
 }
 

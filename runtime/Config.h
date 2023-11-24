@@ -1,31 +1,47 @@
-// This file is part of SymCC.
+// This file is part of the SymCC runtime.
 //
-// SymCC is free software: you can redistribute it and/or modify it under the
-// terms of the GNU General Public License as published by the Free Software
-// Foundation, either version 3 of the License, or (at your option) any later
-// version.
+// The SymCC runtime is free software: you can redistribute it and/or modify it
+// under the terms of the GNU Lesser General Public License as published by the
+// Free Software Foundation, either version 3 of the License, or (at your
+// option) any later version.
 //
-// SymCC is distributed in the hope that it will be useful, but WITHOUT ANY
-// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-// A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+// The SymCC runtime is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+// FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License
+// for more details.
 //
-// You should have received a copy of the GNU General Public License along with
-// SymCC. If not, see <https://www.gnu.org/licenses/>.
+// You should have received a copy of the GNU Lesser General Public License
+// along with the SymCC runtime. If not, see <https://www.gnu.org/licenses/>.
 
 #ifndef CONFIG_H
 #define CONFIG_H
 
 #include <string>
+#include <variant>
+
+/// Marker struct for fully concrete execution.
+struct NoInput {};
+
+/// Marker struct for symbolic input from stdin.
+struct StdinInput {};
+
+/// Marker struct for symbolic input via _sym_make_symbolic.
+struct MemoryInput {};
+
+/// Configuration for symbolic input from a file.
+struct FileInput {
+  /// The name of input file.
+  std::string fileName;
+};
 
 struct Config {
-  /// Should we allow symbolic data in the program?
-  bool fullyConcrete = false;
+  using InputConfig = std::variant<NoInput, StdinInput, MemoryInput, FileInput>;
+
+  /// The configuration for our symbolic input.
+  InputConfig input = StdinInput{};
 
   /// The directory for storing new outputs.
   std::string outputDir = "/tmp/output";
-
-  /// The input file, if any.
-  std::string inputFile;
 
   /// The file to log constraint solving information to.
   std::string logFile = "";

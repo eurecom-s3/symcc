@@ -1,16 +1,17 @@
-// This file is part of SymCC.
+// This file is part of the SymCC runtime.
 //
-// SymCC is free software: you can redistribute it and/or modify it under the
-// terms of the GNU General Public License as published by the Free Software
-// Foundation, either version 3 of the License, or (at your option) any later
-// version.
+// The SymCC runtime is free software: you can redistribute it and/or modify it
+// under the terms of the GNU Lesser General Public License as published by the
+// Free Software Foundation, either version 3 of the License, or (at your
+// option) any later version.
 //
-// SymCC is distributed in the hope that it will be useful, but WITHOUT ANY
-// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-// A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+// The SymCC runtime is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+// FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License
+// for more details.
 //
-// You should have received a copy of the GNU General Public License along with
-// SymCC. If not, see <https://www.gnu.org/licenses/>.
+// You should have received a copy of the GNU Lesser General Public License
+// along with the SymCC runtime. If not, see <https://www.gnu.org/licenses/>.
 
 #include "Config.h"
 
@@ -19,6 +20,7 @@
 #include <limits>
 #include <sstream>
 #include <stdexcept>
+#include <variant>
 
 namespace {
 
@@ -41,17 +43,26 @@ bool checkFlagString(std::string value) {
 Config g_config;
 
 void loadConfig() {
-  auto *fullyConcrete = getenv("SYMCC_NO_SYMBOLIC_INPUT");
-  if (fullyConcrete != nullptr)
-    g_config.fullyConcrete = checkFlagString(fullyConcrete);
-
   auto *outputDir = getenv("SYMCC_OUTPUT_DIR");
   if (outputDir != nullptr)
     g_config.outputDir = outputDir;
 
   auto *inputFile = getenv("SYMCC_INPUT_FILE");
   if (inputFile != nullptr)
-    g_config.inputFile = inputFile;
+    g_config.input = FileInput{inputFile};
+
+  auto *memoryInput = getenv("SYMCC_MEMORY_INPUT");
+  if (memoryInput != nullptr && checkFlagString(memoryInput)) {
+    if (std::holds_alternative<FileInput>(g_config.input))
+      throw std::runtime_error{
+          "Can't enable file and memory input at the same time"};
+
+    g_config.input = MemoryInput{};
+  }
+
+  auto *fullyConcrete = getenv("SYMCC_NO_SYMBOLIC_INPUT");
+  if (fullyConcrete != nullptr && checkFlagString(fullyConcrete))
+    g_config.input = NoInput{};
 
   auto *logFile = getenv("SYMCC_LOG_FILE");
   if (logFile != nullptr)
@@ -76,7 +87,8 @@ void loadConfig() {
       throw std::runtime_error(msg.str());
     } catch (std::out_of_range &) {
       std::stringstream msg;
-      msg << "The GC threshold must be between 0 and " << std::numeric_limits<size_t>::max();
+      msg << "The GC threshold must be between 0 and "
+          << std::numeric_limits<size_t>::max();
       throw std::runtime_error(msg.str());
     }
   }

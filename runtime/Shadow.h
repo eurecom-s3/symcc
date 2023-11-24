@@ -1,16 +1,17 @@
-// This file is part of SymCC.
+// This file is part of the SymCC runtime.
 //
-// SymCC is free software: you can redistribute it and/or modify it under the
-// terms of the GNU General Public License as published by the Free Software
-// Foundation, either version 3 of the License, or (at your option) any later
-// version.
+// The SymCC runtime is free software: you can redistribute it and/or modify it
+// under the terms of the GNU Lesser General Public License as published by the
+// Free Software Foundation, either version 3 of the License, or (at your
+// option) any later version.
 //
-// SymCC is distributed in the hope that it will be useful, but WITHOUT ANY
-// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-// A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+// The SymCC runtime is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+// FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License
+// for more details.
 //
-// You should have received a copy of the GNU General Public License along with
-// SymCC. If not, see <https://www.gnu.org/licenses/>.
+// You should have received a copy of the GNU Lesser General Public License
+// along with the SymCC runtime. If not, see <https://www.gnu.org/licenses/>.
 
 #ifndef SHADOW_H
 #define SHADOW_H
@@ -18,7 +19,6 @@
 #include <algorithm>
 #include <cassert>
 #include <cstring>
-#include <iterator>
 #include <map>
 
 #include <Runtime.h>
@@ -58,12 +58,21 @@ extern std::map<uintptr_t, SymExpr *> g_shadow_pages;
 /// An iterator that walks over the shadow bytes corresponding to a memory
 /// region. If there is no shadow for any given memory address, it just returns
 /// null.
-class ReadShadowIterator
-    : public std::iterator<std::bidirectional_iterator_tag, SymExpr> {
+class ReadShadowIterator {
 public:
   explicit ReadShadowIterator(uintptr_t address)
-      : std::iterator<std::bidirectional_iterator_tag, SymExpr>(),
-        address_(address), shadow_(getShadow(address)) {}
+      : address_(address), shadow_(getShadow(address)) {}
+
+  // The STL requires iterator types to expose the following type definitions
+  // (see std::iterator_traits). Before C++17, it was possible to get them by
+  // deriving from std::iterator, which is just an empty template struct with
+  // five typedefs. However, std::iterator was deprecated in C++17 and hence its
+  // use causes a warning in recent compilers.
+  using iterator_category = std::bidirectional_iterator_tag;
+  using value_type = SymExpr;
+  using difference_type = ptrdiff_t;
+  using pointer = SymExpr *;
+  using reference = SymExpr &;
 
   ReadShadowIterator &operator++() {
     auto previousAddress = address_++;
