@@ -200,6 +200,6 @@ bool isInterceptedFunction(const Function &f) {
       "fgetc",   "getchar",        "bcopy",         "bcmp",    "bzero",
       "freopen", "fread_unlocked", "getc_unlocked", "getline", "getutxent",
       "getutent"};
-  
+
   return (kInterceptedFunctions.count(f.getName()) > 0);
 }
