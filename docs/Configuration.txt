@@ -9,7 +9,7 @@ SymCC is configured at two different stages:
    compilation time and the set of dependencies. This is done via arguments to
    CMake.
 
-2. When you run programs that have been compiled with SymCC, environment
+2. When you run programs that have been compiled with SymCC, the environment
    variables control various aspects of the execution and analysis.
 
 We list all available options for each stage in turn.
@@ -57,7 +57,7 @@ environment variables.
 
 - SYMCC_OUTPUT_DIR (default "/tmp/output"): This is the directory where SymCC
   will store new inputs (QSYM backend only). If you prefer to handle them
-  programatically, make your program call symcc_set_test_case_handler; the
+  programmatically, make your program call symcc_set_test_case_handler; the
   handler will be called instead of the default handler each time the backend
   generates a new input.
 
@@ -96,7 +96,7 @@ There is actually a third category of options: when compiling with SymCC, you
 can specify the location of its various components via environment variables.
 This is not necessary in most cases because the build system makes sure that all
 components know about each other; however, in some advanced setups you may need
-to move files around after building them, and in that case you can use the
+to move files around after building them, and in that case, you can use the
 variables documented below to communicate the new locations:
 
 - SYMCC_RUNTIME_DIR and SYMCC_RUNTIME32_DIR: The directory that contains the

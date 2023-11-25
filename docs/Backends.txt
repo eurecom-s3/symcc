@@ -13,7 +13,7 @@ used. Also, we always link against "libSymRuntime.so", so the choice of backend
 is deferred until run time. From the target program's point of view, the only
 requirement on a backend is that it be a shared library with the expected name
 that implements the interface defined in runtime/RuntimeCommon.h (with type
-"SymExpr" defined to be something of pointer width).
+"SymExpr" is defined to be something of pointer width).
 
 Depending on the build option QSYM_BACKEND we build either our own backend or
 parts of QSYM (which are pulled in via a git submodule) and a small translation
