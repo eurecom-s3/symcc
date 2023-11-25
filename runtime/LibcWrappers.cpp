@@ -47,9 +47,9 @@
 #include "Config.h"
 #include "Shadow.h"
 #include <Runtime.h>
-#include <utmpx.h>
 #include <stdio.h>
 #include <utmp.h>
+#include <utmpx.h>
 
 #define SYM(x) x##_symbolized
 
@@ -238,23 +238,21 @@ uint32_t SYM(lseek)(int fd, uint32_t offset, int whence) {
   return (uint32_t)-1;
 }
 
-FILE *SYM(freopen)(const char *filename, const char *mode, FILE *stream)
-{
-    auto *result = freopen(filename, mode, stream);
-    _sym_set_return_expression(nullptr);
-    if (result != nullptr && !g_config.fullyConcrete &&
-        !g_config.inputFile.empty() &&
-        strstr(filename, g_config.inputFile.c_str()) != nullptr)
-    {
-        if (inputFileDescriptor != -1)
-            std::cerr << "Warning: input file opened multiple times; this is not yet "
-                         "supported"
-                      << std::endl;
-        inputFileDescriptor = fileno(result);
-        inputOffset = 0;
-    }
+FILE *SYM(freopen)(const char *filename, const char *mode, FILE *stream) {
+  auto *result = freopen(filename, mode, stream);
+  _sym_set_return_expression(nullptr);
+  if (result != nullptr && !g_config.fullyConcrete &&
+      !g_config.inputFile.empty() &&
+      strstr(filename, g_config.inputFile.c_str()) != nullptr) {
+    if (inputFileDescriptor != -1)
+      std::cerr << "Warning: input file opened multiple times; this is not yet "
+                   "supported"
+                << std::endl;
+    inputFileDescriptor = fileno(result);
+    inputOffset = 0;
+  }
 
-    return result;
+  return result;
 }
 
 FILE *SYM(fopen)(const char *pathname, const char *mode) {
@@ -297,30 +295,25 @@ size_t SYM(fread)(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   return result;
 }
 
-size_t SYM(fread_unlocked)(void *ptr, size_t size, size_t nmemb, FILE *stream)
-{
-    tryAlternative(ptr, _sym_get_parameter_expression(0), SYM(fread_unlocked));
-    tryAlternative(size, _sym_get_parameter_expression(1), SYM(fread_unlocked));
-    tryAlternative(nmemb, _sym_get_parameter_expression(2), SYM(fread_unlocked));
+size_t SYM(fread_unlocked)(void *ptr, size_t size, size_t nmemb, FILE *stream) {
+  tryAlternative(ptr, _sym_get_parameter_expression(0), SYM(fread_unlocked));
+  tryAlternative(size, _sym_get_parameter_expression(1), SYM(fread_unlocked));
+  tryAlternative(nmemb, _sym_get_parameter_expression(2), SYM(fread_unlocked));
 
-    auto result = fread_unlocked(ptr, size, nmemb, stream);
-    _sym_set_return_expression(nullptr);
+  auto result = fread_unlocked(ptr, size, nmemb, stream);
+  _sym_set_return_expression(nullptr);
 
-    if (fileno(stream) == inputFileDescriptor)
-    {
-        // Reading symbolic input.
-        ReadWriteShadow shadow(ptr, result * size);
-        std::generate(shadow.begin(), shadow.end(),
-                      []()
-                      { return _sym_get_input_byte(inputOffset++); });
-    }
-    else if (!isConcrete(ptr, result * size))
-    {
-        ReadWriteShadow shadow(ptr, result * size);
-        std::fill(shadow.begin(), shadow.end(), nullptr);
-    }
+  if (fileno(stream) == inputFileDescriptor) {
+    // Reading symbolic input.
+    ReadWriteShadow shadow(ptr, result * size);
+    std::generate(shadow.begin(), shadow.end(),
+                  []() { return _sym_get_input_byte(inputOffset++); });
+  } else if (!isConcrete(ptr, result * size)) {
+    ReadWriteShadow shadow(ptr, result * size);
+    std::fill(shadow.begin(), shadow.end(), nullptr);
+  }
 
-    return result;
+  return result;
 }
 
 char *SYM(fgets)(char *str, int n, FILE *stream) {
@@ -406,50 +399,40 @@ int SYM(fseeko64)(FILE *stream, uint64_t offset, int whence) {
   return result;
 }
 
-struct utmp *SYM(getutent)()
-{
-    auto *result = getutent();
-    _sym_set_return_expression(nullptr);
+struct utmp *SYM(getutent)() {
+  auto *result = getutent();
+  _sym_set_return_expression(nullptr);
 
+  // Reading symbolic input.
+  ReadWriteShadow shadow(result, sizeof(struct utmp));
+  std::generate(shadow.begin(), shadow.end(),
+                []() { return _sym_get_input_byte(inputOffset++); });
+
+  return result;
+}
+
+struct utmpx *SYM(getutxent)() { return (utmpx *)SYM(getutent)(); }
+
+ssize_t SYM(getline)(char **ptr, size_t *n, FILE *stream) {
+
+  tryAlternative(ptr, _sym_get_parameter_expression(0), SYM(getline));
+  tryAlternative(n, _sym_get_parameter_expression(1), SYM(getline));
+
+  auto result = getdelim(ptr, n, '\n', stream);
+
+  _sym_set_return_expression(nullptr);
+
+  if (fileno(stream) == inputFileDescriptor) {
     // Reading symbolic input.
-    ReadWriteShadow shadow(result, sizeof (struct utmp));
+    ReadWriteShadow shadow(*ptr, result * (*n));
     std::generate(shadow.begin(), shadow.end(),
-                  []()
-                  { return _sym_get_input_byte(inputOffset++); });
+                  []() { return _sym_get_input_byte(inputOffset++); });
+  } else if (!isConcrete(*ptr, result * (*n))) {
+    ReadWriteShadow shadow(*ptr, result * (*n));
+    std::fill(shadow.begin(), shadow.end(), nullptr);
+  }
 
-    return result;
-}
-
-struct utmpx *SYM(getutxent)()
-{
-    return (utmpx *)SYM(getutent)();
-}
-
-ssize_t SYM(getline)(char **ptr, size_t *n, FILE *stream)
-{
-
-    tryAlternative(ptr, _sym_get_parameter_expression(0), SYM(getline));
-    tryAlternative(n, _sym_get_parameter_expression(1), SYM(getline));
-
-    auto result = getdelim(ptr, n, '\n', stream);
-
-    _sym_set_return_expression(nullptr);
-
-    if (fileno(stream) == inputFileDescriptor)
-    {
-        // Reading symbolic input.
-        ReadWriteShadow shadow(*ptr, result * (*n));
-        std::generate(shadow.begin(), shadow.end(),
-                      []()
-                      { return _sym_get_input_byte(inputOffset++); });
-    }
-    else if (!isConcrete(*ptr, result * (*n)))
-    {
-        ReadWriteShadow shadow(*ptr, result * (*n));
-        std::fill(shadow.begin(), shadow.end(), nullptr);
-    }
-
-    return result;
+  return result;
 }
 
 int SYM(getc)(FILE *stream) {
@@ -468,22 +451,20 @@ int SYM(getc)(FILE *stream) {
   return result;
 }
 
-int SYM(getc_unlocked)(FILE *stream)
-{
-    auto result = getc_unlocked(stream);
-    if (result == EOF)
-    {
-        _sym_set_return_expression(nullptr);
-        return result;
-    }
-
-    if (fileno(stream) == inputFileDescriptor)
-        _sym_set_return_expression(_sym_build_zext(
-                _sym_get_input_byte(inputOffset++), sizeof(int) * 8 - 8));
-    else
-        _sym_set_return_expression(nullptr);
-
+int SYM(getc_unlocked)(FILE *stream) {
+  auto result = getc_unlocked(stream);
+  if (result == EOF) {
+    _sym_set_return_expression(nullptr);
     return result;
+  }
+
+  if (fileno(stream) == inputFileDescriptor)
+    _sym_set_return_expression(_sym_build_zext(
+        _sym_get_input_byte(inputOffset++), sizeof(int) * 8 - 8));
+  else
+    _sym_set_return_expression(nullptr);
+
+  return result;
 }
 
 int SYM(fgetc)(FILE *stream) {
