@@ -18,9 +18,9 @@ There are two stages at which data can be identified as concrete:
 
 If we detect in the compiler pass that a value is a compile-time constant (case
 1 above), we do not emit code for symbolic handling at all. However, for any
-other type of data we need to generate code that handles the case of it being
+other type of data, we need to generate code that handles the case of it being
 symbolic at run time. Concretely (no pun intended), we mark concrete values at
-run time by setting its corresponding symbolic expression in shadow memory to
+run time by setting their corresponding symbolic expression in shadow memory to
 null. This makes it very cheap to check concreteness during execution: just run
 a null check on the symbolic expression.
 
