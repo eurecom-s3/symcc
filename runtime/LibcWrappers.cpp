@@ -411,7 +411,9 @@ struct utmp *SYM(getutent)() {
   return result;
 }
 
-struct utmpx *SYM(getutxent)() { return (utmpx *)SYM(getutent)(); }
+struct utmpx *SYM(getutxent)() { 
+  return (utmpx *)SYM(getutent)(); 
+}
 
 ssize_t SYM(getline)(char **ptr, size_t *n, FILE *stream) {
 
