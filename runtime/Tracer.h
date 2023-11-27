@@ -14,6 +14,7 @@ public:
 
 private:
   static void recursivelyCollectSymbols(SymExpr symbol);
+  static string getSymbolID(SymExpr symbol);
 
   static nlohmann::json currentTrace;
   static nlohmann::json symbols;

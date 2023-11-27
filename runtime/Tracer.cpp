@@ -8,21 +8,22 @@ const std::string Tracer::BACKEND_TRACE_FILE = "/tmp/backend_trace.json";
 
 void Tracer::trace(uintptr_t pc) {
 
-  std::vector<uintptr_t> symbolicAddresses;
+  nlohmann::json newEntry;
+  newEntry["pc"] = pc;
 
   for (auto const &[pageAddress, _] : g_shadow_pages) {
     for (auto byteAddress = pageAddress; byteAddress < pageAddress + kPageSize;
          byteAddress++) {
       auto byteExpr = _sym_read_memory((u_int8_t *)byteAddress, 1, true);
       if (byteExpr != nullptr && !byteExpr->isConcrete()) {
-        symbolicAddresses.push_back(byteAddress);
+        nlohmann::json symbolicAddress;
+        symbolicAddress["address"] = byteAddress;
+        symbolicAddress["symbol"] = getSymbolID(byteExpr);
+
+        newEntry["symbolicAddresses"].push_back(symbolicAddress);
       }
     }
   }
-
-  nlohmann::json newEntry;
-  newEntry["pc"] = pc;
-  newEntry["symbolicAddresses"] = symbolicAddresses;
 
   currentTrace.push_back(newEntry);
 }
@@ -41,16 +42,20 @@ void Tracer::writeTraceToDisk() {
 }
 
 void Tracer::recursivelyCollectSymbols(SymExpr symbolPtr) {
-  string symbolID = std::to_string(reinterpret_cast<uintptr_t>(symbolPtr));
+  string symbolID = getSymbolID(symbolPtr);
   if (symbols.count(symbolID) > 0) {
     return;
   }
 
-  symbols[symbolID]["type"] = symbolPtr->kind();
+  symbols[symbolID]["kink"] = symbolPtr->kind();
   for (int child_i = 0; child_i < symbolPtr->num_children(); child_i++) {
     SymExpr child = symbolPtr->getChild(child_i).get();
-    string childID = std::to_string(reinterpret_cast<uintptr_t>(child));
+    string childID = getSymbolID(child);
     symbols[symbolID]["children"].push_back(childID);
     recursivelyCollectSymbols(child);
   }
+}
+
+string Tracer::getSymbolID(SymExpr symbol) {
+  return std::to_string(reinterpret_cast<uintptr_t>(symbol));
 }
