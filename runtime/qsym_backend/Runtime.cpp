@@ -450,7 +450,7 @@ bool _sym_feasible(SymExpr expr) {
 //
 
 void _sym_collect_garbage() {
-  if (allocatedExpressions.size() < g_config.garbageCollectionThreshold)
+//  if (allocatedExpressions.size() < g_config.garbageCollectionThreshold)
     return;
 
 #ifdef DEBUG_RUNTIME
