@@ -10,6 +10,7 @@ void Tracer::trace(uintptr_t pc) {
 
   nlohmann::json newEntry;
   newEntry["pc"] = pc;
+  newEntry["memory_to_symbol_mapping"] = nlohmann::json::object();
 
   for (auto const &[pageAddress, _] : g_shadow_pages) {
     for (auto byteAddress = pageAddress; byteAddress < pageAddress + kPageSize;
@@ -20,7 +21,7 @@ void Tracer::trace(uintptr_t pc) {
         symbolicAddress["address"] = byteAddress;
         symbolicAddress["symbol"] = getSymbolID(byteExpr);
 
-        newEntry["symbolicAddresses"].push_back(symbolicAddress);
+        newEntry["memory_to_symbol_mapping"][std::to_string(reinterpret_cast<uintptr_t>(byteAddress))] = getSymbolID(byteExpr);
       }
     }
   }
@@ -47,11 +48,12 @@ void Tracer::recursivelyCollectSymbols(SymExpr symbolPtr) {
     return;
   }
 
-  symbols[symbolID]["kink"] = symbolPtr->kind();
+  symbols[symbolID]["kind"] = symbolPtr->kind();
+  symbols[symbolID]["args"] = nlohmann::json::array();
   for (int child_i = 0; child_i < symbolPtr->num_children(); child_i++) {
     SymExpr child = symbolPtr->getChild(child_i).get();
     string childID = getSymbolID(child);
-    symbols[symbolID]["children"].push_back(childID);
+    symbols[symbolID]["args"].push_back(childID);
     recursivelyCollectSymbols(child);
   }
 }
