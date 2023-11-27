@@ -3,10 +3,10 @@
 #include "Shadow.h"
 
 nlohmann::json Tracer::currentTrace;
+nlohmann::json Tracer::symbols;
 const std::string Tracer::BACKEND_TRACE_FILE = "/tmp/backend_trace.json";
 
 void Tracer::trace(uintptr_t pc) {
-
 
   std::vector<uintptr_t> symbolicAddresses;
 
@@ -27,8 +27,30 @@ void Tracer::trace(uintptr_t pc) {
   currentTrace.push_back(newEntry);
 }
 
-
 void Tracer::writeTraceToDisk() {
+  for (auto const &[symbolPtr, _] : getAllocatedExpressions()) {
+    recursivelyCollectSymbols(symbolPtr);
+  }
+
+  nlohmann::json dataToSave;
+  dataToSave["trace"] = currentTrace;
+  dataToSave["symbols"] = symbols;
+
   std::ofstream o(BACKEND_TRACE_FILE);
-  o << std::setw(4) << currentTrace << std::endl;
+  o << std::setw(4) << dataToSave << std::endl;
+}
+
+void Tracer::recursivelyCollectSymbols(SymExpr symbolPtr) {
+  string symbolID = std::to_string(reinterpret_cast<uintptr_t>(symbolPtr));
+  if (symbols.count(symbolID) > 0) {
+    return;
+  }
+
+  symbols[symbolID]["type"] = symbolPtr->kind();
+  for (int child_i = 0; child_i < symbolPtr->num_children(); child_i++) {
+    SymExpr child = symbolPtr->getChild(child_i).get();
+    string childID = std::to_string(reinterpret_cast<uintptr_t>(child));
+    symbols[symbolID]["children"].push_back(childID);
+    recursivelyCollectSymbols(child);
+  }
 }

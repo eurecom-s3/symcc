@@ -2,6 +2,7 @@
 #ifndef SYMRUNTIME_TRACER_H
 #define SYMRUNTIME_TRACER_H
 
+#include "Runtime.h"
 #include <cstdint>
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -12,7 +13,10 @@ public:
   static void writeTraceToDisk();
 
 private:
+  static void recursivelyCollectSymbols(SymExpr symbol);
+
   static nlohmann::json currentTrace;
+  static nlohmann::json symbols;
   static const std::string BACKEND_TRACE_FILE;
 };
 

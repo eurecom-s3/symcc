@@ -21,4 +21,6 @@
 typedef qsym::Expr *SymExpr;
 #include <RuntimeCommon.h>
 
+std::map<SymExpr, qsym::ExprRef> &getAllocatedExpressions();
+
 #endif
