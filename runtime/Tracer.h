@@ -9,7 +9,9 @@
 
 class Tracer {
 public:
-  static void trace(uintptr_t pc);
+  static void traceStep(uintptr_t pc);
+  static void tracePathConstraint(SymExpr constraint);
+  static void traceNewInput(const unsigned char* input, size_t size);
   static void writeTraceToDisk();
 
 private:
@@ -18,6 +20,7 @@ private:
 
   static nlohmann::json currentTrace;
   static nlohmann::json symbols;
+  static nlohmann::json pathConstraints;
   static const std::string BACKEND_TRACE_FILE;
 };
 

@@ -4,9 +4,10 @@
 
 nlohmann::json Tracer::currentTrace;
 nlohmann::json Tracer::symbols;
+nlohmann::json Tracer::pathConstraints;
 const std::string Tracer::BACKEND_TRACE_FILE = "/tmp/backend_trace.json";
 
-void Tracer::trace(uintptr_t pc) {
+void Tracer::traceStep(uintptr_t pc) {
 
   nlohmann::json newEntry;
   newEntry["pc"] = pc;
@@ -21,12 +22,35 @@ void Tracer::trace(uintptr_t pc) {
         symbolicAddress["address"] = byteAddress;
         symbolicAddress["symbol"] = getSymbolID(byteExpr);
 
-        newEntry["memory_to_symbol_mapping"][std::to_string(reinterpret_cast<uintptr_t>(byteAddress))] = getSymbolID(byteExpr);
+        newEntry["memory_to_symbol_mapping"]
+                [std::to_string(reinterpret_cast<uintptr_t>(byteAddress))] =
+                    getSymbolID(byteExpr);
       }
     }
   }
 
   currentTrace.push_back(newEntry);
+}
+
+void Tracer::tracePathConstraint(SymExpr constraint) {
+  if (pathConstraints.empty()) {
+    symcc_set_test_case_handler(
+        reinterpret_cast<TestCaseHandler>(traceNewInput));
+  }
+
+  nlohmann::json newEntry;
+  newEntry["symbol"] = getSymbolID(constraint);
+  newEntry["after_step"] = currentTrace.size() - 1;
+  newEntry["new_input_value"] = nlohmann::json::array();
+
+  pathConstraints.push_back(newEntry);
+}
+
+void Tracer::traceNewInput(const unsigned char *input, size_t size) {
+  for (size_t i = 0; i < size; i++) {
+    pathConstraints[pathConstraints.size() - 1]["new_input_value"].push_back(
+        input[i]);
+  }
 }
 
 void Tracer::writeTraceToDisk() {
@@ -37,6 +61,7 @@ void Tracer::writeTraceToDisk() {
   nlohmann::json dataToSave;
   dataToSave["trace"] = currentTrace;
   dataToSave["symbols"] = symbols;
+  dataToSave["path_constraints"] = pathConstraints;
 
   std::ofstream o(BACKEND_TRACE_FILE);
   o << std::setw(4) << dataToSave << std::endl;

@@ -328,6 +328,7 @@ void _sym_push_path_constraint(SymExpr constraint, int taken,
   if (constraint == nullptr)
     return;
 
+  Tracer::tracePathConstraint(constraint);
   g_solver->addJcc(allocatedExpressions.at(constraint), taken != 0, site_id);
 }
 

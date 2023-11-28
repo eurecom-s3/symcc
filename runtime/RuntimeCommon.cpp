@@ -488,8 +488,7 @@ SymExpr _sym_build_bit_to_bool(SymExpr expr) {
                               _sym_build_integer(0, _sym_bits_helper(expr)));
 }
 
-void _sym_trace_execution(uintptr_t pc) {
-  Tracer::trace(pc);
+void _sym_trace_execution(uintptr_t pc) { Tracer::traceStep(pc);
 }
 
 void _sym_finalize_tracing() {
