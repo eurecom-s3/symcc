@@ -2,6 +2,7 @@
 #ifndef SYMRUNTIME_TRACER_H
 #define SYMRUNTIME_TRACER_H
 
+#include "GarbageCollection.h"
 #include "Runtime.h"
 #include <cstdint>
 #include <fstream>

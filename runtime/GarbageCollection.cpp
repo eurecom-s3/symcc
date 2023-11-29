@@ -23,6 +23,10 @@
 /// A list of memory regions that are known to contain symbolic expressions.
 std::vector<ExpressionRegion> expressionRegions;
 
+std::vector<ExpressionRegion>& getExpressionRegions() {
+  return expressionRegions;
+}
+
 void registerExpressionRegion(ExpressionRegion r) {
   expressionRegions.push_back(std::move(r));
 }

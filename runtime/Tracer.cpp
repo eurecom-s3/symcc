@@ -18,19 +18,28 @@ void Tracer::traceStep(uintptr_t pc) {
          byteAddress++) {
       auto byteExpr = _sym_read_memory((u_int8_t *)byteAddress, 1, true);
       if (byteExpr != nullptr && !byteExpr->isConcrete()) {
-        nlohmann::json symbolicAddress;
-        symbolicAddress["address"] = byteAddress;
-        symbolicAddress["symbol"] = getSymbolID(byteExpr);
 
-        newEntry["memory_to_symbol_mapping"]
-                [std::to_string(reinterpret_cast<uintptr_t>(byteAddress))] =
+        newEntry["memory_to_symbol_mapping"][std::to_string(reinterpret_cast<uintptr_t>(byteAddress))] =
                     getSymbolID(byteExpr);
+      }
+    }
+  }
+
+  for (auto &expressionRegion : getExpressionRegions()){
+    for (auto byteAddress = expressionRegion.first; byteAddress < expressionRegion.first + expressionRegion.second / sizeof(byteAddress);
+         byteAddress++) {
+      auto byteExpr = *byteAddress;
+      if (byteExpr != nullptr && !byteExpr->isConcrete()) {
+
+        newEntry["memory_to_symbol_mapping"][std::to_string(reinterpret_cast<uintptr_t>(byteAddress))] =
+            getSymbolID(byteExpr);
       }
     }
   }
 
   currentTrace.push_back(newEntry);
 }
+
 
 void Tracer::tracePathConstraint(SymExpr constraint) {
   if (pathConstraints.empty()) {
@@ -41,7 +50,7 @@ void Tracer::tracePathConstraint(SymExpr constraint) {
   nlohmann::json newEntry;
   newEntry["symbol"] = getSymbolID(constraint);
   newEntry["after_step"] = currentTrace.size() - 1;
-  newEntry["new_input_value"] = nlohmann::json::array();
+  newEntry["new_input_value"] = nlohmann::json();
 
   pathConstraints.push_back(newEntry);
 }
