@@ -215,8 +215,10 @@ SymExpr _sym_build_integer128(uint64_t high, uint64_t low) {
   return registerExpression(g_expr_builder->createConstant({128, words}, 128));
 }
 
-SymExpr _sym_build_integer_arbitrary_length(unsigned num_bits, unsigned num_words, uint64_t *words){
-  return registerExpression(g_expr_builder->createConstant({num_bits, num_words, words}, num_bits));
+SymExpr _sym_build_integer_from_buffer(void *buffer, unsigned num_bits){
+  assert(num_bits % 64 == 0);
+  return registerExpression(g_expr_builder->createConstant(
+      {num_bits, num_bits / 64, (uint64_t *)buffer}, num_bits));
 }
 
 SymExpr _sym_build_null_pointer() {
