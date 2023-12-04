@@ -42,7 +42,7 @@ void Tracer::traceStep(uintptr_t pc) {
 }
 
 
-void Tracer::tracePathConstraint(SymExpr constraint) {
+void Tracer::tracePathConstraint(SymExpr constraint, bool taken) {
   if (pathConstraints.empty()) {
     symcc_set_test_case_handler(
         reinterpret_cast<TestCaseHandler>(traceNewInput));
@@ -52,6 +52,7 @@ void Tracer::tracePathConstraint(SymExpr constraint) {
   newEntry["symbol"] = getSymbolID(constraint);
   newEntry["after_step"] = currentTrace.size() - 1;
   newEntry["new_input_value"] = nlohmann::json();
+  newEntry["taken"] = taken;
 
   pathConstraints.push_back(newEntry);
 }

@@ -11,7 +11,7 @@
 class Tracer {
 public:
   static void traceStep(uintptr_t pc);
-  static void tracePathConstraint(SymExpr constraint);
+  static void tracePathConstraint(SymExpr constraint, bool taken);
   static void traceNewInput(const unsigned char* input, size_t size);
   static void writeTraceToDisk();
 
