@@ -1,6 +1,7 @@
 
 #include "Tracer.h"
 #include "Shadow.h"
+#include "llvm/Support/raw_ostream.h"
 
 nlohmann::json Tracer::currentTrace;
 nlohmann::json Tracer::symbols;
@@ -63,7 +64,7 @@ void Tracer::traceNewInput(const unsigned char *input, size_t size) {
 }
 
 void Tracer::writeTraceToDisk() {
-  for (auto const &[symbolPtr, _] : getAllocatedExpressions()) {
+  for (auto const &[_, symbolPtr] : getAllocatedExpressions()) {
     recursivelyCollectSymbols(symbolPtr);
   }
 
@@ -76,17 +77,28 @@ void Tracer::writeTraceToDisk() {
   o << std::setw(4) << dataToSave << std::endl;
 }
 
-void Tracer::recursivelyCollectSymbols(SymExpr symbolPtr) {
-  string symbolID = getSymbolID(symbolPtr);
+void Tracer::recursivelyCollectSymbols(const shared_ptr<qsym::Expr>& symbolPtr) {
+  string symbolID = getSymbolID(symbolPtr.get());
   if (symbols.count(symbolID) > 0) {
     return;
   }
 
-  symbols[symbolID]["kind"] = symbolPtr->kind();
+  symbols[symbolID]["operation"]["kind"] = symbolPtr->kind();
+  symbols[symbolID]["operation"]["properties"] = nlohmann::json::object();
+  if (symbolPtr->kind() == qsym::Constant){
+    auto value_llvm_int = static_pointer_cast<qsym::ConstantExpr>(symbolPtr)->value();
+    std::string value_str;
+    llvm::raw_string_ostream rso(value_str);
+    value_llvm_int.print(rso, false);
+
+    symbols[symbolID]["operation"]["properties"]["value"] = value_str;
+  }
+  symbols[symbolID]["size_bits"] = symbolPtr->bits();
+  symbols[symbolID]["input_byte_dependency"] = *symbolPtr->getDependencies();
   symbols[symbolID]["args"] = nlohmann::json::array();
   for (int child_i = 0; child_i < symbolPtr->num_children(); child_i++) {
-    SymExpr child = symbolPtr->getChild(child_i).get();
-    string childID = getSymbolID(child);
+    shared_ptr<qsym::Expr> child = symbolPtr->getChild(child_i);
+    string childID = getSymbolID(child.get());
     symbols[symbolID]["args"].push_back(childID);
     recursivelyCollectSymbols(child);
   }

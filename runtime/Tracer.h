@@ -16,7 +16,7 @@ public:
   static void writeTraceToDisk();
 
 private:
-  static void recursivelyCollectSymbols(SymExpr symbol);
+  static void recursivelyCollectSymbols(const shared_ptr<qsym::Expr>& symbolPtr);
   static string getSymbolID(SymExpr symbol);
 
   static nlohmann::json currentTrace;
