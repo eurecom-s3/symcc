@@ -1,0 +1,4 @@
+build
+symcctrace.egg-info
+.idea
+__pycache__
