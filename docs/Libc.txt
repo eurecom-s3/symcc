@@ -11,7 +11,7 @@ as the sanitizers and intercept calls to libc functions, wrapping them with
 symbolic handling. For example, the wrapper for "memset" obtains the symbolic
 expression for the value to be written in memory and pushes it to the shadow
 region of the destination memory. In the future, we may experiment with
-compiling (parts of) libc to avoid the effort of manually defining wrappers.
+compiling (parts of) the libc to avoid the effort of manually defining wrappers.
 
 Initially, we tried the interception mechanism that the LLVM sanitizers use,
 implemented in the compiler-rt library. The Linux version basically just defines
@@ -25,11 +25,11 @@ replaces a given libc function, in the executable and in all libraries that it
 loads. However, our run-time support library is loaded into the same process and
 makes heavy use of libc, so we need the ability to use wrappers in one part of
 the program and concrete functions in another. This turned out to complicate the
-compiler-rt based implementation so much that we eventually abandoned the
+compiler-rt-based implementation so much that we eventually abandoned the
 approach.
 
 Function renaming provided a convenient alternative: we control all code that is
-supposed to call wrappers rather the libc functions proper, so we just rename
+supposed to call wrappers rather than the libc functions properly, so we just rename
 the targets of their calls. For example, a call to "memset" in the program under
 test is turned into a call to "memset_symbolized", which we can easily define as
 a regular function wrapping "memset". Calls from our run-time library, on the

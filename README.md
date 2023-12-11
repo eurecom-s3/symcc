@@ -9,7 +9,7 @@ of PRs, we will try to merge them when possible.
 
 # SymCC: efficient compiler-based symbolic execution
 
-SymCC is a compiler wrapper which embeds symbolic execution into the program
+SymCC is a compiler pass which embeds symbolic execution into the program
 during compilation, and an associated run-time support library. In essence, the
 compiler inserts code that computes symbolic expressions for each value in the
 program. The actual computation happens through calls to the support library at

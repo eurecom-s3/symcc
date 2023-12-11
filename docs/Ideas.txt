@@ -35,7 +35,7 @@ because intermediate values are rarely computed without being used: typically,
 they end up being inputs to future computations, so we couldn't free the
 corresponding expressions anyway. A notable exception is the computation of
 values only for output - the expressions for such values could be freed after
-the value is output, which would reduce memory consumption especially with
+the value is output, which would reduce memory consumption, especially with
 output-heavy target programs.
 
 
@@ -63,6 +63,6 @@ improvements they have made over AFL (e.g., AFL++ or Honggfuzz).
                                 Forking version
 
 Instead of working with a fuzzer, we could also implement forking and some
-scheduling strategy ourselves. Georgia Tech has developed some OS-level
+scheduling strategies ourselves. Georgia Tech has developed some OS-level
 primitives that could help to implement such a feature:
 https://github.com/sslab-gatech/perf-fuzz.
