@@ -24,7 +24,7 @@ Under Ubuntu Groovy the following one liner should install all required
 packages:
 
 ```
-sudo apt install -y git cargo clang-10 cmake g++ git libz3-dev llvm-10-dev llvm-10-tools ninja-build python2 python3-pip zlib1g-dev && sudo pip3 install lit
+sudo apt install -y git cargo clang-14 cmake g++ git libz3-dev llvm-14-dev llvm-14-tools ninja-build python2 python3-pip zlib1g-dev && sudo pip3 install lit
 ```
 
 Alternatively, see below for using the provided Dockerfile, or the file
