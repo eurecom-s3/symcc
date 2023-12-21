@@ -8,6 +8,8 @@ Here we document how to reproduce the experiments that we show in the paper
 are available on our website [1], which also provides our raw results. Feel free
 to reach out to us if you encounter problems with reproducing the benchmarks.
 
+The datasets are also archived on figshare [10].
+
 In the paper, we describe two sets of experiments: we first benchmark SymCC on
 the CGC programs, then we run it on real-world software.
 
@@ -37,7 +39,7 @@ regular 32-bit binaries built by cb-multios.
 
 The analysis of real-world software always follows the same procedure. Assuming
 you have exported CC=symcc, CXX=sym++ and SYMCC_NO_SYMBOLIC_INPUT=1, first
-download the code, then build it using its own build system, finally unset
+download the code, then build it using its own build system, and finally unset
 SYMCC_NO_SYMBOLIC_INPUT and analyze the program in concert with AFL (which
 requires building a second time for AFL, see docs/Fuzzing.txt). We used AFL
 2.56b and built the targets with AFL_USE_ASan=1. Note that the fuzzing helper is
@@ -50,7 +52,7 @@ OpenJPEG [4]: we used revision 1f1e9682, built with CMake as described in the
   files file1.jp2 and file8.jp2 [5].
 
 libarchive [6]: we used revision 9ebb2484, built with CMake as described in the
-  poject's INSTALL (but adding "-DCMAKE_BUILD_TYPE=Release"), and analyzed
+  project's INSTALL (but adding "-DCMAKE_BUILD_TYPE=Release"), and analyzed
   "bin/bsdtar tf @@"; the corpus consisted of just a single dummy file
   containing the character "A".
 
@@ -78,3 +80,4 @@ running it with AFL according to the QSYM authors' instructions [9].
 [7] https://github.com/the-tcpdump-group/tcpdump.git
 [8] https://github.com/the-tcpdump-group/libpcap.git
 [9] https://github.com/sslab-gatech/qsym#run-hybrid-fuzzing-with-afl
+[10] https://doi.org/10.6084/m9.figshare.24270709.v1 or https://figshare.com/articles/dataset/SymCC_evaluation_data/24270709
