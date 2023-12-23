@@ -2,7 +2,7 @@ import enum
 import dataclasses
 
 
-class SymbolKind(enum.Enum):
+class ExpressionKind(enum.Enum):
     BOOL = 0
     CONSTANT = 1
     READ = 2
@@ -46,12 +46,12 @@ class SymbolKind(enum.Enum):
 
 @dataclasses.dataclass
 class Operation:
-    kind: SymbolKind
+    kind: ExpressionKind
     properties: dict
 
 
 @dataclasses.dataclass
-class RawSymbol:
+class RawExpression:
     operation: Operation
     size_bits: int
     input_byte_dependency: list[int]
@@ -61,12 +61,12 @@ class RawSymbol:
 @dataclasses.dataclass
 class RawTraceStep:
     pc: int
-    memory_to_symbol_mapping: dict[str, str]
+    memory_to_expression_mapping: dict[str, str]
 
 
 @dataclasses.dataclass
 class RawPathConstraint:
-    symbol: str
+    expression: str
     after_step: int
     new_input_value: list[int] | None
     taken: bool
@@ -75,27 +75,27 @@ class RawPathConstraint:
 @dataclasses.dataclass
 class RawTraceData:
     trace: list[RawTraceStep]
-    symbols: dict[str, RawSymbol]
+    expressions: dict[str, RawExpression]
     path_constraints: list[RawPathConstraint]
 
 
 @dataclasses.dataclass
-class Symbol:
+class Expression:
     operation: Operation
     size_bits: int
     input_byte_dependency: list[int]
-    args: list['Symbol']
+    args: list['Expression']
 
 
 @dataclasses.dataclass
 class TraceStep:
     pc: int
-    memory_to_symbol_mapping: dict[str, Symbol]
+    memory_to_expression_mapping: dict[str, Expression]
 
 
 @dataclasses.dataclass
 class PathConstraint:
-    symbol: Symbol
+    expression: Expression
     after_step: TraceStep
     new_input_value: bytes | None
     taken: bool
@@ -110,6 +110,6 @@ class MemoryArea:
 @dataclasses.dataclass
 class TraceData:
     trace: list[TraceStep]
-    symbols: dict[str, Symbol]
+    expressions: dict[str, Expression]
     path_constraints: list[PathConstraint]
     memory_areas: list[MemoryArea]
