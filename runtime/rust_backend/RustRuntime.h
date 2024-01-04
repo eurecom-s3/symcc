@@ -23,8 +23,9 @@
 #ifndef RUSTRUNTIME_H
 #define RUSTRUNTIME_H
 
-#include <cstdint>
+#include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 typedef uintptr_t RSymExpr;
 
