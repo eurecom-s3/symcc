@@ -23,6 +23,7 @@
 #ifndef RUSTRUNTIME_H
 #define RUSTRUNTIME_H
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
 
