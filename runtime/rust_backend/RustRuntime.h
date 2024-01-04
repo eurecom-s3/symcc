@@ -24,13 +24,7 @@
 #define RUSTRUNTIME_H
 
 #include <stddef.h>
-
-#ifdef __cplusplus
 #include <cstdint>
-extern "C" {
-#else
-#include <stdint.h>
-#endif
 
 typedef uintptr_t RSymExpr;
 
@@ -144,9 +138,3 @@ void _rsym_notify_basic_block(uintptr_t site_id);
  * Garbage collection
  */
 void _rsym_expression_unreachable(RSymExpr *expressions, size_t num_elements);
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif
