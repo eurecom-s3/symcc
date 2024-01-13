@@ -8,7 +8,7 @@ import cattrs
 
 from . import data
 
-MEMORY_AREA_MAX_DISTANCE = 0x100000
+MEMORY_AREA_MAX_DISTANCE = 0x1000000
 
 
 def parse_trace(
