@@ -57,7 +57,7 @@ if [[ -v failed_dir ]]; then
 fi
 
 function cleanup() {
-    rm -rf $work_dir
+    rm -rf --preserve-root -- $work_dir
 }
 
 trap cleanup EXIT
