@@ -30,7 +30,9 @@ while getopts "i:o:" opt; do
     esac
 done
 shift $((OPTIND-1))
-target=$@
+target=("$@")
+target[0]=$(realpath "${target[0]}")
+target="${target[@]}"
 timeout="timeout -k 5 90"
 
 if [[ ! -v in ]]; then
@@ -82,6 +84,16 @@ function maybe_export() {
     fi
 }
 
+function remove_analysed() {
+    local source_dir="$1"
+    local f
+    for f in $source_dir/*; do
+        if grep -q "$(basename $f)" $work_dir/analyzed_inputs; then
+            rm $f
+        fi
+    done
+}
+
 # Copy those files from the input directory to the next generation that haven't
 # been analyzed yet.
 function maybe_import() {
@@ -130,6 +142,7 @@ while true; do
             # Make the new test cases part of the next generation
             add_to_next_generation $work_dir/symcc_out
             maybe_export $work_dir/symcc_out
+            remove_analysed $work_dir/next
             echo $(basename $f) >> $work_dir/analyzed_inputs
             rm -f $f
         done
