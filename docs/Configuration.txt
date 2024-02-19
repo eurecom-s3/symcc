@@ -9,7 +9,7 @@ SymCC is configured at two different stages:
    compilation time and the set of dependencies. This is done via arguments to
    CMake.
 
-2. When you run programs that have been compiled with SymCC, environment
+2. When you run programs that have been compiled with SymCC, the environment
    variables control various aspects of the execution and analysis.
 
 We list all available options for each stage in turn.
@@ -56,11 +56,19 @@ environment variables.
   uninstrumented counterparts.
 
 - SYMCC_OUTPUT_DIR (default "/tmp/output"): This is the directory where SymCC
-  will store new inputs (QSYM backend only).
+  will store new inputs (QSYM backend only). If you prefer to handle them
+  programmatically, make your program call symcc_set_test_case_handler; the
+  handler will be called instead of the default handler each time the backend
+  generates a new input.
 
 - SYMCC_INPUT_FILE (default empty): When empty, SymCC treats data read from
   standard input as symbolic; when set to a file name, any data read from that
-  file is considered symbolic.
+  file is considered symbolic. Ignored if SYMCC_NO_SYMBOLIC_INPUT is set to 1.
+
+- SYMCC_MEMORY_INPUT=0/1 (default 0): When set to 1, expect the program under
+  test to communicate symbolic inputs with one or more calls to
+  symcc_make_symbolic. Can't be combined with SYMCC_INPUT_FILE. Ignored if
+  SYMCC_NO_SYMBOLIC_INPUT is set to 1.
 
 - SYMCC_LOG_FILE (default empty): When set to a file name, SymCC creates the
   file (or overwrites any existing file!) and uses it to log backend activity
@@ -71,12 +79,15 @@ environment variables.
   repeatedly (QSYM backend only). See the QSYM paper for details; highly
   recommended for fuzzing and enabled automatically by the fuzzing helper.
 
-- SYMCC_AFL_COVERAGE_MAP (default empty): When set to the file name of an AFL
-  coverage map, load the map before executing the target program and use it to
-  skip solver queries for paths that have already been covered (QSYM backend
-  only). The map is updated in place, so beware of races when running multiple
-  instances of SymCC! The fuzzing helper uses this to remember the state of
-  exploration across multiple executions of the target program.
+- SYMCC_AFL_COVERAGE_MAP (default empty): When set to the file name of an
+  AFL-style coverage map, load the map before executing the target program and
+  use it to skip solver queries for paths that have already been covered (QSYM
+  backend only). The map is updated in place, so beware of races when running
+  multiple instances of SymCC! The fuzzing helper uses this to remember the
+  state of exploration across multiple executions of the target program.
+  Warning: This setting has a misleading name - while the format of the map
+  follows (classic) AFL, the variable isn't meant to point at a map file that
+  AFL uses too!
 
 (Most people should stop reading here.)
 
@@ -88,7 +99,7 @@ There is actually a third category of options: when compiling with SymCC, you
 can specify the location of its various components via environment variables.
 This is not necessary in most cases because the build system makes sure that all
 components know about each other; however, in some advanced setups you may need
-to move files around after building them, and in that case you can use the
+to move files around after building them, and in that case, you can use the
 variables documented below to communicate the new locations:
 
 - SYMCC_RUNTIME_DIR and SYMCC_RUNTIME32_DIR: The directory that contains the

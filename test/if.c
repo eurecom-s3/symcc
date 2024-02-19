@@ -51,5 +51,6 @@ int main(int argc, char* argv[]) {
     }
     fprintf(stderr, "%d\n", x);
     fprintf(stderr, "%d\n", foo(x, 7));
+    // ANY: 7
     return 0;
 }

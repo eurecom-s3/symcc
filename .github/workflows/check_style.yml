@@ -1,0 +1,19 @@
+name: Check coding style
+on: [pull_request]
+jobs:
+  coding_style:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Run clang-format
+        shell: bash
+        run: |
+          format_changes=$(git clang-format-14 --quiet --diff \
+            ${{ github.event.pull_request.base.sha }} \
+            ${{ github.event.pull_request.head.sha }} | wc -c)
+          if [[ $format_changes -ne 0 ]]; then
+            echo "Please format your changes with clang-format using the LLVM style, e.g., git clang-format --style LLVM before committing"
+            exit 1
+          fi

@@ -1,16 +1,17 @@
-# This file is part of SymCC.
+# This file is part of the SymCC runtime.
 #
-# SymCC is free software: you can redistribute it and/or modify it under the
-# terms of the GNU General Public License as published by the Free Software
-# Foundation, either version 3 of the License, or (at your option) any later
-# version.
+# The SymCC runtime is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Lesser General Public License as published by the
+# Free Software Foundation, either version 3 of the License, or (at your option)
+# any later version.
 #
-# SymCC is distributed in the hope that it will be useful, but WITHOUT ANY
-# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-# A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+# The SymCC runtime is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License
+# for more details.
 #
-# You should have received a copy of the GNU General Public License along with
-# SymCC. If not, see <https://www.gnu.org/licenses/>.
+# You should have received a copy of the GNU Lesser General Public License along
+# with SymCC. If not, see <https://www.gnu.org/licenses/>.
 
 # Build the parts of the Qsym backend that are relevant for us
 
@@ -91,6 +92,5 @@ target_link_libraries(SymRuntime ${Z3_LIBRARIES} ${QSYM_LLVM_DEPS})
 # some current LTS distributions ship a GCC that requires libstdc++fs for
 # std::filesystem - we catch this case in order to enable users of such systems
 # to build with the default compiler.
-if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-  target_link_libraries(SymRuntime stdc++fs)
-endif()
+find_package(Filesystem COMPONENTS Final Experimental)
+target_link_libraries(SymRuntime std::filesystem)

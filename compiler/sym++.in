@@ -55,7 +55,7 @@ if [ $# -eq 0 ]; then
 fi
 
 exec $compiler                                  \
-     -Xclang -load -Xclang "$pass"              \
+     @CLANG_LOAD_PASS@"$pass"                   \
      $stdlib_cflags                             \
      "$@"                                       \
      $stdlib_ldflags                            \
