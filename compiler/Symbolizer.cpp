@@ -550,7 +550,8 @@ void Symbolizer::visitStoreInst(StoreInst &I) {
   // runtime function we call can handle null expressions.
 
   auto V = I.getValueOperand();
-  auto maybeConversion = convertExprForTypeToBitVectorExpr(IRB, V);
+  auto maybeConversion =
+      convertExprForTypeToBitVectorExpr(IRB, V, getSymbolicExpression(V));
 
   IRB.CreateCall(
       runtime.writeMemory,
@@ -558,7 +559,7 @@ void Symbolizer::visitStoreInst(StoreInst &I) {
        ConstantInt::get(intPtrType, dataLayout.getTypeStoreSize(V->getType())),
        maybeConversion ? maybeConversion->lastInstruction
                        : getSymbolicExpressionOrNull(V),
-       IRB.getInt1(dataLayout.isLittleEndian() ? 1 : 0)});
+       IRB.getInt1(isLittleEndian(V->getType()) ? 1 : 0)});
 }
 
 void Symbolizer::visitGetElementPtrInst(GetElementPtrInst &I) {
@@ -846,7 +847,8 @@ void Symbolizer::visitInsertValueInst(InsertValueInst &I) {
     return;
 
   // We may have to convert the expression to bit-vector kind...
-  auto maybeConversion = convertExprForTypeToBitVectorExpr(IRB, insertedValue);
+  auto maybeConversion = convertExprForTypeToBitVectorExpr(
+      IRB, insertedValue, getSymbolicExpressionOrNull(insertedValue));
 
   auto insert = IRB.CreateCall(
       runtime.buildInsert,
@@ -869,7 +871,7 @@ void Symbolizer::visitInsertValueInst(InsertValueInst &I) {
     maybeConversion->merge(insertComputation);
   }
 
-  registerSymbolicComputation(maybeConversion.value_or(insertComputation));
+  registerSymbolicComputation(maybeConversion.value_or(insertComputation), &I);
 }
 
 void Symbolizer::visitExtractValueInst(ExtractValueInst &I) {
@@ -937,7 +939,7 @@ void Symbolizer::visitInstruction(Instruction &I) {
          << "; the result will be concretized\n";
 }
 
-CallInst *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
+Instruction *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
   auto *valueType = V->getType();
 
   if (isa<ConstantPointerNull>(V)) {
@@ -979,37 +981,84 @@ CallInst *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
         {IRB.CreatePtrToInt(V, IRB.getInt64Ty()), IRB.getInt8(ptrBits)});
   }
 
-  if (valueType->isStructTy()) {
+  if (auto structType = dyn_cast<StructType>(valueType)) {
     // In unoptimized code we may see structures in SSA registers. What we
     // want is a single bit-vector expression describing their contents, but
-    // unfortunately we can't take the address of a register. We fix the
-    // problem with a hack: we write the register to memory and initialize the
-    // expression from there.
+    // unfortunately we can't take the address of a register. What we do instead
+    // is to build the expression recursively by iterating over the elements of
+    // the structure.
     //
     // An alternative would be to change the representation of structures in
     // SSA registers to "shadow structures" that contain one expression per
     // member. However, this would put an additional burden on the handling of
     // cast instructions, because expressions would have to be converted
     // between different representations according to the type.
-    //
-    // Unfortunately, the hack doesn't work when the entire structure is
-    // "undef"; writing it to memory is a well-defined bitcode operation, but
-    // the symbolic expression for the memory region will just be null because
-    // it's entirely concrete. We create an all-zeros expression for it instead.
 
     if (isa<UndefValue>(V)) {
+      // This is just an optimization for completely undefined structs; we
+      // create an all-zeros expression without iterating over the elements.
       return IRB.CreateCall(
           runtime.buildZeroBytes,
           {ConstantInt::get(intPtrType,
                             dataLayout.getTypeStoreSize(valueType))});
     } else {
-      auto *memory = IRB.CreateAlloca(valueType);
-      IRB.CreateStore(V, memory);
-      return IRB.CreateCall(
-          runtime.readMemory,
-          {IRB.CreatePtrToInt(memory, intPtrType),
-           ConstantInt::get(intPtrType, dataLayout.getTypeStoreSize(valueType)),
-           IRB.getInt1(0)});
+      // Iterate over the elements of the struct and concatenate the
+      // corresponding expressions (along with any padding that might be
+      // needed).
+
+      auto structLayout = dataLayout.getStructLayout(structType);
+      auto constantStructValue = dyn_cast<ConstantStruct>(V);
+      size_t offset = 0; // The end of the expressed portion in bytes.
+      Instruction *expr = nullptr;
+      auto append = [&](Instruction *newExpr) {
+        expr = expr ? IRB.CreateCall(runtime.buildConcat, {expr, newExpr})
+                    : newExpr;
+      };
+
+      for (size_t i = 0; i < structType->getNumElements(); i++) {
+        // Build an expression for any padding preceding the current element.
+        if (auto padding = structLayout->getElementOffset(i) - offset;
+            padding > 0) {
+          append(IRB.CreateCall(runtime.buildZeroBytes,
+                                {ConstantInt::get(intPtrType, padding)}));
+        }
+
+        // Build the expression for the current element. If the struct is not a
+        // constant, we need to read the element with extractvalue.
+        auto element = constantStructValue
+                           ? constantStructValue->getAggregateElement(i)
+                           : IRB.CreateExtractValue(V, i);
+        auto elementExpr = createValueExpression(element, IRB);
+
+        // The expression may be of a different kind than bit vector; in this
+        // case, we need to convert it.
+        if (auto conversion =
+                convertExprForTypeToBitVectorExpr(IRB, element, elementExpr)) {
+          elementExpr = conversion->lastInstruction;
+        }
+
+        // If the element is represented in little-endian byte order in memory,
+        // swap the bytes.
+        auto elementType = structType->getElementType(i);
+        if (isLittleEndian(elementType) &&
+            dataLayout.getTypeStoreSize(elementType) > 1) {
+          elementExpr = IRB.CreateCall(runtime.buildBswap, {elementExpr});
+        }
+
+        append(elementExpr);
+
+        offset = structLayout->getElementOffset(i) +
+                 dataLayout.getTypeStoreSize(structType->getElementType(i));
+      }
+
+      // Insert padding at the end, if any.
+      if (auto finalPadding = dataLayout.getTypeStoreSize(structType) - offset;
+          finalPadding > 0) {
+        append(IRB.CreateCall(runtime.buildZeroBytes,
+                              {ConstantInt::get(intPtrType, finalPadding)}));
+      }
+
+      return expr;
     }
   }
 
@@ -1091,21 +1140,22 @@ Instruction *Symbolizer::convertBitVectorExprForType(llvm::IRBuilder<> &IRB,
 }
 
 std::optional<Symbolizer::SymbolicComputation>
-Symbolizer::convertExprForTypeToBitVectorExpr(llvm::IRBuilder<> &IRB,
-                                              llvm::Value *V) const {
+Symbolizer::convertExprForTypeToBitVectorExpr(IRBuilder<> &IRB, Value *V,
+                                              Value *Expr) const {
+  if (Expr == nullptr)
+    return {};
+
   auto T = V->getType();
 
   if (T->isFloatingPointTy()) {
-    return buildRuntimeCall(IRB, runtime.buildFloatToBits, {V});
+    auto floatBits = IRB.CreateCall(runtime.buildFloatToBits, {Expr});
+    return SymbolicComputation(floatBits, floatBits, {Input(V, 0, floatBits)});
   } else if (T->isIntegerTy() && T->getIntegerBitWidth() == 1) {
-    if (auto computation = buildRuntimeCall(IRB, runtime.buildBoolToBit, {V})) {
-      computation->merge(
-          forceBuildRuntimeCall(IRB, runtime.buildZExt,
-                                {{computation->lastInstruction, false},
-                                 {IRB.getInt8(7 /* 1 byte */), false}}));
-      return computation;
-    }
+    auto bitExpr = IRB.CreateCall(runtime.buildBoolToBit, {Expr});
+    auto bitVectorExpr = IRB.CreateCall(runtime.buildZExt,
+                                        {bitExpr, IRB.getInt8(7 /* 1 byte */)});
+    return SymbolicComputation(bitExpr, bitVectorExpr, {Input(V, 0, bitExpr)});
+  } else {
+    return {};
   }
-
-  return {};
 }

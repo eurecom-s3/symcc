@@ -92,6 +92,5 @@ target_link_libraries(SymRuntime ${Z3_LIBRARIES} ${QSYM_LLVM_DEPS})
 # some current LTS distributions ship a GCC that requires libstdc++fs for
 # std::filesystem - we catch this case in order to enable users of such systems
 # to build with the default compiler.
-if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-  target_link_libraries(SymRuntime stdc++fs)
-endif()
+find_package(Filesystem COMPONENTS Final Experimental)
+target_link_libraries(SymRuntime std::filesystem)

@@ -9,14 +9,14 @@ of PRs, we will try to merge them when possible.
 
 # SymCC: efficient compiler-based symbolic execution
 
-SymCC is a compiler wrapper which embeds symbolic execution into the program
+SymCC is a compiler pass which embeds symbolic execution into the program
 during compilation, and an associated run-time support library. In essence, the
 compiler inserts code that computes symbolic expressions for each value in the
 program. The actual computation happens through calls to the support library at
 run time.
 
 To build the pass and the support library, install LLVM (any version between 8
-and 15) and Z3 (version 4.5 or later), as well as a C++ compiler with support
+and 17) and Z3 (version 4.5 or later), as well as a C++ compiler with support
 for C++17. LLVM lit is only needed to run the tests; if it's not packaged with
 your LLVM, you can get it with `pip install lit`.
 
@@ -24,7 +24,7 @@ Under Ubuntu Groovy the following one liner should install all required
 packages:
 
 ```
-sudo apt install -y git cargo clang-10 cmake g++ git libz3-dev llvm-10-dev llvm-10-tools ninja-build python2 python3-pip zlib1g-dev && sudo pip3 install lit
+sudo apt install -y git cargo clang-14 cmake g++ git libz3-dev llvm-14-dev llvm-14-tools ninja-build python2 python3-pip zlib1g-dev && sudo pip3 install lit
 ```
 
 Alternatively, see below for using the provided Dockerfile, or the file

@@ -110,7 +110,11 @@ bool canLower(const CallInst *CI) {
   case Intrinsic::roundeven:
 #endif
   case Intrinsic::copysign:
+#if LLVM_VERSION_MAJOR < 16
   case Intrinsic::flt_rounds:
+#else
+  case Intrinsic::get_rounding:
+#endif
   case Intrinsic::invariant_start:
   case Intrinsic::lifetime_start:
   case Intrinsic::invariant_end:

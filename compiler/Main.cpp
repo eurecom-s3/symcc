@@ -13,7 +13,9 @@
 // SymCC. If not, see <https://www.gnu.org/licenses/>.
 
 #include <llvm/IR/LegacyPassManager.h>
+#if LLVM_VERSION_MAJOR <= 15
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
+#endif
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Scalar/Scalarizer.h>
 
@@ -42,6 +44,8 @@ using namespace llvm;
 // Legacy pass registration (up to LLVM 13)
 //
 
+#if LLVM_VERSION_MAJOR <= 15
+
 void addSymbolizeLegacyPass(const PassManagerBuilder & /* unused */,
                             legacy::PassManagerBase &PM) {
   PM.add(createScalarizerPass());
@@ -56,6 +60,8 @@ static struct RegisterStandardPasses Y(PassManagerBuilder::EP_VectorizerStart,
                                        addSymbolizeLegacyPass);
 static struct RegisterStandardPasses
     Z(PassManagerBuilder::EP_EnabledOnOptLevel0, addSymbolizeLegacyPass);
+
+#endif
 
 //
 // New pass registration (LLVM 13 and above)

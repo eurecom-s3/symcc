@@ -21,7 +21,7 @@ with System;
 --  SymCC runtime (see RuntimeCommon.h).
 package SymCC is
 
-   procedure SymCC_Make_Symbolic
+   procedure Make_Symbolic
      (Address : System.Address; Size : Interfaces.C.size_t) with
      Import => True, Convention => C, External_Name => "symcc_make_symbolic";
    --  Mark a memory region as symbolic program input.
@@ -33,12 +33,11 @@ package SymCC is
        (Data_Block : System.Address; Size : Interfaces.C.size_t) with
      Convention => C;
    --  Type of functions that the runtime can call when it generates new
-   --  program inputs (see SymCC_Set_Test_Case_Handler).
+   --  program inputs (see Set_Test_Case_Handler).
 
-   procedure SymCC_Set_Test_Case_Handler
+   procedure Set_Test_Case_Handler
      (Callback : Test_Case_Handler_Callback_Type) with
-     Import        => True,
-     Convention    => C,
+     Import        => True, Convention => C,
      External_Name => "symcc_set_test_case_handler";
    --  Define a custom handler for new program inputs.
    --  @param Callback The procedure to be called for each new input.

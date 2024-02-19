@@ -26,12 +26,12 @@ install the 32-bit version of Z3 in your system.
 Once the dependencies for 32-bit SymCC are available (as well as the 64-bit
 dependencies mentioned in the main README), configure and build SymCC as usual
 but add "-DTARGET_32BIT=ON" to the CMake invocation. If the build system doesn't
-find your 32-bit versions of LLVM and Z3, specify their locations with
+find your 32-bit versions of LLVM and Z3, and specify their locations with
 "-DLLVM_32BIT_DIR=/some/path" and "-DZ3_32BIT_DIR=/some/other/path",
 respectively - analogously to how you would hint at the 64-bit versions.
 
 The resulting "symcc" and "sym++" scripts work like regular SymCC, but they
-additionally understand the "-m32" switch, which tells clang to build 32-bit
+additionally understand the "-m32" switch, which tells Clang to build 32-bit
 artifacts. If you build anything with "-m32", SymCC will make sure that the
 32-bit version of the symbolic backend is linked to it instead of the 64-bit
 variant that would normally be used. Note that, in order to compile C++ code
