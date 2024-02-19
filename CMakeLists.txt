@@ -15,6 +15,8 @@
 cmake_minimum_required(VERSION 3.5)
 project(SymbolicCompiler)
 
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+
 option(QSYM_BACKEND "Use the Qsym backend instead of our own" OFF)
 option(TARGET_32BIT "Make the compiler work correctly with -m32" OFF)
 
@@ -33,10 +35,12 @@ set(SYM_RUNTIME_BUILD_ARGS
   -DCMAKE_CXX_FLAGS_INIT=${CMAKE_CXX_FLAGS_INIT}
   -DCMAKE_EXE_LINKER_FLAGS=${CMAKE_EXE_LINKER_FLAGS}
   -DCMAKE_EXE_LINKER_FLAGS_INIT=${CMAKE_EXE_LINKER_FLAGS_INIT}
+  -DCMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}
   -DCMAKE_MODULE_LINKER_FLAGS=${CMAKE_MODULE_LINKER_FLAGS}
   -DCMAKE_MODULE_LINKER_FLAGS_INIT=${CMAKE_MODULE_LINKER_FLAGS_INIT}
   -DCMAKE_SHARED_LINKER_FLAGS=${CMAKE_SHARED_LINKER_FLAGS}
   -DCMAKE_SHARED_LINKER_FLAGS_INIT=${CMAKE_SHARED_LINKER_FLAGS_INIT}
+  -DCMAKE_MODULE_PATH=${CMAKE_MODULE_PATH}
   -DCMAKE_SYSROOT=${CMAKE_SYSROOT}
   -DQSYM_BACKEND=${QSYM_BACKEND}
   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
@@ -76,8 +80,8 @@ find_package(LLVM REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake from ${LLVM_DIR}")
 
-if (${LLVM_VERSION_MAJOR} LESS 8 OR ${LLVM_VERSION_MAJOR} GREATER 11)
-  message(WARNING "The software has been developed for LLVM 8 through 11; \
+if (${LLVM_VERSION_MAJOR} LESS 8 OR ${LLVM_VERSION_MAJOR} GREATER 17)
+  message(WARNING "The software has been developed for LLVM 8 through 17; \
 it is unlikely to work with other versions!")
 endif()
 
@@ -87,7 +91,7 @@ include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 \
 -Wredundant-decls -Wcast-align -Wmissing-include-dirs -Wswitch-default \
 -Wextra -Wall -Winvalid-pch -Wredundant-decls -Wformat=2 \
--Wmissing-format-attribute -Wformat-nonliteral -Werror")
+-Wmissing-format-attribute -Wformat-nonliteral -Werror -Wno-error=deprecated-declarations")
 
 # Mark nodelete to work around unload bug in upstream LLVM 5.0+
 set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,-z,nodelete")
@@ -112,6 +116,12 @@ find_program(CLANGPP_BINARY "clang++"
   DOC "The clang binary to use in the sym++ wrapper script.")
 if (NOT CLANG_BINARY)
   message(FATAL_ERROR "Clang not found; please make sure that the version corresponding to your LLVM installation is available.")
+endif()
+
+if (${LLVM_VERSION_MAJOR} LESS 13)
+  set(CLANG_LOAD_PASS "-Xclang -load -Xclang ")
+else()
+  set(CLANG_LOAD_PASS "-fpass-plugin=")
 endif()
 
 configure_file("compiler/symcc.in" "symcc" @ONLY)

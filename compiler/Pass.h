@@ -19,21 +19,31 @@
 #include <llvm/IR/ValueMap.h>
 #include <llvm/Pass.h>
 
-class SymbolizePass : public llvm::FunctionPass {
+#if LLVM_VERSION_MAJOR >= 13
+#include <llvm/IR/PassManager.h>
+#endif
+
+class SymbolizeLegacyPass : public llvm::FunctionPass {
 public:
   static char ID;
 
-  SymbolizePass() : FunctionPass(ID) {}
+  SymbolizeLegacyPass() : FunctionPass(ID) {}
 
-  bool doInitialization(llvm::Module &M) override;
-  bool runOnFunction(llvm::Function &F) override;
-
-private:
-  static constexpr char kSymCtorName[] = "__sym_ctor";
-
-  /// Mapping from global variables to their corresponding symbolic expressions.
-  llvm::ValueMap<llvm::GlobalVariable *, llvm::GlobalVariable *>
-      globalExpressions;
+  virtual bool doInitialization(llvm::Module &M) override;
+  virtual bool runOnFunction(llvm::Function &F) override;
 };
+
+#if LLVM_VERSION_MAJOR >= 13
+
+class SymbolizePass : public llvm::PassInfoMixin<SymbolizePass> {
+public:
+  llvm::PreservedAnalyses run(llvm::Function &F,
+                              llvm::FunctionAnalysisManager &);
+  llvm::PreservedAnalyses run(llvm::Module &M, llvm::ModuleAnalysisManager &);
+
+  static bool isRequired() { return true; }
+};
+
+#endif
 
 #endif

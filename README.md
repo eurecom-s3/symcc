@@ -1,23 +1,32 @@
 [![Compile and test SymCC](https://github.com/eurecom-s3/symcc/actions/workflows/run_tests.yml/badge.svg)](https://github.com/eurecom-s3/symcc/actions/workflows/run_tests.yml)
 
+Note: The SymCC project is currently understaffed and therefore maintained in a 
+best effort mode. In fact, we are hiring, in case you are interested to join 
+the [S3 group at Eurecom](https://www.s3.eurecom.fr/) to work on this (and other
+projects in the group) please [contact us](mailto:aurelien.francillon@eurecom.fr). 
+We nevertheless appreciate PRs and apologize in advance for the slow processing 
+of PRs, we will try to merge them when possible.
+
 # SymCC: efficient compiler-based symbolic execution
 
-SymCC is a compiler wrapper which embeds symbolic execution into the program
+SymCC is a compiler pass which embeds symbolic execution into the program
 during compilation, and an associated run-time support library. In essence, the
 compiler inserts code that computes symbolic expressions for each value in the
 program. The actual computation happens through calls to the support library at
 run time.
 
-To build the pass and the support library, make sure that LLVM 8, 9, 10 or 11
-and Z3 version 4.5 or later, as well as a C++ compiler with support for C++17
-are installed. "lit" is also needed which is not always packaged with LLVM.
+To build the pass and the support library, install LLVM (any version between 8
+and 17) and Z3 (version 4.5 or later), as well as a C++ compiler with support
+for C++17. LLVM lit is only needed to run the tests; if it's not packaged with
+your LLVM, you can get it with `pip install lit`.
 
-Under Ubuntu groovy the following one liner should install all required
+Under Ubuntu Groovy the following one liner should install all required
 packages:
 
 ```
-sudo apt install -y git cargo clang-10 cmake g++ git libz3-dev llvm-10-dev llvm-10-tools ninja-build python2 python3-pip zlib1g-dev && sudo pip3 install lit
+sudo apt install -y git cargo clang-14 cmake g++ git libz3-dev llvm-14-dev llvm-14-tools ninja-build python2 python3-pip zlib1g-dev && sudo pip3 install lit
 ```
+
 Alternatively, see below for using the provided Dockerfile, or the file
 `util/quicktest.sh` for exact steps to perform under Ubuntu (or use with the
 provided Vagrant file).
@@ -173,6 +182,57 @@ every change to SymCC (which is, in principle the right thing to do), whereas in
 many cases it is sufficient to let the build system figure out what to rebuild
 (and recompile, e.g., libc++ only when necessary).
 
+## FAQ / BUGS / TODOs
+
+### Why is SymCC only exploring one path and not all paths?
+
+SymCC is currently a concolic executor it follows the concrete
+path. In theory, it would be possible to make it a forking executor
+see [issue #14](https://github.com/eurecom-s3/symcc/issues/14)
+
+### Why does SymCC not generate some test cases?
+
+There are multiple possible reasons:
+
+#### QSym backend performs pruning
+
+When built with the QSym backend exploration (e.g., loops) symcc is
+subject to path pruning, this is part of the optimizations that makes
+SymCC/QSym fast, it isn't sound. This is not a problem for using in
+hybrid fuzzing, but this may be a problem for other uses. See for
+example [issue #88](https://github.com/eurecom-s3/symcc/issues/88).
+
+When building with the simple backend the paths should be found. If
+the paths are not found with the simple backend this may be a bug (or
+possibly a limitation of the simple backend).
+
+#### Incomplete symbolic handing of functions, systems interactions.
+
+The current symbolic understanding of libc is incomplete. So when an
+unsupported libc function is called SymCC can't trace the computations
+that happen in the function.
+
+1. Adding the function to the [collection of wrapped libc
+   functions](https://github.com/eurecom-s3/symcc/blob/master/runtime/LibcWrappers.cpp)
+   and [register the
+   wrapper](https://github.com/eurecom-s3/symcc/blob/b29dc4db2803830ebf50798e72b336473a567655/compiler/Runtime.cpp#L159)
+   in the compiler.
+2. Build a fully instrumented libc.
+3. Cherry-pick individual libc functions from a libc implementation (e.g., musl) 
+
+See [issue #23](https://github.com/eurecom-s3/symcc/issues/23) for more details.
+
+
+### Rust support ?
+
+This would be possible to support RUST, see [issue
+#1](https://github.com/eurecom-s3/symcc/issues/1) for tracking this.
+
+### Bug reporting
+
+We appreciate bugs with test cases and steps to reproduce, PR with
+corresponding test cases. SymCC is currently understaffed, we hope to
+catch up and get back to active development at some point.
 
 ## Contact
 
@@ -210,17 +270,24 @@ SymCC is free software: you can redistribute it and/or modify it under the terms
 of the GNU General Public License as published by the Free Software Foundation,
 either version 3 of the License, or (at your option) any later version.
 
+As an exception from the above, you can redistribute and/or modify the SymCC
+runtime under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation, either version 3 of the License, or (at your
+option) any later version. See #114 for the rationale.
+
 SymCC is distributed in the hope that it will be useful, but WITHOUT ANY
 WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
 PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License along with
-SymCC. If not, see <https://www.gnu.org/licenses/>.
+You should have received a copy of the GNU General Public License and the GNU
+Lesser General Public License along with SymCC. If not, see
+<https://www.gnu.org/licenses/>.
 
 The following pieces of software have additional or alternate copyrights,
 licenses, and/or restrictions:
 
-| Program | Directory                   |
-| ---     | ---                         |
-| QSYM    | `runtime/qsym_backend/qsym` |
+| Program       | Directory                   |
+|---------------|-----------------------------|
+| QSYM          | `runtime/qsym_backend/qsym` |
+| SymCC runtime | `runtime`                   |
 

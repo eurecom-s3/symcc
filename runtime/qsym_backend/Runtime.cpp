@@ -1,19 +1,20 @@
-// This file is part of SymCC.
+// This file is part of the SymCC runtime.
 //
-// SymCC is free software: you can redistribute it and/or modify it under the
-// terms of the GNU General Public License as published by the Free Software
-// Foundation, either version 3 of the License, or (at your option) any later
-// version.
+// The SymCC runtime is free software: you can redistribute it and/or modify it
+// under the terms of the GNU Lesser General Public License as published by the
+// Free Software Foundation, either version 3 of the License, or (at your
+// option) any later version.
 //
-// SymCC is distributed in the hope that it will be useful, but WITHOUT ANY
-// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-// A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+// The SymCC runtime is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+// FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License
+// for more details.
 //
-// You should have received a copy of the GNU General Public License along with
-// SymCC. If not, see <https://www.gnu.org/licenses/>.
+// You should have received a copy of the GNU Lesser General Public License
+// along with SymCC. If not, see <https://www.gnu.org/licenses/>.
 
 //
-// Definitions that we need for the Qsym backend
+// Definitions that we need for the QSYM backend
 //
 
 #include "Runtime.h"
@@ -34,6 +35,7 @@
 #include <iterator>
 #include <map>
 #include <unordered_set>
+#include <variant>
 
 #if HAVE_FILESYSTEM
 #include <filesystem>
@@ -46,9 +48,10 @@
 #endif
 
 // C
+#include <cstdint>
 #include <cstdio>
 
-// Qsym
+// QSYM
 #include <afl_trace_map.h>
 #include <call_stack_manager.h>
 #include <expr_builder.h>
@@ -77,12 +80,7 @@ namespace {
 /// Indicate whether the runtime has been initialized.
 std::atomic_flag g_initialized = ATOMIC_FLAG_INIT;
 
-/// The file that contains out input.
-std::string inputFileName;
-
-void deleteInputFile() { std::remove(inputFileName.c_str()); }
-
-/// A mapping of all expressions that we have ever received from Qsym to the
+/// A mapping of all expressions that we have ever received from QSYM to the
 /// corresponding shared pointers on the heap.
 ///
 /// We can't expect C clients to handle std::shared_ptr, so we maintain a single
@@ -105,6 +103,55 @@ SymExpr registerExpression(const qsym::ExprRef &expr) {
   return rawExpr;
 }
 
+/// The user-provided test case handler, if any.
+///
+/// If the user doesn't register a handler, we use QSYM's default behavior of
+/// writing the test case to a file in the output directory.
+TestCaseHandler g_test_case_handler = nullptr;
+
+/// A QSYM solver that doesn't require the entire input on initialization.
+class EnhancedQsymSolver : public qsym::Solver {
+  // Warning!
+  //
+  // Before we can override methods of qsym::Solver, we need to declare them
+  // virtual because the QSYM code refers to the solver with a pointer of type
+  // qsym::Solver*; for non-virtual methods, it will always choose the
+  // implementation of the base class. Beware that making a method virtual adds
+  // a small performance overhead and requires us to change QSYM code.
+  //
+  // Subclassing the QSYM solver is ugly but helps us to avoid making too many
+  // changes in the QSYM codebase.
+
+public:
+  EnhancedQsymSolver()
+      : qsym::Solver("/dev/null", g_config.outputDir, g_config.aflCoverageMap) {
+  }
+
+  void pushInputByte(size_t offset, uint8_t value) {
+    if (inputs_.size() <= offset)
+      inputs_.resize(offset + 1);
+
+    inputs_[offset] = value;
+  }
+
+  void saveValues(const std::string &suffix) override {
+    if (auto handler = g_test_case_handler) {
+      auto values = getConcreteValues();
+      // The test-case handler may be instrumented, so let's call it with
+      // argument expressions to meet instrumented code's expectations.
+      // Otherwise, we might end up erroneously using whatever expression was
+      // last registered for a function parameter.
+      _sym_set_parameter_expression(0, nullptr);
+      _sym_set_parameter_expression(1, nullptr);
+      handler(values.data(), values.size());
+    } else {
+      Solver::saveValues(suffix);
+    }
+  }
+};
+
+EnhancedQsymSolver *g_enhanced_solver;
+
 } // namespace
 
 using namespace qsym;
@@ -122,7 +169,7 @@ void _sym_initialize(void) {
   loadConfig();
   initLibcWrappers();
   std::cerr << "This is SymCC running with the QSYM backend" << std::endl;
-  if (g_config.fullyConcrete) {
+  if (std::holds_alternative<NoInput>(g_config.input)) {
     std::cerr
         << "Performing fully concrete execution (i.e., without symbolic input)"
         << std::endl;
@@ -138,48 +185,15 @@ void _sym_initialize(void) {
     exit(-1);
   }
 
-  // Qsym requires the full input in a file
-  if (g_config.inputFile.empty()) {
-    std::cerr << "Reading program input until EOF (use Ctrl+D in a terminal)..."
-              << std::endl;
-    std::istreambuf_iterator<char> in_begin(std::cin), in_end;
-    std::vector<char> inputData(in_begin, in_end);
-    inputFileName = std::tmpnam(nullptr);
-    std::ofstream inputFile(inputFileName, std::ios::trunc);
-    std::copy(inputData.begin(), inputData.end(),
-              std::ostreambuf_iterator<char>(inputFile));
-    inputFile.close();
-
-#ifdef DEBUG_RUNTIME
-    std::cerr << "Loaded input:" << std::endl;
-    std::copy(inputData.begin(), inputData.end(),
-              std::ostreambuf_iterator<char>(std::cerr));
-    std::cerr << std::endl;
-#endif
-
-    atexit(deleteInputFile);
-
-    // Restore some semblance of standard input
-    auto *newStdin = freopen(inputFileName.c_str(), "r", stdin);
-    if (newStdin == nullptr) {
-      perror("Failed to reopen stdin");
-      exit(-1);
-    }
-  } else {
-    inputFileName = g_config.inputFile;
-    std::cerr << "Making data read from " << inputFileName << " as symbolic"
-              << std::endl;
-  }
-
   g_z3_context = new z3::context{};
-  g_solver =
-      new Solver(inputFileName, g_config.outputDir, g_config.aflCoverageMap);
+  g_enhanced_solver = new EnhancedQsymSolver{};
+  g_solver = g_enhanced_solver; // for QSYM-internal use
   g_expr_builder = g_config.pruning ? PruneExprBuilder::create()
                                     : SymbolicExprBuilder::create();
 }
 
 SymExpr _sym_build_integer(uint64_t value, uint8_t bits) {
-  // Qsym's API takes uintptr_t, so we need to be careful when compiling for
+  // QSYM's API takes uintptr_t, so we need to be careful when compiling for
   // 32-bit systems: the compiler would helpfully truncate our uint64_t to fit
   // into 32 bits.
   if constexpr (sizeof(uint64_t) == sizeof(uintptr_t)) {
@@ -199,6 +213,12 @@ SymExpr _sym_build_integer(uint64_t value, uint8_t bits) {
 SymExpr _sym_build_integer128(uint64_t high, uint64_t low) {
   std::array<uint64_t, 2> words = {low, high};
   return registerExpression(g_expr_builder->createConstant({128, words}, 128));
+}
+
+SymExpr _sym_build_integer_from_buffer(void *buffer, unsigned num_bits) {
+  assert(num_bits % 64 == 0);
+  return registerExpression(g_expr_builder->createConstant(
+      {num_bits, num_bits / 64, (uint64_t *)buffer}, num_bits));
 }
 
 SymExpr _sym_build_null_pointer() {
@@ -266,17 +286,32 @@ SymExpr _sym_build_not(SymExpr expr) {
       g_expr_builder->createNot(allocatedExpressions.at(expr)));
 }
 
+SymExpr _sym_build_ite(SymExpr cond, SymExpr a, SymExpr b) {
+  return registerExpression(g_expr_builder->createIte(
+      allocatedExpressions.at(cond), allocatedExpressions.at(a),
+      allocatedExpressions.at(b)));
+}
+
 SymExpr _sym_build_sext(SymExpr expr, uint8_t bits) {
+  if (expr == nullptr)
+    return nullptr;
+
   return registerExpression(g_expr_builder->createSExt(
       allocatedExpressions.at(expr), bits + expr->bits()));
 }
 
 SymExpr _sym_build_zext(SymExpr expr, uint8_t bits) {
+  if (expr == nullptr)
+    return nullptr;
+
   return registerExpression(g_expr_builder->createZExt(
       allocatedExpressions.at(expr), bits + expr->bits()));
 }
 
 SymExpr _sym_build_trunc(SymExpr expr, uint8_t bits) {
+  if (expr == nullptr)
+    return nullptr;
+
   return registerExpression(
       g_expr_builder->createTrunc(allocatedExpressions.at(expr), bits));
 }
@@ -289,7 +324,8 @@ void _sym_push_path_constraint(SymExpr constraint, int taken,
   g_solver->addJcc(allocatedExpressions.at(constraint), taken != 0, site_id);
 }
 
-SymExpr _sym_get_input_byte(size_t offset) {
+SymExpr _sym_get_input_byte(size_t offset, uint8_t value) {
+  g_enhanced_solver->pushInputByte(offset, value);
   return registerExpression(g_expr_builder->createRead(offset));
 }
 
@@ -305,25 +341,44 @@ SymExpr _sym_extract_helper(SymExpr expr, size_t first_bit, size_t last_bit) {
 
 size_t _sym_bits_helper(SymExpr expr) { return expr->bits(); }
 
-SymExpr _sym_build_bool_to_bits(SymExpr expr, uint8_t bits) {
+SymExpr _sym_build_bool_to_bit(SymExpr expr) {
+  if (expr == nullptr)
+    return nullptr;
+
   return registerExpression(
-      g_expr_builder->boolToBit(allocatedExpressions.at(expr), bits));
+      g_expr_builder->boolToBit(allocatedExpressions.at(expr), 1));
 }
 
 //
-// Floating-point operations (unsupported in Qsym)
+// Floating-point operations (unsupported in QSYM)
 //
+
+// Even if we don't generally support operations on floats in this backend, we
+// need dummy implementations of a few functions to help the parts of the
+// instrumentation that deal with structures; if structs contain floats, the
+// instrumentation expects to be able to create bit-vector expressions for
+// them.
+
+SymExpr _sym_build_float(double, int is_double) {
+  // We create an all-zeros bit vector, mainly to capture the length of the
+  // value. This is compatible with our dummy implementation of
+  // _sym_build_float_to_bits.
+  return registerExpression(
+      g_expr_builder->createConstant(0, is_double ? 64 : 32));
+}
+
+SymExpr _sym_build_float_to_bits(SymExpr expr) { return expr; }
 
 #define UNSUPPORTED(prototype)                                                 \
   prototype { return nullptr; }
 
-UNSUPPORTED(SymExpr _sym_build_float(double, int))
 UNSUPPORTED(SymExpr _sym_build_fp_add(SymExpr, SymExpr))
 UNSUPPORTED(SymExpr _sym_build_fp_sub(SymExpr, SymExpr))
 UNSUPPORTED(SymExpr _sym_build_fp_mul(SymExpr, SymExpr))
 UNSUPPORTED(SymExpr _sym_build_fp_div(SymExpr, SymExpr))
 UNSUPPORTED(SymExpr _sym_build_fp_rem(SymExpr, SymExpr))
 UNSUPPORTED(SymExpr _sym_build_fp_abs(SymExpr))
+UNSUPPORTED(SymExpr _sym_build_fp_neg(SymExpr))
 UNSUPPORTED(SymExpr _sym_build_float_ordered_greater_than(SymExpr, SymExpr))
 UNSUPPORTED(SymExpr _sym_build_float_ordered_greater_equal(SymExpr, SymExpr))
 UNSUPPORTED(SymExpr _sym_build_float_ordered_less_than(SymExpr, SymExpr))
@@ -341,7 +396,6 @@ UNSUPPORTED(SymExpr _sym_build_float_unordered_not_equal(SymExpr, SymExpr))
 UNSUPPORTED(SymExpr _sym_build_int_to_float(SymExpr, int, int))
 UNSUPPORTED(SymExpr _sym_build_float_to_float(SymExpr, int))
 UNSUPPORTED(SymExpr _sym_build_bits_to_float(SymExpr, int))
-UNSUPPORTED(SymExpr _sym_build_float_to_bits(SymExpr))
 UNSUPPORTED(SymExpr _sym_build_float_to_signed_integer(SymExpr, uint8_t))
 UNSUPPORTED(SymExpr _sym_build_float_to_unsigned_integer(SymExpr, uint8_t))
 
@@ -423,4 +477,12 @@ void _sym_collect_garbage() {
                    .count()
             << " milliseconds)" << std::endl;
 #endif
+}
+
+//
+// Test-case handling
+//
+
+void symcc_set_test_case_handler(TestCaseHandler handler) {
+  g_test_case_handler = handler;
 }

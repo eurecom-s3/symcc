@@ -1,0 +1,24 @@
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+anod_build:
+  services:
+    - image:sandbox
+    - cpu:8
+    - mem:16
+  stage: build
+  script:
+    - export ANOD_DEFAULT_SANDBOX_DIR=/it/wave
+
+    # Check out QSYM
+    - cd runtime/qsym_backend
+    - git clone -b symcc https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}:${CI_SERVER_PORT}/eng/fuzz/qsym
+
+    # Use our repositories
+    - anod vcs --add-repo symcc $CI_PROJECT_DIR
+    - anod vcs --add-repo qsym $CI_PROJECT_DIR/runtime/qsym_backend/qsym
+
+    # Build SymCC
+    - anod source symcc
+    - anod build symcc
