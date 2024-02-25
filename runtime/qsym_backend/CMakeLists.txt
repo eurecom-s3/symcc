@@ -98,5 +98,5 @@ target_link_libraries(SymRuntime ${Z3_LIBRARIES} ${QSYM_LLVM_DEPS} nlohmann_json
 # some current LTS distributions ship a GCC that requires libstdc++fs for
 # std::filesystem - we catch this case in order to enable users of such systems
 # to build with the default compiler.
-#find_package(Filesystem COMPONENTS Final Experimental)
-#target_link_libraries(SymRuntime std::filesystem)
+find_package(Filesystem COMPONENTS Final Experimental)
+target_link_libraries(SymRuntime std::filesystem)
