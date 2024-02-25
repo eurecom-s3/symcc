@@ -136,9 +136,8 @@ public:
   }
 
   void saveValues(const std::string &suffix) override {
-    auto values = getConcreteValues();
     if (auto handler = g_test_case_handler) {
-
+      auto values = getConcreteValues();
       // The test-case handler may be instrumented, so let's call it with
       // argument expressions to meet instrumented code's expectations.
       // Otherwise, we might end up erroneously using whatever expression was
@@ -146,20 +145,9 @@ public:
       _sym_set_parameter_expression(0, nullptr);
       _sym_set_parameter_expression(1, nullptr);
       handler(values.data(), values.size());
-    }
-//    } else {
+    } else {
       Solver::saveValues(suffix);
-      puts("New testcase hex : ");
-        for (unsigned char value : values) {
-          printf("%02x", value);
-        }
-        puts("");
-        puts("New testcase ascii : ");
-        for (unsigned char value : values) {
-          printf("%c", value);
-        }
-        puts("");
-//    }
+    }
   }
 };
 
