@@ -76,6 +76,11 @@ z3::context *g_z3_context;
 
 } // namespace qsym
 
+namespace {
+
+/// Indicate whether the runtime has been initialized.
+std::atomic_flag g_initialized = ATOMIC_FLAG_INIT;
+
 /// A mapping of all expressions that we have ever received from QSYM to the
 /// corresponding shared pointers on the heap.
 ///
@@ -86,17 +91,6 @@ z3::context *g_z3_context;
 /// std::map seems to perform slightly better than std::unordered_map on our
 /// workload.
 std::map<SymExpr, qsym::ExprRef> allocatedExpressions;
-
-std::map<SymExpr, qsym::ExprRef> &getAllocatedExpressions() {
-  return allocatedExpressions;
-}
-
-namespace {
-
-/// Indicate whether the runtime has been initialized.
-std::atomic_flag g_initialized = ATOMIC_FLAG_INIT;
-
-
 
 SymExpr registerExpression(const qsym::ExprRef &expr) {
   SymExpr rawExpr = expr.get();
@@ -172,6 +166,10 @@ public:
 EnhancedQsymSolver *g_enhanced_solver;
 
 } // namespace
+
+std::map<SymExpr, qsym::ExprRef> &getAllocatedExpressions() {
+  return allocatedExpressions;
+}
 
 using namespace qsym;
 
