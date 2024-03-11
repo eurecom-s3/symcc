@@ -264,6 +264,17 @@ More information on the paper is available
 [here](http://www.s3.eurecom.fr/tools/symbolic_execution/symcc.html).
 
 
+## Other projects using SymCC
+
+[SymQEMU](https://github.com/eurecom-s3/symqemu) relies on SymCC.
+
+LibAFL supports concolic execution with [SymCC](https://aflplus.plus/libafl-book/advanced_features/concolic/concolic.html), 
+requires external patches (for now).
+
+[AdaCore](https://www.adacore.com/) published [a paper describing](https://dl.acm.org/doi/10.1145/3631483.3631500) 
+SymCC integration in GNATfuzz for test case generation and [plans to release this
+as part of GNATfuzz beta release](https://docs.adacore.com/live/wave/roadmap/html/roadmap/roadmap_25_GNAT%20Pro.html#symbolic-execution-to-retrieve-input-values).
+
 ## License
 
 SymCC is free software: you can redistribute it and/or modify it under the terms
