@@ -353,7 +353,7 @@ fn process_new_testcase(
             )
         })? {
         AflShowmapResult::Success(testcase_bitmap) => {
-            let interesting = state.current_bitmap.merge(&testcase_bitmap);
+            let interesting = state.current_bitmap.merge(*testcase_bitmap)?;
             if interesting {
                 symcc::copy_testcase(&testcase, &mut state.queue, parent).with_context(|| {
                     format!(
