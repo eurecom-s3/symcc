@@ -512,8 +512,18 @@ void _sym_notify_ret(uintptr_t) {}
 void _sym_notify_basic_block(uintptr_t) {}
 
 /* Debugging */
-const char *_sym_expr_to_string(SymExpr expr) {
-  return Z3_ast_to_string(g_context, expr);
+size_t _sym_expr_to_string(SymExpr expr, char* buf, size_t buf_size) {
+  char* expr_string = Z3_ast_to_string(g_context, expr);
+  size_t expr_string_size = strlen(expr_string_size);
+
+  if (expr_string_size + 1 > buf_size) {
+    return expr_string_size;
+  }
+
+  strncpy(buf, expr_string, expr_string_size);
+  buf[expr_string_size] = '\0';
+
+  return 0;
 }
 
 bool _sym_feasible(SymExpr expr) {
