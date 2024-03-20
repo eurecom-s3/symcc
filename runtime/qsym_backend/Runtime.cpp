@@ -422,15 +422,18 @@ void _sym_notify_basic_block(uintptr_t site_id) {
 // Debugging
 //
 
-const char *_sym_expr_to_string(SymExpr expr) {
-  static char buffer[4096];
+size_t _sym_expr_to_string(SymExpr expr, char* buf, size_t buf_size) {
+  std::string expr_string = expr->toString();
+  size_t expr_string_size = expr_string.size();
 
-  auto expr_string = expr->toString();
-  auto copied = expr_string.copy(
-      buffer, std::min(expr_string.length(), sizeof(buffer) - 1));
-  buffer[copied] = '\0';
+  if (expr_string_size + 1 > buf_size) {
+    return expr_string_size;
+  }
 
-  return buffer;
+  strncpy(buf, expr->toString().c_str(), expr_string_size);
+  buf[expr_string_size] = '\0';
+
+  return 0;
 }
 
 bool _sym_feasible(SymExpr expr) {
