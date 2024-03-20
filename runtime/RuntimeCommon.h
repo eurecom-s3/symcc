@@ -210,7 +210,7 @@ void _sym_notify_basic_block(uintptr_t site_id);
  * Debugging
  */
 // Puts the string associated to expr in buf.
-// If bufsize is not big enough, returns the size of expr's string.
+// If buf_size is not big enough, returns the size of expr's string.
 // Otherwise, returns 0.
 size_t _sym_expr_to_string(SymExpr expr, char* buf, size_t buf_size);
 bool _sym_feasible(SymExpr expr);
