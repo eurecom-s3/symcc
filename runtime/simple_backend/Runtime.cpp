@@ -435,7 +435,7 @@ void _sym_push_path_constraint(Z3_ast constraint, int taken,
                                uintptr_t site_id [[maybe_unused]]) {
   if (constraint == nullptr)
     return;
-
+  taken = taken & 0x1;
   constraint = Z3_simplify(g_context, constraint);
   Z3_inc_ref(g_context, constraint);
 
