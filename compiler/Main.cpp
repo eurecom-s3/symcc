@@ -36,6 +36,17 @@ using OptimizationLevel = llvm::PassBuilder::OptimizationLevel;
 #include <llvm/Transforms/Scalar/LowerAtomic.h>
 #endif
 
+#if LLVM_VERSION_MAJOR >= 13
+#include <llvm/Passes/PassBuilder.h>
+#include <llvm/Passes/PassPlugin.h>
+
+#if LLVM_VERSION_MAJOR >= 14
+#include <llvm/Passes/OptimizationLevel.h>
+#else
+using OptimizationLevel = llvm::PassBuilder::OptimizationLevel;
+#endif
+#endif
+
 #include "Pass.h"
 
 using namespace llvm;
