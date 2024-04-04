@@ -1,0 +1,4 @@
+[submodule "runtime"]
+	path = runtime
+	url = https://github.com/eurecom-s3/symcc-rt.git
+	branch = export_symcc_runtime
