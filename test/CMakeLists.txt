@@ -35,7 +35,7 @@ add_custom_target(check
   COMMENT "Testing the system..."
   USES_TERMINAL)
 
-add_dependencies(check SymRuntime Symbolize)
-if (TARGET SymRuntime32)
-  add_dependencies(check SymRuntime32)
+add_dependencies(check SymccRuntime Symcc)
+if (TARGET SymccRuntime32)
+  add_dependencies(check SymccRuntime32 Symcc)
 endif()

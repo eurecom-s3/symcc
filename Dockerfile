@@ -21,18 +21,27 @@ FROM ubuntu:22.04 AS builder
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y \
         cargo \
-        clang-15 \
         cmake \
         g++ \
         git \
         libz3-dev \
-        llvm-15-dev \
-        llvm-15-tools \
         ninja-build \
         python3-pip \
         zlib1g-dev \
+        wget \
+        lsb-release \
+        software-properties-common \
+        gnupg \
+        libzstd-dev \
     && rm -rf /var/lib/apt/lists/*
 RUN pip3 install lit
+
+# Install LLVM
+RUN mkdir /llvm
+WORKDIR /llvm
+RUN wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh && ./llvm.sh 15
+
+WORKDIR /
 
 # Build AFL.
 RUN git clone -b v2.56b https://github.com/google/AFL.git afl \
@@ -48,11 +57,7 @@ COPY . /symcc_source
 
 # Init submodules if they are not initialiazed yet
 WORKDIR /symcc_source
-RUN if git submodule status | grep "^-">/dev/null ; then \
-    echo "Initializing submodules"; \
-    git submodule init; \
-    git submodule update; \
-    fi
+RUN git submodule update --init --recursive
 
 
 #
@@ -61,9 +66,10 @@ RUN if git submodule status | grep "^-">/dev/null ; then \
 FROM builder AS builder_simple
 WORKDIR /symcc_build_simple
 RUN cmake -G Ninja \
-        -DQSYM_BACKEND=OFF \
+        -DSYMCC_RT_BACKEND=simple \
         -DCMAKE_BUILD_TYPE=RelWithDebInfo \
         -DZ3_TRUST_SYSTEM_VERSION=on \
+        -DLLVM_VERSION=15 \
         /symcc_source \
     && ninja check
 
@@ -93,9 +99,10 @@ RUN export SYMCC_REGULAR_LIBCXX=yes SYMCC_NO_SYMBOLIC_INPUT=yes \
 FROM builder_libcxx AS builder_qsym
 WORKDIR /symcc_build
 RUN cmake -G Ninja \
-        -DQSYM_BACKEND=ON \
+        -DSYMCC_RT_BACKEND=qsym \
         -DCMAKE_BUILD_TYPE=RelWithDebInfo \
         -DZ3_TRUST_SYSTEM_VERSION=on \
+        -DLLVM_VERSION=15 \
         /symcc_source \
     && ninja check \
     && cargo install --path /symcc_source/util/symcc_fuzzing_helper
@@ -109,9 +116,7 @@ FROM ubuntu:22.04
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y \
         build-essential \
-        clang-15 \
         g++ \
-        libllvm15 \
         zlib1g \
         sudo \
     && rm -rf /var/lib/apt/lists/* \
