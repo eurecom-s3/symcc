@@ -15,7 +15,7 @@
 cmake_minimum_required(VERSION 3.16)
 project(Symcc)
 
-set(LLVM_VERSION 17 CACHE STRING "LLVM version to use. The corresponding LLVM dev package must be installed.")
+set(LLVM_VERSION "" CACHE STRING "LLVM version to use. The corresponding LLVM dev package must be installed.")
 set(SYMCC_RT_BACKEND "qsym" CACHE STRING "The symbolic backend to use. Please check symcc-rt to get a list of the available backends.")
 option(TARGET_32BIT "Make the compiler work correctly with -m32" OFF)
 
@@ -23,6 +23,17 @@ option(TARGET_32BIT "Make the compiler work correctly with -m32" OFF)
 # doesn't allow us to build it twice with different options (one 32-bit version
 # and one 64-bit variant).
 include(ExternalProject)
+
+# Find LLVM
+find_package(LLVM ${LLVM_VERSION} REQUIRED CONFIG)
+
+message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+message(STATUS "Using LLVMConfig.cmake from ${LLVM_DIR}")
+
+if (${LLVM_VERSION_MAJOR} LESS 8 OR ${LLVM_VERSION_MAJOR} GREATER 17)
+  message(WARNING "The software has been developed for LLVM 8 through 17; \
+it is unlikely to work with other versions!")
+endif()
 
 set(SYM_RUNTIME_BUILD_ARGS
   -DCMAKE_AR=${CMAKE_AR}
@@ -42,7 +53,7 @@ set(SYM_RUNTIME_BUILD_ARGS
   -DCMAKE_MODULE_PATH=${CMAKE_MODULE_PATH}
   -DCMAKE_SYSROOT=${CMAKE_SYSROOT}
   -DSYMCC_RT_BACKEND=${SYMCC_RT_BACKEND}
-  -DLLVM_VERSION=${LLVM_VERSION}
+  -DLLVM_VERSION=${LLVM_PACKAGE_VERSION}
   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
   -DZ3_TRUST_SYSTEM_VERSION=${Z3_TRUST_SYSTEM_VERSION})
 
@@ -73,20 +84,6 @@ if (${TARGET_32BIT})
 
   ExternalProject_Get_Property(SymccRuntime32 BINARY_DIR)
   set(SYMCC_RUNTIME_32BIT_DIR ${BINARY_DIR})
-endif()
-
-find_package(LLVM QUIET ${LLVM_VERSION} REQUIRED CONFIG)
-if (NOT LLVM_FOUND)
-  message(FATAL_ERROR "LLVM Version ${LLVM_VERSION} not found.\
-Please set LLVM_VERSION to an available version or install LLVM ${LLVM_VERSION} dev package")
-endif()
-
-message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
-message(STATUS "Using LLVMConfig.cmake from ${LLVM_DIR}")
-
-if (${LLVM_VERSION_MAJOR} LESS 8 OR ${LLVM_VERSION_MAJOR} GREATER 17)
-  message(WARNING "The software has been developed for LLVM 8 through 17; \
-it is unlikely to work with other versions!")
 endif()
 
 add_definitions(${LLVM_DEFINITIONS})

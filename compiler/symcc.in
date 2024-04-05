@@ -44,5 +44,4 @@ exec "$compiler"                                \
      -L"$runtime_dir"                           \
      -lsymcc-rt                                 \
      -Wl,-rpath,"$runtime_dir"                  \
-     -lstdc++                                   \
      -Qunused-arguments

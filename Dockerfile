@@ -28,18 +28,10 @@ RUN apt-get update \
         ninja-build \
         python3-pip \
         zlib1g-dev \
-        wget \
-        lsb-release \
-        software-properties-common \
-        gnupg \
-        libzstd-dev \
+        llvm-15 \
+        clang-15 \
     && rm -rf /var/lib/apt/lists/*
 RUN pip3 install lit
-
-# Install LLVM
-RUN mkdir /llvm
-WORKDIR /llvm
-RUN wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh && ./llvm.sh 15
 
 WORKDIR /
 
@@ -69,7 +61,6 @@ RUN cmake -G Ninja \
         -DSYMCC_RT_BACKEND=simple \
         -DCMAKE_BUILD_TYPE=RelWithDebInfo \
         -DZ3_TRUST_SYSTEM_VERSION=on \
-        -DLLVM_VERSION=15 \
         /symcc_source \
     && ninja check
 
@@ -102,7 +93,6 @@ RUN cmake -G Ninja \
         -DSYMCC_RT_BACKEND=qsym \
         -DCMAKE_BUILD_TYPE=RelWithDebInfo \
         -DZ3_TRUST_SYSTEM_VERSION=on \
-        -DLLVM_VERSION=15 \
         /symcc_source \
     && ninja check \
     && cargo install --path /symcc_source/util/symcc_fuzzing_helper
