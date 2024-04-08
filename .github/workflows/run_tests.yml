@@ -61,11 +61,12 @@ jobs:
             ..
           make
 
-  # 1- only push to DockerHub from the master/main branch and from original repository
-  # Although you can remove the if statements to test on a fork if needed.
-  # 2- I figure we should only push if all other tests pass
+  # 1- This is all open source anyway, so I figure anyone working on this should maybe create a DockerHub account
+  # and create secrets to store their username and password to test uploading their changes to symcc.
+  # Also, deleting the old workflow, as if I kept it, this would build the Docker image twice.
+  # 2- We should only build and push to DockerHub if this passes all tests
   upload_dockerhub:
-    if: github.repository == 'eurecom-s3/symcc' && github.ref == 'refs/heads/master'
+    # if: github.repository == 'eurecom-s3/symcc' && github.ref == 'refs/heads/master'
     needs: [ llvm_compatibility, llvm_compatibility_latest_llvm ]
     runs-on: ubuntu-latest
     steps:
