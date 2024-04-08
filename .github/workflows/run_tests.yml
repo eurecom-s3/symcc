@@ -1,21 +1,6 @@
 name: Compile and test SymCC
 on: [pull_request, workflow_dispatch]
 jobs:
-  build_and_test_symcc:
-    runs-on: ubuntu-20.04
-    steps:
-      - uses: actions/checkout@v2
-      - name: Setup docker compilation environment
-        run: docker build --target builder  -t symcc .
-      - name: Build and test SymCC with simple backend
-        run: docker build --target builder_simple  -t symcc .
-      - name: Build libcxx using SymCC simple backend
-        run: docker build --target builder_libcxx  -t symcc .
-      - name: Build and test SymCC with Qsym backend
-        run: docker build --target builder_qsym  -t symcc .
-      - name: Creation of the final SymCC docker image with Qsym backend and libcxx
-        run: docker build  -t symcc .
-
   llvm_compatibility:
     runs-on: ubuntu-22.04
     strategy:
@@ -76,11 +61,12 @@ jobs:
             ..
           make
 
-  # 1- only push to DockerHub from the master/main branch
+  # 1- only push to DockerHub from the master/main branch and from original repository
+  # Although you can remove the if statements to test on a fork if needed.
   # 2- I figure we should only push if all other tests pass
   upload_dockerhub:
-    if: github.ref == 'refs/heads/master'
-    needs: [ build_and_test_symcc, llvm_compatibility, llvm_compatibility_latest_llvm]
+    if: github.repository == 'eurecom-s3/symcc' && github.ref == 'refs/heads/master'
+    needs: [ llvm_compatibility, llvm_compatibility_latest_llvm ]
     runs-on: ubuntu-latest
     steps:
     - name: Checkout project sources
