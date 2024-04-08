@@ -157,6 +157,12 @@ $ docker build -t symcc .
 $ docker run -it --rm symcc
 ```
 
+Alternatively, you can pull from docker hub
+```
+$ docker pull eurecoms3/symcc
+$ docker run -it --rm symcc
+```
+
 This will build a Docker image and run an ephemeral container to try out SymCC.
 Inside the container, `symcc` is available as a drop-in replacement for `clang`,
 using the QSYM backend; similarly, `sym++` can be used instead of `clang++`. Now
