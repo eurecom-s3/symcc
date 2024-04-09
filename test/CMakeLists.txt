@@ -35,7 +35,7 @@ add_custom_target(check
   COMMENT "Testing the system..."
   USES_TERMINAL)
 
-add_dependencies(check SymccRuntime Symcc)
-if (TARGET SymccRuntime32)
-  add_dependencies(check SymccRuntime32 Symcc)
+add_dependencies(check SymCCRuntime SymCC)
+if (TARGET SymCCRuntime32)
+  add_dependencies(check SymCCRuntime32 SymCC)
 endif()
