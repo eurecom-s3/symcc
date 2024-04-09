@@ -13,7 +13,7 @@
 # SymCC. If not, see <https://www.gnu.org/licenses/>.
 
 cmake_minimum_required(VERSION 3.16)
-project(Symcc)
+project(SymCC)
 
 set(LLVM_VERSION "" CACHE STRING "LLVM version to use. The corresponding LLVM dev package must be installed.")
 set(SYMCC_RT_BACKEND "qsym" CACHE STRING "The symbolic backend to use. Please check symcc-rt to get a list of the available backends.")
@@ -57,7 +57,7 @@ set(SYM_RUNTIME_BUILD_ARGS
   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
   -DZ3_TRUST_SYSTEM_VERSION=${Z3_TRUST_SYSTEM_VERSION})
 
-ExternalProject_Add(SymccRuntime
+ExternalProject_Add(SymCCRuntime
   SOURCE_DIR ${CMAKE_SOURCE_DIR}/runtime
   CMAKE_ARGS
   ${SYM_RUNTIME_BUILD_ARGS}
@@ -67,11 +67,11 @@ ExternalProject_Add(SymccRuntime
   INSTALL_COMMAND ""
   BUILD_ALWAYS TRUE)
 
-ExternalProject_Get_Property(SymccRuntime BINARY_DIR)
+ExternalProject_Get_Property(SymCCRuntime BINARY_DIR)
 set(SYMCC_RUNTIME_DIR ${BINARY_DIR})
 
 if (${TARGET_32BIT})
-  ExternalProject_Add(SymccRuntime32
+  ExternalProject_Add(SymCCRuntime32
     SOURCE_DIR ${CMAKE_SOURCE_DIR}/runtime
     CMAKE_ARGS
     ${SYM_RUNTIME_BUILD_ARGS}
@@ -82,7 +82,7 @@ if (${TARGET_32BIT})
     INSTALL_COMMAND ""
     BUILD_ALWAYS TRUE)
 
-  ExternalProject_Get_Property(SymccRuntime32 BINARY_DIR)
+  ExternalProject_Get_Property(SymCCRuntime32 BINARY_DIR)
   set(SYMCC_RUNTIME_32BIT_DIR ${BINARY_DIR})
 endif()
 
@@ -101,15 +101,15 @@ set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,-z,nodelete")
 # This is the compiler pass that we later load into clang or opt. If LLVM is
 # built without RTTI we have to disable it for our library too, otherwise we'll
 # get linker errors.
-add_library(Symcc MODULE
+add_library(SymCC MODULE
   compiler/Symbolizer.cpp
   compiler/Pass.cpp
   compiler/Runtime.cpp
   compiler/Main.cpp)
 
-set_target_properties(Symcc PROPERTIES OUTPUT_NAME "symcc")
+set_target_properties(SymCC PROPERTIES OUTPUT_NAME "symcc")
 if (NOT LLVM_ENABLE_RTTI)
-  set_target_properties(Symcc PROPERTIES COMPILE_FLAGS "-fno-rtti")
+  set_target_properties(SymCC PROPERTIES COMPILE_FLAGS "-fno-rtti")
 endif()
 
 find_program(CLANG_BINARY "clang"
