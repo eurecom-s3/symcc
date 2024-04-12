@@ -37,7 +37,7 @@ SymFnT import(llvm::Module &M, llvm::StringRef name, llvm::Type *ret,
 Runtime::Runtime(Module &M) {
   IRBuilder<> IRB(M.getContext());
   auto *intPtrType = M.getDataLayout().getIntPtrType(M.getContext());
-  auto *ptrT = IRB.getInt8PtrTy();
+  auto *ptrT = IRB.getInt8Ty()->getPointerTo();
   auto *int8T = IRB.getInt8Ty();
   auto *int1T = IRB.getInt1Ty();
   auto *voidT = IRB.getVoidTy();
