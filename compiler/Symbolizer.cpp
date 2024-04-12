@@ -89,7 +89,8 @@ void Symbolizer::shortCircuitExpressionUses() {
 
     // Build the check whether any input expression is non-null (i.e., there
     // is a symbolic input).
-    auto *nullExpression = ConstantPointerNull::get(IRB.getInt8Ty()->getPointerTo());
+    auto *nullExpression =
+        ConstantPointerNull::get(IRB.getInt8Ty()->getPointerTo());
     std::vector<Value *> nullChecks;
     for (const auto &input : symbolicComputation.inputs) {
       nullChecks.push_back(
@@ -167,8 +168,8 @@ void Symbolizer::shortCircuitExpressionUses() {
       IRB.SetInsertPoint(&tail->front());
       auto *finalExpression = IRB.CreatePHI(IRB.getInt8Ty()->getPointerTo(), 2);
       symbolicComputation.lastInstruction->replaceAllUsesWith(finalExpression);
-      finalExpression->addIncoming(ConstantPointerNull::get(IRB.getInt8Ty()->getPointerTo()),
-                                   head);
+      finalExpression->addIncoming(
+          ConstantPointerNull::get(IRB.getInt8Ty()->getPointerTo()), head);
       finalExpression->addIncoming(
           symbolicComputation.lastInstruction,
           symbolicComputation.lastInstruction->getParent());
@@ -826,11 +827,13 @@ void Symbolizer::visitPHINode(PHINode &I) {
 
   IRBuilder<> IRB(&I);
   unsigned numIncomingValues = I.getNumIncomingValues();
-  auto *exprPHI = IRB.CreatePHI(IRB.getInt8Ty()->getPointerTo(), numIncomingValues);
+  auto *exprPHI =
+      IRB.CreatePHI(IRB.getInt8Ty()->getPointerTo(), numIncomingValues);
   for (unsigned incoming = 0; incoming < numIncomingValues; incoming++) {
     exprPHI->addIncoming(
         // The null pointer will be replaced in finalizePHINodes.
-        ConstantPointerNull::get(cast<PointerType>(IRB.getInt8Ty()->getPointerTo())),
+        ConstantPointerNull::get(
+            cast<PointerType>(IRB.getInt8Ty()->getPointerTo())),
         I.getIncomingBlock(incoming));
   }
 
