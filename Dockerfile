@@ -29,7 +29,6 @@ RUN apt-get update \
         llvm-15-dev \
         llvm-15-tools \
         ninja-build \
-        python2 \
         python3-pip \
         zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*

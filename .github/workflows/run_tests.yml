@@ -30,7 +30,6 @@ jobs:
           sudo apt-get install -y \
             llvm-${{ matrix.llvm_version }}-dev \
             libz3-dev \
-            python2
       - name: Build SymCC with the QSYM backend
         run: |
           mkdir build
@@ -46,7 +45,7 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        llvm_version: [16, 17]
+        llvm_version: [16, 17, 18]
     steps:
       - uses: actions/checkout@v3
         with:
@@ -64,7 +63,6 @@ jobs:
           sudo apt-get install -y \
             llvm-${{ matrix.llvm_version }}-dev \
             libz3-dev \
-            python2
       - name: Build SymCC with the QSYM backend
         run: |
           mkdir build

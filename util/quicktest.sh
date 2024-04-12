@@ -19,7 +19,7 @@ sudo apt-get update
 sudo apt-get upgrade -y
 
 # install requirements
-sudo apt-get install -y git cargo clang-10 cmake g++ git libz3-dev llvm-10-dev llvm-10-tools ninja-build python2 python3-pip zlib1g-dev
+sudo apt-get install -y git cargo clang-10 cmake g++ git libz3-dev llvm-10-dev llvm-10-tools ninja-build python3-pip zlib1g-dev
 sudo pip3 install lit
 
 # Clone project 

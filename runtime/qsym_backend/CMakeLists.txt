@@ -17,24 +17,6 @@
 
 set(QSYM_SOURCE_DIR "qsym/qsym/pintool")
 
-add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/expr__gen.cpp
-  COMMAND python2 gen_expr.py ${CMAKE_CURRENT_BINARY_DIR}
-  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${QSYM_SOURCE_DIR}/codegen
-  COMMENT "Generating Qsym's expr__gen.cpp"
-  VERBATIM
-  DEPENDS
-  ${QSYM_SOURCE_DIR}/codegen/expr.cpp
-  ${QSYM_SOURCE_DIR}/codegen/gen_expr.py)
-
-add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/expr_builder__gen.cpp
-  COMMAND python2 gen_expr_builder.py ${CMAKE_CURRENT_BINARY_DIR}
-  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${QSYM_SOURCE_DIR}/codegen
-  COMMENT "Generating Qsym's expr__gen.cpp"
-  VERBATIM
-  DEPENDS
-  ${QSYM_SOURCE_DIR}/codegen/expr_builder.cpp
-  ${QSYM_SOURCE_DIR}/codegen/gen_expr_builder.py)
-
 find_package(LLVM REQUIRED CONFIG)
 add_definitions(${LLVM_DEFINITIONS})
 include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
@@ -57,8 +39,8 @@ configure CMake with -DZ3_TRUST_SYSTEM_VERSION=on (see also docs/Configuration.t
 endif()
 
 add_library(SymRuntime SHARED
-  ${CMAKE_CURRENT_BINARY_DIR}/expr__gen.cpp
-  ${CMAKE_CURRENT_BINARY_DIR}/expr_builder__gen.cpp
+  ${QSYM_SOURCE_DIR}/expr.cpp
+  ${QSYM_SOURCE_DIR}/expr_builder.cpp
   ${QSYM_SOURCE_DIR}/expr_cache.cpp
   ${QSYM_SOURCE_DIR}/expr_evaluate.cpp
   ${QSYM_SOURCE_DIR}/solver.cpp
