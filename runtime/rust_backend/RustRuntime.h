@@ -39,6 +39,7 @@ typedef uintptr_t RSymExpr;
  */
 RSymExpr _rsym_build_integer(uint64_t value, uint8_t bits);
 RSymExpr _rsym_build_integer128(uint64_t high, uint64_t low);
+RSymExpr _rsym_build_integer_from_buffer(void *buffer, unsigned num_bits);
 RSymExpr _rsym_build_float(double value, bool is_double);
 RSymExpr _rsym_build_null_pointer(void);
 RSymExpr _rsym_build_true(void);
