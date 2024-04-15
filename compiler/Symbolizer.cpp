@@ -89,7 +89,8 @@ void Symbolizer::shortCircuitExpressionUses() {
 
     // Build the check whether any input expression is non-null (i.e., there
     // is a symbolic input).
-    auto *nullExpression = ConstantPointerNull::get(IRB.getInt8PtrTy());
+    auto *nullExpression =
+        ConstantPointerNull::get(IRB.getInt8Ty()->getPointerTo());
     std::vector<Value *> nullChecks;
     for (const auto &input : symbolicComputation.inputs) {
       nullChecks.push_back(
@@ -149,7 +150,7 @@ void Symbolizer::shortCircuitExpressionUses() {
       Value *finalArgExpression;
       if (needRuntimeCheck) {
         IRB.SetInsertPoint(symbolicComputation.firstInstruction);
-        auto *argPHI = IRB.CreatePHI(IRB.getInt8PtrTy(), 2);
+        auto *argPHI = IRB.CreatePHI(IRB.getInt8Ty()->getPointerTo(), 2);
         argPHI->addIncoming(originalArgExpression, argCheckBlock);
         argPHI->addIncoming(newArgExpression, newArgExpression->getParent());
         finalArgExpression = argPHI;
@@ -165,10 +166,10 @@ void Symbolizer::shortCircuitExpressionUses() {
     // if short-circuiting wasn't possible.
     if (!symbolicComputation.lastInstruction->use_empty()) {
       IRB.SetInsertPoint(&tail->front());
-      auto *finalExpression = IRB.CreatePHI(IRB.getInt8PtrTy(), 2);
+      auto *finalExpression = IRB.CreatePHI(IRB.getInt8Ty()->getPointerTo(), 2);
       symbolicComputation.lastInstruction->replaceAllUsesWith(finalExpression);
-      finalExpression->addIncoming(ConstantPointerNull::get(IRB.getInt8PtrTy()),
-                                   head);
+      finalExpression->addIncoming(
+          ConstantPointerNull::get(IRB.getInt8Ty()->getPointerTo()), head);
       finalExpression->addIncoming(
           symbolicComputation.lastInstruction,
           symbolicComputation.lastInstruction->getParent());
@@ -384,7 +385,7 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
     // previous function call. (If the function is instrumented, it will just
     // override our null with the real expression.)
     IRB.CreateCall(runtime.setReturnExpression,
-                   ConstantPointerNull::get(IRB.getInt8PtrTy()));
+                   ConstantPointerNull::get(IRB.getInt8Ty()->getPointerTo()));
     IRB.SetInsertPoint(returnPoint);
     symbolicExpressions[&I] = IRB.CreateCall(runtime.getReturnExpression);
   }
@@ -826,11 +827,13 @@ void Symbolizer::visitPHINode(PHINode &I) {
 
   IRBuilder<> IRB(&I);
   unsigned numIncomingValues = I.getNumIncomingValues();
-  auto *exprPHI = IRB.CreatePHI(IRB.getInt8PtrTy(), numIncomingValues);
+  auto *exprPHI =
+      IRB.CreatePHI(IRB.getInt8Ty()->getPointerTo(), numIncomingValues);
   for (unsigned incoming = 0; incoming < numIncomingValues; incoming++) {
     exprPHI->addIncoming(
         // The null pointer will be replaced in finalizePHINodes.
-        ConstantPointerNull::get(cast<PointerType>(IRB.getInt8PtrTy())),
+        ConstantPointerNull::get(
+            cast<PointerType>(IRB.getInt8Ty()->getPointerTo())),
         I.getIncomingBlock(incoming));
   }
 
@@ -909,7 +912,7 @@ void Symbolizer::visitSwitchInst(SwitchInst &I) {
 
   // Build a check whether we have a symbolic condition, to be used later.
   auto *haveSymbolicCondition = IRB.CreateICmpNE(
-      conditionExpr, ConstantPointerNull::get(IRB.getInt8PtrTy()));
+      conditionExpr, ConstantPointerNull::get(IRB.getInt8Ty()->getPointerTo()));
   auto *constraintBlock = SplitBlockAndInsertIfThen(haveSymbolicCondition, &I,
                                                     /* unreachable */ false);
 

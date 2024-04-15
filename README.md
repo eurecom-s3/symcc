@@ -16,7 +16,7 @@ program. The actual computation happens through calls to the support library at
 run time.
 
 To build the pass and the support library, install LLVM (any version between 8
-and 17) and Z3 (version 4.5 or later), as well as a C++ compiler with support
+and 18) and Z3 (version 4.5 or later), as well as a C++ compiler with support
 for C++17. LLVM lit is only needed to run the tests; if it's not packaged with
 your LLVM, you can get it with `pip install lit`.
 
