@@ -19,6 +19,7 @@
 
 #include "Runtime.h"
 #include "GarbageCollection.h"
+#include "Tracer.h"
 
 // C++
 #if __has_include(<filesystem>)
@@ -153,6 +154,10 @@ public:
 EnhancedQsymSolver *g_enhanced_solver;
 
 } // namespace
+
+std::map<SymExpr, qsym::ExprRef> &getAllocatedExpressions() {
+  return allocatedExpressions;
+}
 
 using namespace qsym;
 
@@ -321,6 +326,7 @@ void _sym_push_path_constraint(SymExpr constraint, int taken,
   if (constraint == nullptr)
     return;
 
+  Tracer::tracePathConstraint(constraint, taken != 0);
   g_solver->addJcc(allocatedExpressions.at(constraint), taken != 0, site_id);
 }
 
@@ -449,7 +455,7 @@ bool _sym_feasible(SymExpr expr) {
 //
 
 void _sym_collect_garbage() {
-  if (allocatedExpressions.size() < g_config.garbageCollectionThreshold)
+//  if (allocatedExpressions.size() < g_config.garbageCollectionThreshold)
     return;
 
 #ifdef DEBUG_RUNTIME

@@ -28,6 +28,7 @@ using ExpressionRegion = std::pair<SymExpr *, size_t>;
 /// Add the specified region to the list of places to search for symbolic
 /// expressions.
 void registerExpressionRegion(ExpressionRegion r);
+std::vector<ExpressionRegion>& getExpressionRegions();
 
 /// Return the set of currently reachable symbolic expressions.
 std::set<SymExpr> collectReachableExpressions();
