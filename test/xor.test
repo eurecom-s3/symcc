@@ -1,0 +1,2 @@
+RUN: %symcc %S/xor.c -o %t
+RUN: echo -ne "\x00\x00\x00" | %t 2>&1 | %filecheck %S/xor.c
