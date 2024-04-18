@@ -227,24 +227,35 @@ impl State {
 
         let mut num_interesting = 0u64;
         let mut num_total = 0u64;
+        let mut num_failed = 0u64;
 
         let symcc_result = symcc
             .run(&input, tmp_dir.path().join("output"))
             .context("Failed to run SymCC")?;
         for new_test in symcc_result.test_cases.iter() {
-            let res = process_new_testcase(&new_test, &input, &tmp_dir, &afl_config, self)?;
+            let res = process_new_testcase(&new_test, &input, &tmp_dir, &afl_config, self);
 
             num_total += 1;
-            if res == TestcaseResult::New {
-                log::debug!("Test case is interesting");
-                num_interesting += 1;
-            }
+
+            match res {
+                Err(e) => {
+                    log::error!("Showmap failed with {}", e);
+                    num_failed += 1;
+                }
+                Ok(o) => {
+                    if o == TestcaseResult::New {
+                        log::debug!("Test case is interesting");
+                        num_interesting += 1;
+                    }
+                }
+            };
         }
 
         log::info!(
-            "Generated {} test cases ({} new)",
+            "Generated {} test cases ({} new, {} failed)",
             num_total,
-            num_interesting
+            num_interesting,
+            num_failed
         );
 
         if symcc_result.killed {

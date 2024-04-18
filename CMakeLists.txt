@@ -18,6 +18,7 @@ project(SymbolicCompiler)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
 option(QSYM_BACKEND "Use the Qsym backend instead of our own" OFF)
+option(RUST_BACKEND "Build the support code required for a Rust backend as a static archive." OFF)
 option(TARGET_32BIT "Make the compiler work correctly with -m32" OFF)
 
 # We need to build the runtime as an external project because CMake otherwise
@@ -39,6 +40,7 @@ set(SYM_RUNTIME_BUILD_ARGS
   -DCMAKE_MODULE_LINKER_FLAGS=${CMAKE_MODULE_LINKER_FLAGS}
   -DCMAKE_MODULE_LINKER_FLAGS_INIT=${CMAKE_MODULE_LINKER_FLAGS_INIT}
   -DCMAKE_SHARED_LINKER_FLAGS=${CMAKE_SHARED_LINKER_FLAGS}
+  -DRUST_BACKEND=${RUST_BACKEND}
   -DCMAKE_SHARED_LINKER_FLAGS_INIT=${CMAKE_SHARED_LINKER_FLAGS_INIT}
   -DCMAKE_MODULE_PATH=${CMAKE_MODULE_PATH}
   -DCMAKE_SYSROOT=${CMAKE_SYSROOT}

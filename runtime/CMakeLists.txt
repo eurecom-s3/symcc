@@ -23,6 +23,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 \
 -Wmissing-format-attribute -Wformat-nonliteral")
 
 option(QSYM_BACKEND "Use the Qsym backend instead of our own" OFF)
+option(RUST_BACKEND "Build the support code required for a Rust backend as a static archive." OFF)
 option(Z3_TRUST_SYSTEM_VERSION "Use the system-provided Z3 without a version check" OFF)
 
 # Place the final product in the top-level output directory
@@ -36,7 +37,9 @@ set(SHARED_RUNTIME_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/Shadow.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/GarbageCollection.cpp)
 
-if (${QSYM_BACKEND})
+if (${RUST_BACKEND})
+  add_subdirectory(rust_backend)
+elseif (${QSYM_BACKEND})
   add_subdirectory(qsym_backend)
 else()
   add_subdirectory(simple_backend)

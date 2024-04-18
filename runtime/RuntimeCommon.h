@@ -33,10 +33,12 @@
 #define nullable
 
 #ifdef __cplusplus
+#include <cstddef> // for size_t
 #include <cstddef>
 #include <cstdint>
 extern "C" {
 #else
+#include <stddef.h> // for size_t
 #include <stddef.h>
 #include <stdint.h>
 #endif

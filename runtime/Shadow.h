@@ -23,8 +23,6 @@
 
 #include <Runtime.h>
 
-#include <z3.h>
-
 //
 // This file is dedicated to the management of shadow memory.
 //
