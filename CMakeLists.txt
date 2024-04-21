@@ -86,6 +86,16 @@ if (${TARGET_32BIT})
   set(SYMCC_RUNTIME_32BIT_DIR ${BINARY_DIR})
 endif()
 
+find_package(LLVM REQUIRED CONFIG)
+
+message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+message(STATUS "Using LLVMConfig.cmake from ${LLVM_DIR}")
+
+if (${LLVM_VERSION_MAJOR} LESS 8 OR ${LLVM_VERSION_MAJOR} GREATER 18)
+  message(WARNING "The software has been developed for LLVM 8 through 18; \
+it is unlikely to work with other versions!")
+endif()
+
 add_definitions(${LLVM_DEFINITIONS})
 include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
 

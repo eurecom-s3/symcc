@@ -148,7 +148,7 @@ private:
     Input(llvm::Value *concrete, unsigned idx, llvm::Instruction *user)
         : concreteValue(concrete), operandIndex(idx), user(user) {
       assert(getSymbolicOperand()->getType() ==
-             llvm::Type::getInt8PtrTy(user->getContext()));
+             llvm::Type::getInt8Ty(user->getContext())->getPointerTo());
     }
 
     llvm::Value *getSymbolicOperand() const {
@@ -215,7 +215,7 @@ private:
     auto *expr = getSymbolicExpression(V);
     if (expr == nullptr)
       return llvm::ConstantPointerNull::get(
-          llvm::IntegerType::getInt8PtrTy(V->getContext()));
+          llvm::IntegerType::getInt8Ty(V->getContext())->getPointerTo());
     return expr;
   }
 
