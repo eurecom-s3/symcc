@@ -43,7 +43,7 @@ jobs:
             -DQSYM_BACKEND=ON \
             -DLLVM_DIR=/usr/lib/llvm-${{ matrix.llvm_version }}/cmake \
             ..
-          make tests
+          make check
 
   # checking compatibility (compilation only) with more recent packages
   llvm_compatibility_latest_llvm:
@@ -78,4 +78,4 @@ jobs:
             -DQSYM_BACKEND=ON \
             -DLLVM_DIR=/usr/lib/llvm-${{ matrix.llvm_version }}/cmake \
             ..
-          make tests
+          make check
