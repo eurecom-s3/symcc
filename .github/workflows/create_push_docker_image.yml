@@ -15,7 +15,6 @@ jobs:
     # if: github.repository == 'eurecom-s3/symcc' && github.ref == 'refs/heads/master'
     # not when testing
     # if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    needs: [ llvm_compatibility, llvm_compatibility_latest_llvm ]
     runs-on: ubuntu-latest
     steps:
     - name: Checkout project sources
