@@ -1,20 +1,21 @@
 name: Publish SymCC Docker image
 # for testing only
-on: [pull_request, workflow_dispatch]
+#on: [pull_request, workflow_dispatch]
+#
 # we want to push a docker image when the  Compile and test SymCC
 # workflow completed successfully
-# on:
-#   workflow_run:
-#     workflows: [Compile and test SymCC] # Reuse the name of your tests workflow
-#     branches: master
-#     types:
-#       - completed
+on:
+  workflow_run:
+    workflows: [Compile and test SymCC]
+    branches: master
+    types:
+      - completed
 
 jobs:
   upload_dockerhub:
-    # if: github.repository == 'eurecom-s3/symcc' && github.ref == 'refs/heads/master'
+    if: github.repository == 'eurecom-s3/symcc' && github.ref == 'refs/heads/master'
     # not when testing
-    # if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
     -
