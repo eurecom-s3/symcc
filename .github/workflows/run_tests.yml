@@ -32,7 +32,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             llvm-${{ matrix.llvm_version }}-dev \
-            libz3-dev
+            libz3-dev \
+          pip3 install lit
       - name: Build SymCC with the QSYM backend
         run: |
           mkdir build
@@ -68,6 +69,7 @@ jobs:
           sudo apt-get install -y \
             llvm-${{ matrix.llvm_version }}-dev \
             libz3-dev \
+          pip3 install lit
       - name: Build SymCC with the QSYM backend
         run: |
           mkdir build
