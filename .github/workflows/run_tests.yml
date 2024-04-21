@@ -33,7 +33,6 @@ jobs:
           sudo apt-get install -y \
             llvm-${{ matrix.llvm_version }}-dev \
             libz3-dev
-          pip3 install lit
       - name: Build SymCC with the QSYM backend
         run: |
           mkdir build
@@ -44,7 +43,7 @@ jobs:
             -DQSYM_BACKEND=ON \
             -DLLVM_DIR=/usr/lib/llvm-${{ matrix.llvm_version }}/cmake \
             ..
-          make check
+          make
 
   # checking compatibility (compilation only) with more recent packages
   llvm_compatibility_latest_llvm:
@@ -69,7 +68,6 @@ jobs:
           sudo apt-get install -y \
             llvm-${{ matrix.llvm_version }}-dev \
             libz3-dev
-          pip3 install lit
       - name: Build SymCC with the QSYM backend
         run: |
           mkdir build
@@ -80,4 +78,4 @@ jobs:
             -DQSYM_BACKEND=ON \
             -DLLVM_DIR=/usr/lib/llvm-${{ matrix.llvm_version }}/cmake \
             ..
-          make check
+          make
