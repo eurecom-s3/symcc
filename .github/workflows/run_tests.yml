@@ -15,6 +15,7 @@ jobs:
       - name: Build and test SymCC with Qsym backend
         run: docker build --target builder_qsym  -t symcc .
       - name: Creation of the final SymCC docker image with Qsym backend and libcxx
+        run: docker build  -t symcc .
 
   # checking compatibility with ubuntu llvm packages
   llvm_compatibility:
