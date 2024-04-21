@@ -1,6 +1,22 @@
 name: Compile and test SymCC
 on: [pull_request, workflow_dispatch]
 jobs:
+  # Building and running the tests with Dockerfile
+  build_and_test_symcc:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup docker compilation environment
+        run: docker build --target builder  -t symcc .
+      - name: Build and test SymCC with simple backend
+        run: docker build --target builder_simple  -t symcc .
+      - name: Build libcxx using SymCC simple backend
+        run: docker build --target builder_libcxx  -t symcc .
+      - name: Build and test SymCC with Qsym backend
+        run: docker build --target builder_qsym  -t symcc .
+      - name: Creation of the final SymCC docker image with Qsym backend and libcxx
+
+  # checking compatibility with ubuntu llvm packages
   llvm_compatibility:
     runs-on: ubuntu-22.04
     strategy:
@@ -15,7 +31,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             llvm-${{ matrix.llvm_version }}-dev \
-            libz3-dev \
+            libz3-dev
       - name: Build SymCC with the QSYM backend
         run: |
           mkdir build
@@ -26,7 +42,9 @@ jobs:
             -DQSYM_BACKEND=ON \
             -DLLVM_DIR=/usr/lib/llvm-${{ matrix.llvm_version }}/cmake \
             ..
-          make
+          make tests
+
+  # checking compatibility (compilation only) with more recent packages
   llvm_compatibility_latest_llvm:
     runs-on: ubuntu-22.04
     strategy:
@@ -59,33 +77,4 @@ jobs:
             -DQSYM_BACKEND=ON \
             -DLLVM_DIR=/usr/lib/llvm-${{ matrix.llvm_version }}/cmake \
             ..
-          make
-
-  # 1- This is all open source anyway, so I figure anyone working on this should maybe create a DockerHub account
-  # and create secrets to store their username and password to test uploading their changes to symcc.
-  # Also, deleting the old workflow, as if I kept it, this would build the Docker image twice.
-  # 2- We should only build and push to DockerHub if this passes all tests
-  upload_dockerhub:
-    # if: github.repository == 'eurecom-s3/symcc' && github.ref == 'refs/heads/master'
-    needs: [ llvm_compatibility, llvm_compatibility_latest_llvm ]
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout project sources
-      uses: actions/checkout@v4
-
-    - name: Login to Docker Hub
-      uses: docker/login-action@v3
-      with:
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
-
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-
-    - name: Build and push
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: ./Dockerfile
-        push: true
-        tags: ${{ secrets.DOCKER_USERNAME }}/symcc:latest
+          make tests
