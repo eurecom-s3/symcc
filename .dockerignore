@@ -12,3 +12,7 @@ compile_commands.json
 
 # The Dockerfile itself doesn't need to be copied
 Dockerfile
+
+# Do not include build directories
+build/
+cmake-*

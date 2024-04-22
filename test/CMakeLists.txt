@@ -12,10 +12,12 @@
 # You should have received a copy of the GNU General Public License along with
 # SymCC. If not, see <https://www.gnu.org/licenses/>.
 
-if (QSYM_BACKEND)
+if (SYMCC_RT_BACKEND STREQUAL "qsym")
   set(SYM_TEST_FILECHECK_ARGS "--check-prefix=QSYM --check-prefix=ANY")
-else()
+elseif (SYMCC_RT_BACKEND STREQUAL "simple")
   set(SYM_TEST_FILECHECK_ARGS "--check-prefix=SIMPLE --check-prefix=ANY")
+else()
+  message(FATAL_ERROR "Unknown backend to test: ${SYMCC_RT_BACKEND}")
 endif()
 
 if (${LLVM_VERSION_MAJOR} VERSION_GREATER_EQUAL 14)
@@ -35,7 +37,7 @@ add_custom_target(check
   COMMENT "Testing the system..."
   USES_TERMINAL)
 
-add_dependencies(check SymRuntime Symbolize)
-if (TARGET SymRuntime32)
-  add_dependencies(check SymRuntime32)
+add_dependencies(check SymCCRuntime SymCC)
+if (TARGET SymCCRuntime32)
+  add_dependencies(check SymCCRuntime32 SymCC)
 endif()

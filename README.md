@@ -20,7 +20,7 @@ and 18) and Z3 (version 4.5 or later), as well as a C++ compiler with support
 for C++17. LLVM lit is only needed to run the tests; if it's not packaged with
 your LLVM, you can get it with `pip install lit`.
 
-Under Ubuntu Groovy the following one liner should install all required
+Under Ubuntu Groovy the following one-liner should install all required
 packages:
 
 ```
@@ -31,11 +31,10 @@ Alternatively, see below for using the provided Dockerfile, or the file
 `util/quicktest.sh` for exact steps to perform under Ubuntu (or use with the
 provided Vagrant file).
 
-Make sure to pull the QSYM code:
+Make sure to pull the SymCC Runtime:
 
 ```
-$ git submodule init
-$ git submodule update
+$ git submodule update --init --recursive
 ```
 
 Note that it is not necessary or recommended to build the QSYM submodule - our
@@ -46,7 +45,7 @@ Create a build directory somewhere, and execute the following commands inside
 it:
 
 ```
-$ cmake -G Ninja -DQSYM_BACKEND=ON /path/to/compiler/sources
+$ cmake -G Ninja -DSYMCC_RT_BACKEND=qsym /path/to/compiler/sources
 $ ninja check
 ```
 
@@ -153,8 +152,6 @@ Docker image enables optional C++ support from source, so creating the image can
 take quite some time!)
 
 ```
-$ git submodule init
-$ git submodule update
 $ docker build -t symcc .
 $ docker run -it --rm symcc
 ```
@@ -196,8 +193,8 @@ many cases it is sufficient to let the build system figure out what to rebuild
 
 ### Why is SymCC only exploring one path and not all paths?
 
-SymCC is currently a concolic executor it follows the concrete
-path. In theory, it would be possible to make it a forking executor
+SymCC is currently a concolic executor. As such, it follows the concrete
+path. In theory, it would be possible to make it a forking executor -
 see [issue #14](https://github.com/eurecom-s3/symcc/issues/14)
 
 ### Why does SymCC not generate some test cases?
@@ -291,11 +288,6 @@ SymCC is free software: you can redistribute it and/or modify it under the terms
 of the GNU General Public License as published by the Free Software Foundation,
 either version 3 of the License, or (at your option) any later version.
 
-As an exception from the above, you can redistribute and/or modify the SymCC
-runtime under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation, either version 3 of the License, or (at your
-option) any later version. See #114 for the rationale.
-
 SymCC is distributed in the hope that it will be useful, but WITHOUT ANY
 WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
 PARTICULAR PURPOSE. See the GNU General Public License for more details.
@@ -309,6 +301,4 @@ licenses, and/or restrictions:
 
 | Program       | Directory                   |
 |---------------|-----------------------------|
-| QSYM          | `runtime/qsym_backend/qsym` |
-| SymCC runtime | `runtime`                   |
-
+| SymCC Runtime | `runtime`                   |

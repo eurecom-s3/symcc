@@ -14,9 +14,9 @@
 # You should have received a copy of the GNU General Public License along with
 # SymCC. If not, see <https://www.gnu.org/licenses/>.
 
-runtime_64bit_dir="${SYMCC_RUNTIME_DIR:-@SYM_RUNTIME_DIR@}"
-runtime_32bit_dir="${SYMCC_RUNTIME32_DIR:-@SYM_RUNTIME_32BIT_DIR@}"
-pass="${SYMCC_PASS_DIR:-@CMAKE_CURRENT_BINARY_DIR@}/libSymbolize.so"
+runtime_64bit_dir="${SYMCC_RUNTIME_DIR:-@SYMCC_RUNTIME_DIR@}"
+runtime_32bit_dir="${SYMCC_RUNTIME32_DIR:-@SYMCC_RUNTIME_32BIT_DIR@}"
+pass="${SYMCC_PASS_DIR:-@CMAKE_CURRENT_BINARY_DIR@}/libsymcc.so"
 compiler="${SYMCC_CLANG:-@CLANG_BINARY@}"
 
 # Find out if we're cross-compiling for a 32-bit architecture
@@ -38,10 +38,10 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
-exec $compiler                                  \
+exec "$compiler"                                \
      @CLANG_LOAD_PASS@"$pass"                   \
      "$@"                                       \
      -L"$runtime_dir"                           \
-     -lSymRuntime                               \
+     -lsymcc-rt                                 \
      -Wl,-rpath,"$runtime_dir"                  \
      -Qunused-arguments

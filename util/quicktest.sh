@@ -27,13 +27,12 @@ git clone https://github.com/eurecom-s3/symcc.git
 cd symcc
 
 # init/update submodules 
-git submodule init
-git submodule update
+git submodule update --init --recursive
 
 #  build
 mkdir ../symcc-build
 cd ../symcc-build
-cmake -G Ninja -DQSYM_BACKEND=ON  -DZ3_TRUST_SYSTEM_VERSION=on ../symcc
+cmake -G Ninja -DSYMCC_RT_BACKEND=qsym  -DZ3_TRUST_SYSTEM_VERSION=on ../symcc
 ninja check
 
 # create a test case 

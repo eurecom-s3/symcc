@@ -1,4 +1,4 @@
-[submodule "qsym_backend/qsym"]
-	path = runtime/qsym_backend/qsym
-	url = https://github.com/eurecom-s3/qsym.git
-	branch = symcc
+[submodule "runtime"]
+	path = runtime
+	url = https://github.com/eurecom-s3/symcc-rt.git
+	branch = main

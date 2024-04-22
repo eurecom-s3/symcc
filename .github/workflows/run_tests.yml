@@ -32,15 +32,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             llvm-${{ matrix.llvm_version }}-dev \
-            libz3-dev
+            libz3-dev \
+            git
+
       - name: Build SymCC with the QSYM backend
         run: |
+          git submodule update --init --recursive runtime
           mkdir build
           cd build
           cmake \
             -DCMAKE_BUILD_TYPE=Release \
             -DZ3_TRUST_SYSTEM_VERSION=ON \
-            -DQSYM_BACKEND=ON \
+            -DSYMCC_RT_BACKEND=qsym \
             -DLLVM_DIR=/usr/lib/llvm-${{ matrix.llvm_version }}/cmake \
             ..
           make
@@ -67,15 +70,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             llvm-${{ matrix.llvm_version }}-dev \
-            libz3-dev
+            libz3-dev \
+            git
       - name: Build SymCC with the QSYM backend
         run: |
+          git submodule update --init --recursive runtime
           mkdir build
           cd build
           cmake \
             -DCMAKE_BUILD_TYPE=Release \
             -DZ3_TRUST_SYSTEM_VERSION=ON \
-            -DQSYM_BACKEND=ON \
+            -DSYMCC_RT_BACKEND=qsym \
             -DLLVM_DIR=/usr/lib/llvm-${{ matrix.llvm_version }}/cmake \
             ..
           make

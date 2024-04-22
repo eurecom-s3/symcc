@@ -12,18 +12,28 @@
 # You should have received a copy of the GNU General Public License along with
 # SymCC. If not, see <https://www.gnu.org/licenses/>.
 
-cmake_minimum_required(VERSION 3.5)
-project(SymbolicCompiler)
+cmake_minimum_required(VERSION 3.16)
+project(SymCC)
 
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
-
-option(QSYM_BACKEND "Use the Qsym backend instead of our own" OFF)
+set(LLVM_VERSION "" CACHE STRING "LLVM version to use. The corresponding LLVM dev package must be installed.")
+set(SYMCC_RT_BACKEND "qsym" CACHE STRING "The symbolic backend to use. Please check symcc-rt to get a list of the available backends.")
 option(TARGET_32BIT "Make the compiler work correctly with -m32" OFF)
 
 # We need to build the runtime as an external project because CMake otherwise
 # doesn't allow us to build it twice with different options (one 32-bit version
 # and one 64-bit variant).
 include(ExternalProject)
+
+# Find LLVM
+find_package(LLVM ${LLVM_VERSION} REQUIRED CONFIG)
+
+message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+message(STATUS "Using LLVMConfig.cmake from ${LLVM_DIR}")
+
+if (${LLVM_VERSION_MAJOR} LESS 8 OR ${LLVM_VERSION_MAJOR} GREATER 17)
+  message(WARNING "The software has been developed for LLVM 8 through 17; \
+it is unlikely to work with other versions!")
+endif()
 
 set(SYM_RUNTIME_BUILD_ARGS
   -DCMAKE_AR=${CMAKE_AR}
@@ -42,11 +52,12 @@ set(SYM_RUNTIME_BUILD_ARGS
   -DCMAKE_SHARED_LINKER_FLAGS_INIT=${CMAKE_SHARED_LINKER_FLAGS_INIT}
   -DCMAKE_MODULE_PATH=${CMAKE_MODULE_PATH}
   -DCMAKE_SYSROOT=${CMAKE_SYSROOT}
-  -DQSYM_BACKEND=${QSYM_BACKEND}
+  -DSYMCC_RT_BACKEND=${SYMCC_RT_BACKEND}
+  -DLLVM_VERSION=${LLVM_PACKAGE_VERSION}
   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
   -DZ3_TRUST_SYSTEM_VERSION=${Z3_TRUST_SYSTEM_VERSION})
 
-ExternalProject_Add(SymRuntime
+ExternalProject_Add(SymCCRuntime
   SOURCE_DIR ${CMAKE_SOURCE_DIR}/runtime
   CMAKE_ARGS
   ${SYM_RUNTIME_BUILD_ARGS}
@@ -56,11 +67,11 @@ ExternalProject_Add(SymRuntime
   INSTALL_COMMAND ""
   BUILD_ALWAYS TRUE)
 
-ExternalProject_Get_Property(SymRuntime BINARY_DIR)
-set(SYM_RUNTIME_DIR ${BINARY_DIR})
+ExternalProject_Get_Property(SymCCRuntime BINARY_DIR)
+set(SYMCC_RUNTIME_DIR ${BINARY_DIR})
 
 if (${TARGET_32BIT})
-  ExternalProject_Add(SymRuntime32
+  ExternalProject_Add(SymCCRuntime32
     SOURCE_DIR ${CMAKE_SOURCE_DIR}/runtime
     CMAKE_ARGS
     ${SYM_RUNTIME_BUILD_ARGS}
@@ -71,8 +82,8 @@ if (${TARGET_32BIT})
     INSTALL_COMMAND ""
     BUILD_ALWAYS TRUE)
 
-  ExternalProject_Get_Property(SymRuntime32 BINARY_DIR)
-  set(SYM_RUNTIME_32BIT_DIR ${BINARY_DIR})
+  ExternalProject_Get_Property(SymCCRuntime32 BINARY_DIR)
+  set(SYMCC_RUNTIME_32BIT_DIR ${BINARY_DIR})
 endif()
 
 find_package(LLVM REQUIRED CONFIG)
@@ -88,7 +99,8 @@ endif()
 add_definitions(${LLVM_DEFINITIONS})
 include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 \
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} \
 -Wredundant-decls -Wcast-align -Wmissing-include-dirs -Wswitch-default \
 -Wextra -Wall -Winvalid-pch -Wredundant-decls -Wformat=2 \
 -Wmissing-format-attribute -Wformat-nonliteral -Werror -Wno-error=deprecated-declarations")
@@ -99,13 +111,15 @@ set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,-z,nodelete")
 # This is the compiler pass that we later load into clang or opt. If LLVM is
 # built without RTTI we have to disable it for our library too, otherwise we'll
 # get linker errors.
-add_library(Symbolize MODULE
+add_library(SymCC MODULE
   compiler/Symbolizer.cpp
   compiler/Pass.cpp
   compiler/Runtime.cpp
   compiler/Main.cpp)
+
+set_target_properties(SymCC PROPERTIES OUTPUT_NAME "symcc")
 if (NOT LLVM_ENABLE_RTTI)
-  set_target_properties(Symbolize PROPERTIES COMPILE_FLAGS "-fno-rtti")
+  set_target_properties(SymCC PROPERTIES COMPILE_FLAGS "-fno-rtti")
 endif()
 
 find_program(CLANG_BINARY "clang"
