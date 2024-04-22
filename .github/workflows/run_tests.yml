@@ -1,6 +1,7 @@
 name: Compile and test SymCC
 on: [pull_request, workflow_dispatch]
 jobs:
+  # Building and running the tests with Dockerfile
   build_and_test_symcc:
     runs-on: ubuntu-20.04
     steps:
@@ -15,13 +16,15 @@ jobs:
         run: docker build --target builder_qsym  -t symcc .
       - name: Creation of the final SymCC docker image with Qsym backend and libcxx
         run: docker build  -t symcc .
+
+  # checking compatibility with ubuntu llvm packages
   llvm_compatibility:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
         llvm_version: [11, 12, 13, 14, 15]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: true
       - name: Install dependencies
@@ -31,6 +34,7 @@ jobs:
             llvm-${{ matrix.llvm_version }}-dev \
             libz3-dev \
             git
+
       - name: Build SymCC with the QSYM backend
         run: |
           git submodule update --init --recursive runtime
@@ -43,13 +47,15 @@ jobs:
             -DLLVM_DIR=/usr/lib/llvm-${{ matrix.llvm_version }}/cmake \
             ..
           make
+
+  # checking compatibility (compilation only) with more recent packages
   llvm_compatibility_latest_llvm:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
         llvm_version: [16, 17, 18]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: true
       - name: Add LLVM project deb repository
