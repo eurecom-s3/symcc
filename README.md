@@ -220,7 +220,7 @@ unsupported libc function is called SymCC can't trace the computations
 that happen in the function.
 
 1. Adding the function to the [collection of wrapped libc
-   functions](https://github.com/eurecom-s3/symcc/blob/master/runtime/LibcWrappers.cpp)
+   functions](https://github.com/eurecom-s3/symcc-rt/blob/main/src/LibcWrappers.cpp)
    and [register the
    wrapper](https://github.com/eurecom-s3/symcc/blob/b29dc4db2803830ebf50798e72b336473a567655/compiler/Runtime.cpp#L159)
    in the compiler.
