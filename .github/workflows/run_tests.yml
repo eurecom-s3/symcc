@@ -3,7 +3,7 @@ on: [pull_request, workflow_dispatch]
 jobs:
   # Building and running the tests with Dockerfile
   build_and_test_symcc:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v2
       - name: Setup docker compilation environment
@@ -19,10 +19,10 @@ jobs:
 
   # checking compatibility with ubuntu llvm packages
   llvm_compatibility:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
-        llvm_version: [11, 12, 13, 14, 15]
+        llvm_version: [15, 16, 17, 18, 19]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,39 +48,42 @@ jobs:
             ..
           make
 
-  # checking compatibility (compilation only) with more recent packages
-  llvm_compatibility_latest_llvm:
-    runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        llvm_version: [16, 17, 18]
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-      - name: Add LLVM project deb repository
-        uses: myci-actions/add-deb-repo@11
-        with:
-          repo: deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-${{ matrix.llvm_version }} main
-          repo-name: llvm
-          update: false
-          keys-asc: https://apt.llvm.org/llvm-snapshot.gpg.key
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            llvm-${{ matrix.llvm_version }}-dev \
-            libz3-dev \
-            git
-      - name: Build SymCC with the QSYM backend
-        run: |
-          git submodule update --init --recursive runtime
-          mkdir build
-          cd build
-          cmake \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DZ3_TRUST_SYSTEM_VERSION=ON \
-            -DSYMCC_RT_BACKEND=qsym \
-            -DLLVM_DIR=/usr/lib/llvm-${{ matrix.llvm_version }}/cmake \
-            ..
-          make
+  # TODO Re-enable the section below when LLVM releases a version that isn't
+  # supported by Ubuntu packages in our runner image.
+
+  # # checking compatibility (compilation only) with more recent packages
+  # llvm_compatibility_latest_llvm:
+  #   runs-on: ubuntu-22.04
+  #   strategy:
+  #     matrix:
+  #       llvm_version: [16, 17, 18]
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         submodules: true
+  #     - name: Add LLVM project deb repository
+  #       uses: myci-actions/add-deb-repo@11
+  #       with:
+  #         repo: deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-${{ matrix.llvm_version }} main
+  #         repo-name: llvm
+  #         update: false
+  #         keys-asc: https://apt.llvm.org/llvm-snapshot.gpg.key
+  #     - name: Install dependencies
+  #       run: |
+  #         sudo apt-get update
+  #         sudo apt-get install -y \
+  #           llvm-${{ matrix.llvm_version }}-dev \
+  #           libz3-dev \
+  #           git
+  #     - name: Build SymCC with the QSYM backend
+  #       run: |
+  #         git submodule update --init --recursive runtime
+  #         mkdir build
+  #         cd build
+  #         cmake \
+  #           -DCMAKE_BUILD_TYPE=Release \
+  #           -DZ3_TRUST_SYSTEM_VERSION=ON \
+  #           -DSYMCC_RT_BACKEND=qsym \
+  #           -DLLVM_DIR=/usr/lib/llvm-${{ matrix.llvm_version }}/cmake \
+  #           ..
+  #         make
