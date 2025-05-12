@@ -85,7 +85,6 @@ bool canLower(const CallInst *CI) {
   case Intrinsic::pcmarker:
   case Intrinsic::dbg_declare:
   case Intrinsic::dbg_label:
-  case Intrinsic::eh_typeid_for:
   case Intrinsic::annotation:
   case Intrinsic::ptr_annotation:
   case Intrinsic::assume:
