@@ -338,6 +338,9 @@ void Symbolizer::handleIntrinsicCall(CallBase &I) {
     break;
   }
 #endif
+  case Intrinsic::eh_typeid_for:
+    // This intrinsic returns a constant for our purposes.
+    break;
   default:
     errs() << "Warning: unhandled LLVM intrinsic " << callee->getName()
            << "; the result will be concretized\n";
