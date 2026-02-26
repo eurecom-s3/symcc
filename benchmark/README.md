@@ -1,0 +1,187 @@
+# SymCC MPI Parallelization Benchmark
+
+Benchmark framework for measuring SymCC's MPI-based parallel concolic execution performance.
+
+## Quick Start
+
+```bash
+# 1. Run with built-in targets (simulation mode, no SymCC required)
+python3 benchmark/run_benchmark.py --simulation --np-list 1,2,4,8 --rounds 3
+
+# 2. Run with SymCC (requires SymCC to be built)
+python3 benchmark/run_benchmark.py --np-list 1,2,4,8 --rounds 3 --timeout 120
+```
+
+## Directory Structure
+
+```
+benchmark/
+├── run_benchmark.py              # Main benchmark runner
+├── generate_seeds.py             # Seed input generator
+├── setup_public_benchmarks.sh    # Download public benchmark suites
+├── compile_public_benchmarks.sh  # Compile public benchmark targets
+├── targets/                      # Built-in benchmark C programs
+│   ├── maze.c                    #   Maze solver (exponential branching)
+│   ├── parser.c                  #   Protocol parser (nested conditions)
+│   ├── deep_branches.c           #   Deep branch chains
+│   └── crypto_check.c            #   Crypto-like comparisons
+├── seeds/                        # Pre-generated seed inputs
+└── public/                       # Public benchmark suites (downloaded at runtime)
+    ├── .gitignore
+    ├── lava/                     #   LAVA target programs (file, jq, grep, etc.)
+    ├── cb-multios/               #   CGC challenge binaries (243 programs)
+    └── fuzzer-test-suite/        #   Google fuzzer test suite (24 targets)
+```
+
+## Built-in Targets
+
+Four C programs designed to exercise different aspects of concolic execution:
+
+| Target | Input Size | Description |
+|--------|-----------|-------------|
+| `maze` | 16 bytes | Maze solver with exponential branching paths |
+| `parser` | 32 bytes | Binary protocol parser with nested conditionals |
+| `deep_branches` | 8 bytes | Deep chains of dependent branches |
+| `crypto_check` | 16 bytes | Byte-by-byte comparisons (crypto-like checks) |
+
+Each target reads from a file (passed as `@@` argument) or stdin.
+
+## run_benchmark.py
+
+Main benchmark script. Compiles targets, runs serial and MPI-parallel concolic
+execution, and produces reports comparing throughput at different process counts.
+
+### Options
+
+```
+--symcc PATH       Path to SymCC compiler (auto-detected if omitted)
+--np-list LIST     Comma-separated process counts (default: 1,2,4,8)
+--targets LIST     Comma-separated target names (default: all four)
+--rounds N         Rounds per configuration (default: 3)
+--timeout SEC      Timeout per run in seconds (default: 60)
+--output DIR       Output directory (default: benchmark_results)
+--skip-build       Skip compilation step (reuse existing binaries)
+--simulation       Use gcc instead of SymCC (tests MPI framework only)
+--public [SPECS]   Add public benchmark targets (see below)
+```
+
+### Examples
+
+```bash
+# Basic run with all defaults
+python3 benchmark/run_benchmark.py
+
+# Simulation mode (no SymCC needed, tests MPI framework overhead)
+python3 benchmark/run_benchmark.py --simulation --np-list 1,2,4 --rounds 5
+
+# Only specific targets, longer timeout
+python3 benchmark/run_benchmark.py --targets maze,parser --timeout 300
+
+# With explicit SymCC path
+python3 benchmark/run_benchmark.py --symcc /path/to/symcc --np-list 1,2,4,8,16
+
+# Skip recompilation, reuse previous binaries
+python3 benchmark/run_benchmark.py --skip-build --rounds 10
+```
+
+### Output
+
+Results are written to the output directory (`benchmark_results/` by default):
+
+- `benchmark_report.txt` — Human-readable summary
+- `benchmark_data.csv` — CSV data for plotting
+- `benchmark_data.json` — Full results in JSON format
+
+## Public Benchmark Suites
+
+Real-world programs from well-known fuzzing/symbolic-execution benchmarks.
+
+### Step 1: Download
+
+```bash
+# Download LAVA target programs (file, jq, grep, pcre2, duktape, libyaml, etc.)
+./benchmark/setup_public_benchmarks.sh --lava
+
+# Download LAVA-M corpus (base64, md5sum, uniq, who — with injected bugs)
+./benchmark/setup_public_benchmarks.sh --lava-m
+
+# Download programs from the SymCC USENIX paper (openjpeg, libarchive, tcpdump)
+./benchmark/setup_public_benchmarks.sh --symcc-paper
+
+# Download everything
+./benchmark/setup_public_benchmarks.sh --all
+```
+
+Available suites:
+
+| Flag | Suite | Programs | Source |
+|------|-------|----------|--------|
+| `--lava` | LAVA | file, jq, grep, pcre2, duktape, libyaml, etc. | [panda-re/lava](https://github.com/panda-re/lava) |
+| `--lava-m` | LAVA-M | base64, md5sum, uniq, who (with injected bugs) | [moyix/lava-m-corpus](https://github.com/moyix/lava-m-corpus) |
+| `--symcc-paper` | SymCC paper | openjpeg, libarchive, tcpdump | Various |
+| `--unibench` | UniBench | 20 real-world programs | [unifuzz/unibench](https://github.com/unifuzz/unibench) |
+| `--fuzzbench` | FuzzBench | 47+ OSS-Fuzz targets | [google/fuzzbench](https://github.com/google/fuzzbench) |
+| `--magma` | Magma | 7-9 libraries, 118 real bugs | [HexHive/magma](https://github.com/HexHive/magma) |
+
+You can also manually clone additional repos:
+
+```bash
+cd benchmark/public
+git clone --depth 1 https://github.com/trailofbits/cb-multios.git   # CGC (243 challenges)
+git clone --depth 1 https://github.com/google/fuzzer-test-suite.git  # Google FTS (24 targets)
+```
+
+### Step 2: Compile
+
+```bash
+# Compile with gcc (for MPI framework testing)
+./benchmark/compile_public_benchmarks.sh --all
+
+# Compile with SymCC (for real symbolic execution)
+./benchmark/compile_public_benchmarks.sh --compiler symcc --all
+
+# Only LAVA targets
+./benchmark/compile_public_benchmarks.sh --lava
+```
+
+Compiled binaries go to `benchmark/public/bin/<suite>/`, seeds to `benchmark/public/seeds/<suite>/`.
+
+### Step 3: Run
+
+```bash
+# Auto-discover all compiled public benchmarks
+python3 benchmark/run_benchmark.py --public --simulation
+
+# Mix built-in and public targets
+python3 benchmark/run_benchmark.py --public --targets maze,parser --np-list 1,2,4,8
+
+# Explicit target specification (name:binary:seeddir)
+python3 benchmark/run_benchmark.py \
+  --public 'file:benchmark/public/bin/lava/file:benchmark/public/seeds/lava/file'
+```
+
+When `--public` is used without arguments, the script automatically scans
+`benchmark/public/bin/` for compiled executables and matches them with seed
+directories in `benchmark/public/seeds/`.
+
+## Prerequisites
+
+- **Python 3.6+**
+- **OpenMPI**: `apt install openmpi-bin libopenmpi-dev`
+- **mpi4py**: `pip install mpi4py`
+- **SymCC** (optional): Build from this repo, or use `--simulation` mode
+- **gcc/g++**: For simulation mode or compiling public benchmarks
+- **32-bit support** (for CGC targets): `apt install gcc-multilib lib32z1`
+
+## Simulation Mode
+
+When SymCC is not available (or you want to isolate MPI framework overhead),
+use `--simulation` to compile targets with gcc. This tests:
+
+- MPI coordination overhead
+- Seed distribution efficiency
+- Parallel file I/O performance
+- Process scaling behavior
+
+It does **not** test actual symbolic execution performance, since gcc-compiled
+programs don't generate symbolic constraints.
