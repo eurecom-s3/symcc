@@ -59,6 +59,27 @@ TARGETS = {
 PUBLIC_DIR = SCRIPT_DIR / "public"
 
 
+def _resolve_path(p):
+    """Resolve a path: try absolute, then relative to cwd, then relative to SCRIPT_DIR."""
+    p = str(p)
+    if os.path.isabs(p):
+        return p
+    # Try relative to cwd
+    abs_cwd = os.path.abspath(p)
+    if os.path.exists(abs_cwd):
+        return abs_cwd
+    # Try relative to benchmark/ (SCRIPT_DIR)
+    abs_script = os.path.abspath(os.path.join(str(SCRIPT_DIR), p))
+    if os.path.exists(abs_script):
+        return abs_script
+    # Try relative to project root (SYMCC_ROOT)
+    abs_root = os.path.abspath(os.path.join(str(SYMCC_ROOT), p))
+    if os.path.exists(abs_root):
+        return abs_root
+    # Fall back to cwd-relative (will fail later with a clear error)
+    return abs_cwd
+
+
 def run_cmd(cmd, timeout=300, capture=True):
     """Run a command and return (returncode, stdout, stderr, elapsed)."""
     start = time.monotonic()
@@ -422,10 +443,11 @@ def main():
                         help="Skip compilation step")
     parser.add_argument("--simulation", action="store_true",
                         help="Use gcc instead of SymCC (tests MPI framework only)")
-    parser.add_argument("--public", nargs="*", metavar="BINARY:SEEDDIR",
-                        help="Add public benchmark targets. Format: name:binary_path:seed_dir "
-                             "e.g., 'openjpeg:./opj_decompress:./seeds/openjpeg'. "
-                             "Use @@ in target args. Can specify multiple.")
+    parser.add_argument("--public", nargs="*", metavar="NAME:BINARY:SEEDDIR",
+                        help="Add public benchmark targets. "
+                             "With no args: auto-discover compiled targets in benchmark/public/bin/. "
+                             "With args: name:binary_path:seed_dir "
+                             "e.g., 'file:./benchmark/public/bin/lava/file:./benchmark/public/seeds/lava/file'.")
 
     args = parser.parse_args()
 
@@ -475,19 +497,51 @@ def main():
                     binaries[name] = path
                     break
 
-    # Add public benchmark targets (--public name:binary:seeddir)
+    # Add public benchmark targets (--public [name:binary:seeddir ...])
     public_targets = {}
     public_seed_dirs = {}
-    if args.public:
+    if args.public is not None:
         print("\n  Adding public benchmark targets:")
-        for spec in args.public:
+
+        public_specs = list(args.public)  # explicit specs from CLI
+
+        # If no explicit specs given, auto-discover from benchmark/public/bin/
+        if not public_specs:
+            pub_bin_dir = PUBLIC_DIR / "bin"
+            pub_seed_dir = PUBLIC_DIR / "seeds"
+            if pub_bin_dir.is_dir():
+                for suite_dir in sorted(pub_bin_dir.iterdir()):
+                    if not suite_dir.is_dir():
+                        continue
+                    for binary in sorted(suite_dir.iterdir()):
+                        if binary.is_file() and os.access(str(binary), os.X_OK):
+                            bname = binary.name
+                            seed_candidate = pub_seed_dir / suite_dir.name / bname
+                            if seed_candidate.is_dir():
+                                public_specs.append(
+                                    f"{bname}:{binary}:{seed_candidate}"
+                                )
+                if not public_specs:
+                    print("    No compiled public benchmarks found in:")
+                    print(f"      {pub_bin_dir}/")
+                    print("    Run first: ./compile_public_benchmarks.sh --all")
+            else:
+                print(f"    Public bin directory not found: {pub_bin_dir}")
+                print("    Run first:")
+                print("      ./setup_public_benchmarks.sh --lava")
+                print("      ./compile_public_benchmarks.sh --lava")
+
+        for spec in public_specs:
             parts = spec.split(":")
             if len(parts) != 3:
                 print(f"    WARNING: invalid format '{spec}', expected name:binary:seeddir")
                 continue
             name, binary_path, seed_path = parts
-            binary_path = os.path.abspath(binary_path)
-            seed_path = os.path.abspath(seed_path)
+
+            # Resolve paths: try as-is first, then relative to SCRIPT_DIR
+            binary_path = _resolve_path(binary_path)
+            seed_path = _resolve_path(seed_path)
+
             if not os.path.isfile(binary_path):
                 print(f"    WARNING: binary not found: {binary_path}")
                 continue
