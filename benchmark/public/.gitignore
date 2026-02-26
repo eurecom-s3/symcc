@@ -1,6 +1,7 @@
 # Downloaded benchmark repositories (large, downloaded at runtime)
 cb-multios/
 fuzzer-test-suite/
+lava/
 lava-m/
 unibench/
 symcc-paper/

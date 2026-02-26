@@ -110,14 +110,22 @@ build_cgc() {
 # Real programs with injectable bugs
 ############################################################
 build_lava() {
-    local lava_dir="$PUBLIC_DIR/lava-m/lava"
-    if [ ! -d "$lava_dir" ]; then
-        error "LAVA not found at $lava_dir"
-        error "Run: cd $PUBLIC_DIR/lava-m && git clone --depth 1 https://github.com/panda-re/lava.git"
+    # Support both directory layouts:
+    #   public/lava/          (from: setup_public_benchmarks.sh --lava)
+    #   public/lava-m/lava/   (legacy layout)
+    local lava_dir=""
+    if [ -d "$PUBLIC_DIR/lava/target_bins" ]; then
+        lava_dir="$PUBLIC_DIR/lava"
+    elif [ -d "$PUBLIC_DIR/lava-m/lava/target_bins" ]; then
+        lava_dir="$PUBLIC_DIR/lava-m/lava"
+    else
+        error "LAVA not found. Expected at:"
+        error "  $PUBLIC_DIR/lava/            (run: ./setup_public_benchmarks.sh --lava)"
+        error "  $PUBLIC_DIR/lava-m/lava/     (run: cd $PUBLIC_DIR/lava-m && git clone --depth 1 https://github.com/panda-re/lava.git)"
         return 1
     fi
 
-    info "Building LAVA targets with CC=$CC ..."
+    info "Building LAVA targets from $lava_dir with CC=$CC ..."
     mkdir -p "$BUILD_DIR/lava" "$SEEDS_DIR/lava"
 
     local built=0
@@ -129,7 +137,7 @@ build_lava() {
         local name=$(basename "$tarball" .tar.gz | sed 's/-[0-9].*//; s/-pre$//')
         info "  Extracting and building $name ..."
 
-        local work="$PUBLIC_DIR/lava-m/build_$name"
+        local work="$lava_dir/build_$name"
         rm -rf "$work"
         mkdir -p "$work"
 

@@ -24,10 +24,38 @@ warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 error() { echo -e "${RED}[ERROR]${NC} $*"; }
 
 ############################################################
-# 1. LAVA-M  (coreutils with injected bugs)
-#    Source: https://github.com/moyix/lava-m-corpus
-#    4 programs: base64, md5sum, uniq, who
-#    Each has a seed input + known bug count
+# 1a. LAVA  (bug injection tool + target programs)
+#     Source: https://github.com/panda-re/lava
+#     Targets: file, jq, grep, pcre2, duktape, libyaml, etc.
+#     Contains target_bins/ with source tarballs
+############################################################
+setup_lava() {
+    local dest="$PUBLIC_DIR/lava"
+    if [ -d "$dest" ] && [ -d "$dest/target_bins" ]; then
+        info "LAVA already downloaded at $dest"
+        return
+    fi
+
+    info "Downloading LAVA (panda-re/lava)..."
+    cd "$PUBLIC_DIR"
+
+    git clone --depth 1 https://github.com/panda-re/lava.git 2>/dev/null || {
+        warn "Git clone failed, trying archive download..."
+        curl -sL https://github.com/panda-re/lava/archive/refs/heads/master.tar.gz | tar xz
+        mv lava-master lava
+    }
+
+    info "LAVA setup complete at $dest"
+    echo "  Target programs (source tarballs in target_bins/):"
+    ls "$dest/target_bins/"*.tar.gz 2>/dev/null | while read f; do echo "    $(basename "$f")"; done
+    echo "  To build: ./compile_public_benchmarks.sh --lava"
+}
+
+############################################################
+# 1b. LAVA-M  (coreutils with injected bugs)
+#     Source: https://github.com/moyix/lava-m-corpus
+#     4 programs: base64, md5sum, uniq, who
+#     Each has a seed input + known bug count
 ############################################################
 setup_lava_m() {
     local dest="$PUBLIC_DIR/lava-m"
@@ -398,19 +426,20 @@ EOF
 ############################################################
 
 usage() {
-    echo "Usage: $0 [--all | --lava-m | --unibench | --symcc-paper | --fuzzbench | --magma]"
+    echo "Usage: $0 [--all | --lava | --lava-m | --unibench | --symcc-paper | --fuzzbench | --magma]"
     echo ""
     echo "Download and set up public benchmark suites for SymCC MPI benchmarking."
     echo ""
     echo "Options:"
     echo "  --all          Download all benchmarks"
-    echo "  --lava-m       LAVA-M: 4 coreutils with injected bugs"
+    echo "  --lava         LAVA: target programs (file, jq, grep, pcre2, duktape, etc.)"
+    echo "  --lava-m       LAVA-M: 4 coreutils with injected bugs (base64, md5sum, uniq, who)"
     echo "  --unibench     UniBench: 20 real-world programs"
     echo "  --symcc-paper  Programs from the SymCC USENIX paper"
     echo "  --fuzzbench    Google FuzzBench framework"
     echo "  --magma        Magma ground-truth benchmark"
     echo ""
-    echo "Recommended for quick start: $0 --lava-m --symcc-paper"
+    echo "Recommended for quick start: $0 --lava --symcc-paper"
 }
 
 if [ $# -eq 0 ]; then
@@ -421,12 +450,14 @@ fi
 for arg in "$@"; do
     case "$arg" in
         --all)
+            setup_lava
             setup_lava_m
             setup_unibench
             setup_symcc_paper
             setup_fuzzbench
             setup_magma
             ;;
+        --lava)         setup_lava ;;
         --lava-m)       setup_lava_m ;;
         --unibench)     setup_unibench ;;
         --symcc-paper)  setup_symcc_paper ;;
