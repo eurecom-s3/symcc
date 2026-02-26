@@ -183,7 +183,8 @@ def master(comm, args):
     print(f"[Master] Using {num_workers} worker processes")
 
     idle_rounds = 0
-    max_idle_rounds = 12  # 12 * 5s = 60s of waiting before giving up
+    max_idle_secs = args.max_idle
+    max_idle_rounds = max(1, max_idle_secs // 5)
 
     while True:
         # Try to import new inputs (from external source)
