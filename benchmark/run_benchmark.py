@@ -53,6 +53,11 @@ TARGETS = {
     "crypto_check":  ("crypto_check.c",  16, "crypto_",  True),
 }
 
+# Public benchmark targets (set up via setup_public_benchmarks.sh)
+# Format: name -> (binary_path_relative_to_public_dir, seed_dir, args_template)
+# These are populated at runtime via --public flag
+PUBLIC_DIR = SCRIPT_DIR / "public"
+
 
 def run_cmd(cmd, timeout=300, capture=True):
     """Run a command and return (returncode, stdout, stderr, elapsed)."""
@@ -163,7 +168,7 @@ def run_serial(binary, target_name, seed_dir, timeout, work_dir):
     output_dir = os.path.join(work_dir, "serial_output")
     os.makedirs(output_dir, exist_ok=True)
 
-    uses_file = TARGETS[target_name][3]
+    uses_file = TARGETS[target_name][3] if target_name in TARGETS else True
 
     if uses_file:
         cmd = [
@@ -207,7 +212,7 @@ def run_mpi(binary, target_name, seed_dir, np, timeout, work_dir):
     output_dir = os.path.join(work_dir, f"mpi_np{np}_output")
     os.makedirs(output_dir, exist_ok=True)
 
-    uses_file = TARGETS[target_name][3]
+    uses_file = TARGETS[target_name][3] if target_name in TARGETS else True
     max_idle = max(10, timeout // 6)  # shorter idle wait for benchmarks
 
     cmd = [
@@ -417,6 +422,10 @@ def main():
                         help="Skip compilation step")
     parser.add_argument("--simulation", action="store_true",
                         help="Use gcc instead of SymCC (tests MPI framework only)")
+    parser.add_argument("--public", nargs="*", metavar="BINARY:SEEDDIR",
+                        help="Add public benchmark targets. Format: name:binary_path:seed_dir "
+                             "e.g., 'openjpeg:./opj_decompress:./seeds/openjpeg'. "
+                             "Use @@ in target args. Can specify multiple.")
 
     args = parser.parse_args()
 
@@ -466,6 +475,32 @@ def main():
                     binaries[name] = path
                     break
 
+    # Add public benchmark targets (--public name:binary:seeddir)
+    public_targets = {}
+    public_seed_dirs = {}
+    if args.public:
+        print("\n  Adding public benchmark targets:")
+        for spec in args.public:
+            parts = spec.split(":")
+            if len(parts) != 3:
+                print(f"    WARNING: invalid format '{spec}', expected name:binary:seeddir")
+                continue
+            name, binary_path, seed_path = parts
+            binary_path = os.path.abspath(binary_path)
+            seed_path = os.path.abspath(seed_path)
+            if not os.path.isfile(binary_path):
+                print(f"    WARNING: binary not found: {binary_path}")
+                continue
+            if not os.path.isdir(seed_path):
+                print(f"    WARNING: seed dir not found: {seed_path}")
+                continue
+            binaries[name] = binary_path
+            public_seed_dirs[name] = seed_path
+            public_targets[name] = True
+            if name not in target_names:
+                target_names.append(name)
+            print(f"    {name}: {binary_path} (seeds: {seed_path})")
+
     if not binaries:
         print("\nERROR: No target binaries available.")
         sys.exit(1)
@@ -481,13 +516,18 @@ def main():
     # Prepare seed directories per target
     seed_dirs = {}
     for target in available_targets:
-        prefix = TARGETS[target][2]
-        target_seed_dir = os.path.join(output_dir, f"seeds_{target}")
-        os.makedirs(target_seed_dir, exist_ok=True)
-        for f in SEEDS_DIR.iterdir():
-            if f.name.startswith(prefix):
-                shutil.copy2(str(f), target_seed_dir)
-        seed_dirs[target] = target_seed_dir
+        if target in public_seed_dirs:
+            # Public benchmark: use the provided seed directory directly
+            seed_dirs[target] = public_seed_dirs[target]
+        elif target in TARGETS:
+            # Built-in benchmark: copy matching seeds
+            prefix = TARGETS[target][2]
+            target_seed_dir = os.path.join(output_dir, f"seeds_{target}")
+            os.makedirs(target_seed_dir, exist_ok=True)
+            for f in SEEDS_DIR.iterdir():
+                if f.name.startswith(prefix):
+                    shutil.copy2(str(f), target_seed_dir)
+            seed_dirs[target] = target_seed_dir
 
     # Run benchmarks
     print(f"\nStep 2: Running benchmarks")
