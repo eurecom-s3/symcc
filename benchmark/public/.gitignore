@@ -1,0 +1,12 @@
+# Downloaded benchmark repositories (large, downloaded at runtime)
+cb-multios/
+fuzzer-test-suite/
+lava-m/
+unibench/
+symcc-paper/
+fuzzbench/
+magma/
+
+# Built binaries and seeds (generated at runtime)
+bin/
+seeds/
