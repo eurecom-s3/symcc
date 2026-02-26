@@ -44,3 +44,6 @@ compile_commands.json
 
 # Build directories
 *build*
+
+# Benchmark results (generated at runtime)
+benchmark_results/
