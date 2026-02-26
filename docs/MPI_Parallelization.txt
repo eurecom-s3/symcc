@@ -1,0 +1,232 @@
+MPI-Parallel Concolic Execution with SymCC
+===========================================
+
+This document describes how to use MPI (Message Passing Interface) to
+parallelize SymCC's concolic execution across multiple processes, either
+in standalone mode or in combination with AFL fuzzing.
+
+Overview
+--------
+
+SymCC processes one concrete input at a time, following a single execution
+path and generating alternative inputs by negating path constraints. This
+is inherently serial per-execution, but multiple inputs can be processed
+in parallel across separate SymCC instances.
+
+The MPI parallelization uses a Master-Worker architecture:
+
+  - Rank 0 (Master): Manages input queue, distributes work, deduplicates
+    generated test cases, tracks coverage.
+  - Ranks 1..N-1 (Workers): Run SymCC on assigned inputs and return
+    generated test cases to the master.
+
+Prerequisites
+-------------
+
+1. An MPI implementation: OpenMPI, MPICH, or Intel MPI.
+   Install on Debian/Ubuntu:
+
+     apt-get install openmpi-bin libopenmpi-dev
+
+   Or on CentOS/RHEL:
+
+     yum install openmpi openmpi-devel
+
+2. Python 3.6+ with mpi4py:
+
+     pip install mpi4py
+
+3. A SymCC-instrumented target binary (built with symcc/sym++).
+
+
+Mode 1: Standalone Parallel Concolic Execution
+-----------------------------------------------
+
+Use `mpi_concolic_execution.py` to run iterative concolic execution
+in parallel. This is the MPI-parallel equivalent of
+`pure_concolic_execution.sh`.
+
+Usage:
+
+    mpirun -np <NUM_PROCS> python3 util/mpi_concolic_execution.py \
+        -i <INPUT_DIR> [-o <OUTPUT_DIR>] [-f <FAILED_DIR>] [-t <TIMEOUT>] \
+        -- <TARGET> [ARGS...]
+
+Arguments:
+    -i INPUT_DIR     Directory with initial seed inputs (required)
+    -o OUTPUT_DIR    Directory to store all generated test cases
+    -f FAILED_DIR    Directory to store crashing/failing inputs
+    -t TIMEOUT       Per-execution timeout in seconds (default: 90)
+    --max-idle SECS  Seconds to wait without new work before stopping (default: 60)
+    TARGET           SymCC-instrumented binary
+    ARGS             Arguments to target; use @@ for input file placeholder
+
+Examples:
+
+    # 8 processes (1 master + 7 workers)
+    mpirun -np 8 python3 util/mpi_concolic_execution.py \
+        -i ./seeds -o ./corpus -- ./target_symcc @@
+
+    # Read from stdin instead (no @@)
+    mpirun -np 4 python3 util/mpi_concolic_execution.py \
+        -i ./seeds -o ./corpus -- ./target_symcc
+
+    # With timeout and failed dir
+    mpirun -np 16 python3 util/mpi_concolic_execution.py \
+        -i ./seeds -o ./corpus -f ./crashes -t 120 -- ./target_symcc @@
+
+    # Multi-node (2 machines, 8 procs each)
+    mpirun -np 16 --host node1:8,node2:8 \
+        python3 util/mpi_concolic_execution.py \
+        -i /shared/seeds -o /shared/corpus -- /shared/target_symcc @@
+
+How it works:
+  1. Master reads initial inputs from INPUT_DIR.
+  2. Master assigns inputs to idle workers.
+  3. Workers run SymCC and send generated test cases back.
+  4. Master deduplicates by SHA-256 hash and adds new inputs to the queue.
+  5. Repeat until no new inputs are generated.
+
+The process is iterative: test cases generated in one round become
+inputs for the next round, exploring progressively deeper paths.
+
+
+Mode 2: MPI-Parallel AFL + SymCC Hybrid Fuzzing
+-------------------------------------------------
+
+Use `mpi_fuzzing_helper.py` as a drop-in replacement for
+`symcc_fuzzing_helper` that distributes SymCC executions across
+MPI workers.
+
+Step 1: Start AFL as usual:
+
+    afl-fuzz -M fuzzer01 -i seeds -o /tmp/afl_out -- ./target_afl @@
+
+Step 2: Start the MPI SymCC helper:
+
+    mpirun -np 8 python3 util/mpi_fuzzing_helper.py \
+        -a fuzzer01 -o /tmp/afl_out -n symcc01 -- ./target_symcc @@
+
+Arguments:
+    -a FUZZER_NAME   Name of the AFL fuzzer instance to monitor
+    -o OUTPUT_DIR    AFL output directory
+    -n NAME          Name for this SymCC instance
+    -v               Verbose output
+    TARGET           SymCC-instrumented binary (after --)
+
+How it works:
+  1. Master monitors AFL's queue directory for new test cases.
+  2. When new inputs appear, master distributes them to workers.
+  3. Workers run SymCC and return generated test cases.
+  4. Master triages results using afl-showmap for coverage.
+  5. Test cases with new coverage are added to SymCC's queue,
+     where AFL can pick them up.
+
+This creates a feedback loop:
+  AFL generates inputs -> SymCC explores deeper paths ->
+  New inputs feed back to AFL -> AFL discovers new coverage -> ...
+
+
+Performance Guidelines
+----------------------
+
+1. Number of processes:
+   - Use num_cpus + 1 (1 master + N workers).
+   - For multi-node, ensure target binary and inputs are on shared storage.
+
+2. Memory:
+   - Each worker runs a separate SymCC instance.
+   - Memory usage = N_workers * per_execution_memory.
+   - Constraint solving (Z3/QSYM) can be memory-intensive.
+
+3. Communication overhead:
+   - Test case content is transferred via MPI messages.
+   - For large inputs (>1MB), communication overhead may be significant.
+   - The master performs deduplication to avoid redundant work.
+
+4. Scaling:
+   - Near-linear scaling for CPU-bound targets.
+   - Diminishing returns if solver is the bottleneck (all workers
+     wait on the same type of constraint solving).
+   - Best results with diverse initial seeds.
+
+5. Multi-node considerations:
+   - Ensure the target binary is accessible on all nodes.
+   - Use a shared filesystem (NFS, Lustre) for input/output directories.
+   - Or let MPI handle data transfer (the scripts transfer file contents
+     via MPI messages, so shared FS is only needed for the initial seeds
+     and final output).
+
+
+Comparison with Existing Approaches
+------------------------------------
+
+  pure_concolic_execution.sh:
+    Serial. Processes one input at a time.
+    -> mpi_concolic_execution.py: Parallel. N-1 inputs simultaneously.
+
+  symcc_fuzzing_helper (Rust):
+    Serial. Processes one AFL queue item at a time.
+    -> mpi_fuzzing_helper.py: Parallel. N-1 items simultaneously.
+
+  AFL parallel mode (-M/-S):
+    Multiple AFL instances with file-based sync.
+    -> MPI helper adds parallel symbolic execution on top.
+
+
+Architecture Diagram
+--------------------
+
+Standalone mode:
+
+    +---------+     work      +---------+
+    |         | ------------> | Worker1 | ---> SymCC execution
+    |         |     work      +---------+
+    | Master  | ------------> | Worker2 | ---> SymCC execution
+    | (Rank0) |     work      +---------+
+    |         | ------------> | Worker3 | ---> SymCC execution
+    |         |               +---------+
+    |         | <--- results (new test cases) ---+
+    +---------+                                  |
+        |                                        |
+        v                                        |
+    Input Queue <-- deduplicate + enqueue --------+
+
+
+AFL hybrid mode:
+
+    +----------+                  +---------+
+    | AFL      | --- queue -----> |         |     work      +---------+
+    | Fuzzer   |                  | Master  | ------------> | Worker1 |
+    |          | <-- new tests -- | (Rank0) |     work      +---------+
+    +----------+                  |         | ------------> | Worker2 |
+                                  |         |               +---------+
+                                  |         | <-- results --+
+                                  +---------+
+                                      |
+                                      v
+                                  afl-showmap
+                                  (coverage triage)
+
+
+Troubleshooting
+---------------
+
+1. "ModuleNotFoundError: No module named 'mpi4py'"
+   -> Install: pip install mpi4py
+
+2. "Error: need at least 2 MPI processes"
+   -> Use mpirun -np 2 or higher (1 master + 1+ workers)
+
+3. Workers hang or timeout
+   -> Increase -t timeout value
+   -> Check that target binary path is correct on all nodes
+
+4. No test cases generated
+   -> Verify SymCC instrumentation: run target manually with
+      SYMCC_OUTPUT_DIR=/tmp/test_output and check for output
+   -> Ensure initial seeds trigger different paths
+
+5. MPI communication errors
+   -> Check MPI installation: mpirun --version
+   -> For multi-node: check SSH access and shared filesystem
