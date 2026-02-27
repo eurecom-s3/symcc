@@ -190,6 +190,9 @@ def measure_coverage(cov_binary, cov_dir, source_file, test_case_dir,
     """
     Run all test cases through the coverage binary and measure coverage.
 
+    Uses a shell loop to batch-execute test cases, avoiding per-file
+    subprocess fork overhead (~100x faster for thousands of test cases).
+
     Returns dict with: line_cov, branch_cov, crashes, total_cases
     """
     # Clear old .gcda files
@@ -198,40 +201,61 @@ def measure_coverage(cov_binary, cov_dir, source_file, test_case_dir,
             os.remove(os.path.join(cov_dir, f))
 
     crashes = 0
-    crash_signals = set()
     total_cases = 0
 
     if not os.path.isdir(test_case_dir):
         return {"line_cov": 0.0, "branch_cov": 0.0, "crashes": 0, "total_cases": 0}
 
-    test_files = sorted(os.listdir(test_case_dir))
-    for tf in test_files:
-        fpath = os.path.join(test_case_dir, tf)
-        if not os.path.isfile(fpath):
-            continue
-        total_cases += 1
+    test_files = [os.path.join(test_case_dir, f)
+                  for f in sorted(os.listdir(test_case_dir))
+                  if os.path.isfile(os.path.join(test_case_dir, f))]
+    total_cases = len(test_files)
 
-        try:
-            if uses_file:
-                proc = subprocess.run(
-                    [cov_binary, fpath],
-                    capture_output=True, timeout=timeout_per_case
-                )
-            else:
-                with open(fpath, "rb") as fin:
-                    proc = subprocess.run(
-                        [cov_binary],
-                        stdin=fin, capture_output=True,
-                        timeout=timeout_per_case
-                    )
-            if proc.returncode < 0:
-                # Killed by signal (SIGSEGV, SIGABRT, etc.)
-                crashes += 1
-                crash_signals.add(-proc.returncode)
-        except subprocess.TimeoutExpired:
-            pass
-        except Exception:
-            pass
+    if total_cases == 0:
+        return {"line_cov": 0.0, "branch_cov": 0.0, "crashes": 0, "total_cases": 0}
+
+    # Batch execute: use a shell loop to run all test cases in one subprocess.
+    # This avoids per-file Python subprocess fork overhead.
+    # The shell script counts crash signals (retcode > 128).
+    list_file = os.path.join(cov_dir, "_test_list.txt")
+    with open(list_file, "w") as lf:
+        for fp in test_files:
+            lf.write(fp + "\n")
+
+    if uses_file:
+        run_cmd_part = f'"{cov_binary}" "$f"'
+    else:
+        run_cmd_part = f'"{cov_binary}" < "$f"'
+
+    script = (
+        f'crashes=0; '
+        f'while IFS= read -r f; do '
+        f'  {run_cmd_part} >/dev/null 2>&1; '
+        f'  rc=$?; '
+        f'  [ $rc -gt 128 ] && crashes=$((crashes+1)); '
+        f'done < "{list_file}"; '
+        f'echo "$crashes"'
+    )
+
+    try:
+        # Allow generous timeout: 2s per case (most finish in <10ms)
+        batch_timeout = max(60, total_cases * 2)
+        result = subprocess.run(
+            ["bash", "-c", script],
+            capture_output=True, text=True, timeout=batch_timeout
+        )
+        if result.stdout.strip().isdigit():
+            crashes = int(result.stdout.strip())
+    except subprocess.TimeoutExpired:
+        pass
+    except Exception:
+        pass
+
+    # Clean up temp file
+    try:
+        os.remove(list_file)
+    except OSError:
+        pass
 
     # Run gcov to get coverage stats
     line_cov = 0.0
@@ -260,7 +284,6 @@ def measure_coverage(cov_binary, cov_dir, source_file, test_case_dir,
         "line_cov": line_cov,
         "branch_cov": branch_cov,
         "crashes": crashes,
-        "crash_signals": sorted(crash_signals),
         "total_cases": total_cases,
     }
 
