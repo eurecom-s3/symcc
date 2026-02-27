@@ -273,10 +273,17 @@ def measure_coverage(cov_binary, cov_dir, source_file, test_case_dir,
         if m:
             line_cov = float(m.group(1))
 
-        # Parse "Branches executed:XX.XX% of YY"
-        m = re.search(r"Branches executed:(\d+\.\d+)% of (\d+)", output)
+        # Parse "Taken at least once:XX.XX% of YY" for true branch coverage.
+        # "Branches executed" only means the branch instruction was reached,
+        # not that both outcomes (true/false) were covered.
+        m = re.search(r"Taken at least once:(\d+\.\d+)% of (\d+)", output)
         if m:
             branch_cov = float(m.group(1))
+        else:
+            # Fall back to "Branches executed" if "Taken at least once" not found
+            m = re.search(r"Branches executed:(\d+\.\d+)% of (\d+)", output)
+            if m:
+                branch_cov = float(m.group(1))
     except Exception:
         pass
 
@@ -346,15 +353,19 @@ def run_serial(binary, target_name, seed_dir, timeout, work_dir):
         ]
 
     # The serial script runs forever, so we use timeout
+    timed_out = False
     start = time.monotonic()
     try:
         proc = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
         proc.wait(timeout=timeout)
+        retcode = proc.returncode
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.wait()
+        retcode = -1
+        timed_out = True
 
     elapsed = time.monotonic() - start
     num_generated = count_output_files(output_dir)
@@ -365,6 +376,8 @@ def run_serial(binary, target_name, seed_dir, timeout, work_dir):
         "generated": num_generated,
         "unique": len(unique),
         "output_dir": output_dir,
+        "retcode": retcode,
+        "timed_out": timed_out,
     }
 
 
@@ -376,6 +389,9 @@ def run_mpi(binary, target_name, seed_dir, np, timeout, work_dir):
     uses_file = TARGETS[target_name][3] if target_name in TARGETS else True
     max_idle = max(10, timeout // 6)  # shorter idle wait for benchmarks
 
+    # Give MPI script a wall timeout slightly less than the benchmark timeout
+    # so it can shut down gracefully before the outer subprocess kills it.
+    wall_timeout = max(10, timeout - 30)
     cmd = [
         "mpirun", "--allow-run-as-root", "--oversubscribe",
         "-np", str(np),
@@ -384,6 +400,7 @@ def run_mpi(binary, target_name, seed_dir, np, timeout, work_dir):
         "-o", output_dir,
         "-t", str(min(30, timeout // 2)),
         "--max-idle", str(max_idle),
+        "--wall-timeout", str(wall_timeout),
         "--", binary,
     ]
 
@@ -404,8 +421,25 @@ def run_mpi(binary, target_name, seed_dir, np, timeout, work_dir):
         retcode = -1
 
     elapsed = time.monotonic() - start
-    num_generated = count_output_files(output_dir)
+    timed_out = (retcode == -1 and stderr == "TIMEOUT") or elapsed >= timeout + 25
+
+    # Parse the MPI master's stdout for pre-dedup total_generated count
+    mpi_total_generated = None
+    mpi_total_interesting = None
+    if stdout:
+        m = re.search(r"Total test cases generated:\s*(\d+)", stdout)
+        if m:
+            mpi_total_generated = int(m.group(1))
+        m = re.search(r"New interesting test cases:\s*(\d+)", stdout)
+        if m:
+            mpi_total_interesting = int(m.group(1))
+
     unique = get_unique_hashes(output_dir)
+    # Use MPI master's pre-dedup count if available; otherwise fall back to file count
+    if mpi_total_generated is not None:
+        num_generated = mpi_total_generated
+    else:
+        num_generated = count_output_files(output_dir)
 
     return {
         "wall_time": elapsed,
@@ -413,7 +447,9 @@ def run_mpi(binary, target_name, seed_dir, np, timeout, work_dir):
         "unique": len(unique),
         "output_dir": output_dir,
         "stdout": stdout[-500:] if stdout else "",
+        "stderr": stderr[-500:] if stderr else "",
         "retcode": retcode,
+        "timed_out": timed_out,
     }
 
 
@@ -834,9 +870,13 @@ def main():
                 cov_str = (f", line={cov_data['line_cov']:.1f}%, "
                            f"branch={cov_data['branch_cov']:.1f}%, "
                            f"crashes={cov_data['crashes']}")
+            timeout_str = ""
+            if result.get("timed_out"):
+                timeout_str = " [TIMEOUT]"
             print(f"time={format_time(result['wall_time'])}, "
-                  f"gen={result['generated']}, uniq={result['unique']}"
-                  f"{cov_str}")
+                  f"gen={result['generated']}, uniq={result['unique']}, "
+                  f"ret={result.get('retcode', '?')}"
+                  f"{cov_str}{timeout_str}")
 
             all_results.append({
                 "target": target,
@@ -890,10 +930,21 @@ def main():
                     cov_str = (f", line={cov_data['line_cov']:.1f}%, "
                                f"branch={cov_data['branch_cov']:.1f}%, "
                                f"crashes={cov_data['crashes']}")
+                timeout_str = ""
+                if result.get("timed_out"):
+                    timeout_str = " [TIMEOUT]"
                 print(f"time={format_time(result['wall_time'])}, "
                       f"gen={result['generated']}, uniq={result['unique']}, "
                       f"ret={result.get('retcode', '?')}"
-                      f"{cov_str}")
+                      f"{cov_str}{timeout_str}")
+                # Print stderr summary for non-zero retcodes to aid diagnosis
+                retcode = result.get("retcode", 0)
+                stderr_text = result.get("stderr", "")
+                if retcode != 0 and stderr_text and stderr_text != "TIMEOUT":
+                    # Show last few meaningful lines
+                    err_lines = [l for l in stderr_text.strip().splitlines() if l.strip()]
+                    if err_lines:
+                        print(f"      stderr: {err_lines[-1][:200]}")
 
                 # Compute speedup against serial baseline
                 serial_avg = 0

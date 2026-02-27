@@ -185,14 +185,24 @@ def master(comm, args):
     idle_rounds = 0
     max_idle_secs = args.max_idle
     max_idle_rounds = max(1, max_idle_secs // 5)
+    wall_start = time.monotonic()
+    wall_timeout = args.wall_timeout
 
     while True:
+        # Check wall-clock time limit
+        if wall_timeout > 0 and (time.monotonic() - wall_start) >= wall_timeout:
+            print(f"[Master] Wall-clock timeout ({wall_timeout}s) reached. "
+                  f"Shutting down.")
+            break
+
         # Try to import new inputs (from external source)
         import_inputs(args.input_dir)
 
-        # Distribute work to idle workers
-        # Check for ready workers and send them work
-        while pending_queue and comm.iprobe(source=MPI.ANY_SOURCE, tag=TAG_READY):
+        # Distribute work to idle workers (skip if nearing wall timeout)
+        wall_remaining = (wall_timeout - (time.monotonic() - wall_start)
+                          if wall_timeout > 0 else float("inf"))
+        while (pending_queue and wall_remaining > args.timeout + 5
+               and comm.iprobe(source=MPI.ANY_SOURCE, tag=TAG_READY)):
             status = MPI.Status()
             comm.recv(source=MPI.ANY_SOURCE, tag=TAG_READY, status=status)
             worker_rank = status.Get_source()
@@ -414,6 +424,10 @@ def parse_args():
         help="Seconds to wait without new inputs before stopping (default: 60)",
     )
     parser.add_argument(
+        "--wall-timeout", type=int, default=0,
+        help="Total wall-clock time limit in seconds (0=unlimited, default: 0)",
+    )
+    parser.add_argument(
         "target", nargs=argparse.REMAINDER,
         help="Target command (after '--')",
     )
@@ -443,6 +457,8 @@ def main():
         print(f"  Output dir: {args.output_dir or '(none)'}")
         print(f"  Target: {' '.join(args.target)}")
         print(f"  Timeout: {args.timeout}s per execution")
+        if args.wall_timeout > 0:
+            print(f"  Wall timeout: {args.wall_timeout}s total")
         print()
         master(comm, args)
     else:
