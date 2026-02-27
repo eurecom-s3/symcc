@@ -45,5 +45,9 @@ compile_commands.json
 # Build directories
 *build*
 
+# Python
+__pycache__/
+*.pyc
+
 # Benchmark results (generated at runtime)
 benchmark_results/
