@@ -20,7 +20,6 @@ FROM ubuntu:22.04 AS builder
 # Install dependencies
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y \
-        cargo \
         cmake \
         g++ \
         git \
@@ -28,8 +27,17 @@ RUN apt-get update \
         ninja-build \
         python3-pip \
         zlib1g-dev \
-        wget  
+        wget \
+        curl \
+        build-essential
+
 RUN pip3 install lit
+
+ENV RUSTUP_HOME=/usr/local/rustup
+ENV CARGO_HOME=/usr/local/cargo
+ENV PATH=/usr/local/cargo/bin:$PATH
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.94.0 && chmod -R a+w $RUSTUP_HOME $CARGO_HOME
 
 WORKDIR /
 
@@ -63,7 +71,7 @@ RUN git clone -b llvmorg-$LLVM_VERSION.0.0 --depth 1 https://github.com/llvm/llv
 # Build a version of SymCC with the simple backend to compile libc++
 COPY . /symcc_source
 
-# Init submodules if they are not initialiazed yet
+# Init submodules if they are not initialized yet
 WORKDIR /symcc_source
 RUN git submodule update --init --recursive
 
@@ -118,6 +126,10 @@ RUN cmake -G Ninja \
 #
 FROM ubuntu:22.04 as symcc
 
+ENV RUSTUP_HOME=/usr/local/rustup
+ENV CARGO_HOME=/usr/local/cargo
+ENV PATH=/usr/local/cargo/bin:$PATH
+
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y \
         build-essential \
@@ -135,8 +147,12 @@ RUN apt-get update \
     clang-$LLVM_VERSION \
     && rm -rf /var/lib/apt/lists/*
 
+# rust toolchain
+COPY --from=builder_qsym $RUSTUP_HOME $RUSTUP_HOME
+COPY --from=builder_qsym $CARGO_HOME $CARGO_HOME
+
 COPY --from=builder_qsym /symcc_build /symcc_build
-COPY --from=builder_qsym /root/.cargo/bin/symcc_fuzzing_helper /symcc_build/
+COPY --from=builder_qsym $CARGO_HOME/bin/symcc_fuzzing_helper /symcc_build/
 COPY util/pure_concolic_execution.sh /symcc_build/
 COPY --from=builder_qsym /libcxx_symcc_install /libcxx_symcc_install
 COPY --from=builder_qsym /afl /afl
