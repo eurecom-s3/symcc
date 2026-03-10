@@ -45,8 +45,38 @@ else
     # It is important that the resulting binaries load libstdc++ before libc++;
     # otherwise our backend calls the instrumented library in cases where
     # exported names collide.
-    stdlib_cflags="-isystem ${!libcxx_var}/include/c++/v1 -nostdlib++"
-    stdlib_ldflags="-L${!libcxx_var}/lib -Wl,-rpath,${!libcxx_var}/lib -lstdc++ -lc++ -stdlib=libc++"
+    libcxx_base="${!libcxx_var}"
+    libcxx_inc="$libcxx_base/include/c++/v1"
+    # LLVM 15+ may install __config_site in include/<target-triple>/c++/v1
+    # (see e.g. llvm/llvm-project#57104). Triples can differ (pc vs unknown),
+    # so try dumpmachine first and then scan for a matching __config_site path.
+    triple=$($compiler -dumpmachine 2>/dev/null)
+    target_inc=
+    if [ -n "$triple" ] && [ -d "$libcxx_base/include/$triple/c++/v1" ]; then
+        target_inc="$libcxx_base/include/$triple/c++/v1"
+    else
+        for maybe_target_inc in "$libcxx_base"/include/*/c++/v1; do
+            if [ -f "$maybe_target_inc/__config_site" ]; then
+                target_inc="$maybe_target_inc"
+                break
+            fi
+        done
+    fi
+    if [ -n "$target_inc" ]; then
+        stdlib_cflags="-isystem $target_inc -isystem $libcxx_inc -nostdlib++"
+    else
+        stdlib_cflags="-isystem $libcxx_inc -nostdlib++"
+    fi
+    libcxx_lib="$libcxx_base/lib"
+    if [ ! -f "$libcxx_lib/libc++.so" ] && [ ! -f "$libcxx_lib/libc++.a" ]; then
+        for maybe_lib in "$libcxx_base"/lib/*; do
+            if [ -f "$maybe_lib/libc++.so" ] || [ -f "$maybe_lib/libc++.a" ]; then
+                libcxx_lib="$maybe_lib"
+                break
+            fi
+        done
+    fi
+    stdlib_ldflags="-L${libcxx_lib} -Wl,-rpath,${libcxx_lib} -lstdc++ -lc++ -stdlib=libc++"
 fi
 
 if [ $# -eq 0 ]; then

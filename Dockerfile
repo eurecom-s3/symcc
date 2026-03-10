@@ -17,10 +17,11 @@
 #
 FROM ubuntu:22.04 AS builder
 
-# Install dependencies
+# Install dependencies (Rust via rustup for Cargo 1.85+ / edition2024 support)
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y \
         cmake \
+        curl \
         g++ \
         git \
         libz3-dev \
@@ -46,9 +47,8 @@ RUN git clone -b v2.56b https://github.com/google/AFL.git afl \
     && cd afl \
     && make
 
-# This is passed along to symcc and qsym backend
-# Version 15 is buggy  https://github.com/eurecom-s3/symcc/issues/164
-arg LLVM_VERSION=12
+# This is passed along to symcc and qsym backend (must match final image).
+ARG LLVM_VERSION=15
 
 # installing/building with the right LLVM version, currently:
 # - no plan to support < 11
@@ -124,7 +124,7 @@ RUN cmake -G Ninja \
 #
 # The final image
 #
-FROM ubuntu:22.04 as symcc
+FROM ubuntu:22.04 AS symcc
 
 ENV RUSTUP_HOME=/usr/local/rustup
 ENV CARGO_HOME=/usr/local/cargo
@@ -139,7 +139,7 @@ RUN apt-get update \
     && useradd -m -s /bin/bash ubuntu \
     && echo 'ubuntu ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/ubuntu
 
-arg LLVM_VERSION=15
+ARG LLVM_VERSION=15
 
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y \
@@ -160,10 +160,10 @@ COPY --from=builder_qsym /afl /afl
 # fix permissions
 RUN chmod -R og+rX /symcc_build
 
-ENV PATH /symcc_build:$PATH
-ENV AFL_PATH /afl
-ENV AFL_CC clang-$LLVM_VERSION
-ENV AFL_CXX clang++-$LLVM_VERSION
+ENV PATH=/symcc_build:$PATH
+ENV AFL_PATH=/afl
+ENV AFL_CC=clang-$LLVM_VERSION
+ENV AFL_CXX=clang++-$LLVM_VERSION
 ENV SYMCC_LIBCXX_PATH=/libcxx_symcc_install
 
 USER ubuntu
