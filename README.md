@@ -183,6 +183,13 @@ The Docker image also has AFL and `symcc_fuzzing_helper` preinstalled, so you
 can use it to run SymCC with a fuzzer as described in [the
 docs](docs/Fuzzing.txt). (The AFL binaries are located in `/afl`.)
 
+To run a quick Docker smoke test that checks `sym++` and verifies one generated
+testcase contains `root`, use:
+
+```
+$ ./test/test_sympp_root_in_docker.sh symcc
+```
+
 While the Docker image is very convenient for _using_ SymCC, I recommend a local
 build outside Docker for _development_. Docker will rebuild most of the image on
 every change to SymCC (which is, in principle the right thing to do), whereas in
