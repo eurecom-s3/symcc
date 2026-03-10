@@ -17,7 +17,7 @@
 #
 FROM ubuntu:22.04 AS builder
 
-# Install dependencies (Rust via rustup for Cargo 1.85+ / edition2024 support)
+# Install dependencies
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y \
         cmake \
@@ -154,6 +154,7 @@ COPY --from=builder_qsym $CARGO_HOME $CARGO_HOME
 COPY --from=builder_qsym /symcc_build /symcc_build
 COPY --from=builder_qsym $CARGO_HOME/bin/symcc_fuzzing_helper /symcc_build/
 COPY util/pure_concolic_execution.sh /symcc_build/
+COPY test/test_readme_c_smoke.sh /symcc_build/
 COPY --from=builder_qsym /libcxx_symcc_install /libcxx_symcc_install
 COPY --from=builder_qsym /afl /afl
 
