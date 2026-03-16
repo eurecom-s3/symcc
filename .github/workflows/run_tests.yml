@@ -1,5 +1,7 @@
 name: Compile and test SymCC
 on: [pull_request, workflow_dispatch]
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 jobs:
   # Building and running the tests with Dockerfile
   build_and_test_symcc:
