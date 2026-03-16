@@ -183,11 +183,12 @@ The Docker image also has AFL and `symcc_fuzzing_helper` preinstalled, so you
 can use it to run SymCC with a fuzzer as described in [the
 docs](docs/Fuzzing.txt). (The AFL binaries are located in `/afl`.)
 
-To run a quick Docker smoke test that checks `sym++` and verifies one generated
-testcase contains `root`, use:
+Right after building the Docker image, you can run quick smoke tests for both
+C++ and C examples:
 
 ```
 $ ./test/test_sympp_root_in_docker.sh symcc
+$ ./test/test_readme_c_smoke.sh
 ```
 
 While the Docker image is very convenient for _using_ SymCC, I recommend a local
