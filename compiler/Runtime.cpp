@@ -45,7 +45,8 @@ Runtime::Runtime(Module &M) {
   buildInteger = import(M, "_sym_build_integer", ptrT, IRB.getInt64Ty(), int8T);
   buildInteger128 = import(M, "_sym_build_integer128", ptrT, IRB.getInt64Ty(),
                            IRB.getInt64Ty());
-  buildFloat = import(M, "_sym_build_float", ptrT, IRB.getDoubleTy(), int1T);
+  buildFloat =
+      import(M, "_sym_build_float", ptrT, IRB.getDoubleTy(), IRB.getInt32Ty());
   buildNullPointer = import(M, "_sym_build_null_pointer", ptrT);
   buildTrue = import(M, "_sym_build_true", ptrT);
   buildFalse = import(M, "_sym_build_false", ptrT);
@@ -54,10 +55,12 @@ Runtime::Runtime(Module &M) {
   buildZExt = import(M, "_sym_build_zext", ptrT, ptrT, int8T);
   buildTrunc = import(M, "_sym_build_trunc", ptrT, ptrT, int8T);
   buildBswap = import(M, "_sym_build_bswap", ptrT, ptrT);
-  buildIntToFloat =
-      import(M, "_sym_build_int_to_float", ptrT, ptrT, int1T, int1T);
-  buildFloatToFloat = import(M, "_sym_build_float_to_float", ptrT, ptrT, int1T);
-  buildBitsToFloat = import(M, "_sym_build_bits_to_float", ptrT, ptrT, int1T);
+  buildIntToFloat = import(M, "_sym_build_int_to_float", ptrT, ptrT,
+                           IRB.getInt32Ty(), IRB.getInt32Ty());
+  buildFloatToFloat =
+      import(M, "_sym_build_float_to_float", ptrT, ptrT, IRB.getInt32Ty());
+  buildBitsToFloat =
+      import(M, "_sym_build_bits_to_float", ptrT, ptrT, IRB.getInt32Ty());
   buildFloatToBits = import(M, "_sym_build_float_to_bits", ptrT, ptrT);
   buildFloatToSignedInt =
       import(M, "_sym_build_float_to_signed_integer", ptrT, ptrT, int8T);

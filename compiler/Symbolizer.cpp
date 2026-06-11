@@ -663,7 +663,7 @@ void Symbolizer::visitBitCastInst(BitCastInst &I) {
     auto conversion =
         buildRuntimeCall(IRB, runtime.buildBitsToFloat,
                          {{I.getOperand(0), true},
-                          {IRB.getInt1(I.getDestTy()->isDoubleTy()), false}});
+                          {IRB.getInt32(I.getDestTy()->isDoubleTy()), false}});
     registerSymbolicComputation(conversion, &I);
     return;
   }
@@ -722,8 +722,8 @@ void Symbolizer::visitSIToFPInst(SIToFPInst &I) {
   auto conversion =
       buildRuntimeCall(IRB, runtime.buildIntToFloat,
                        {{I.getOperand(0), true},
-                        {IRB.getInt1(I.getDestTy()->isDoubleTy()), false},
-                        {/* is_signed */ IRB.getInt1(true), false}});
+                        {IRB.getInt32(I.getDestTy()->isDoubleTy()), false},
+                        {/* is_signed */ IRB.getInt32(1), false}});
   registerSymbolicComputation(conversion, &I);
 }
 
@@ -732,8 +732,8 @@ void Symbolizer::visitUIToFPInst(UIToFPInst &I) {
   auto conversion =
       buildRuntimeCall(IRB, runtime.buildIntToFloat,
                        {{I.getOperand(0), true},
-                        {IRB.getInt1(I.getDestTy()->isDoubleTy()), false},
-                        {/* is_signed */ IRB.getInt1(false), false}});
+                        {IRB.getInt32(I.getDestTy()->isDoubleTy()), false},
+                        {/* is_signed */ IRB.getInt32(0), false}});
   registerSymbolicComputation(conversion, &I);
 }
 
@@ -742,7 +742,7 @@ void Symbolizer::visitFPExtInst(FPExtInst &I) {
   auto conversion =
       buildRuntimeCall(IRB, runtime.buildFloatToFloat,
                        {{I.getOperand(0), true},
-                        {IRB.getInt1(I.getDestTy()->isDoubleTy()), false}});
+                        {IRB.getInt32(I.getDestTy()->isDoubleTy()), false}});
   registerSymbolicComputation(conversion, &I);
 }
 
@@ -751,7 +751,7 @@ void Symbolizer::visitFPTruncInst(FPTruncInst &I) {
   auto conversion =
       buildRuntimeCall(IRB, runtime.buildFloatToFloat,
                        {{I.getOperand(0), true},
-                        {IRB.getInt1(I.getDestTy()->isDoubleTy()), false}});
+                        {IRB.getInt32(I.getDestTy()->isDoubleTy()), false}});
   registerSymbolicComputation(conversion, &I);
 }
 
@@ -978,7 +978,7 @@ Instruction *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
   if (valueType->isFloatingPointTy()) {
     return IRB.CreateCall(runtime.buildFloat,
                           {IRB.CreateFPCast(V, IRB.getDoubleTy()),
-                           IRB.getInt1(valueType->isDoubleTy())});
+                           IRB.getInt32(valueType->isDoubleTy())});
   }
 
   if (valueType->isPointerTy()) {
@@ -1135,7 +1135,7 @@ Instruction *Symbolizer::convertBitVectorExprForType(llvm::IRBuilder<> &IRB,
 
   if (T->isFloatingPointTy()) {
     result = IRB.CreateCall(runtime.buildBitsToFloat,
-                            {I, IRB.getInt1(T->isDoubleTy())});
+                            {I, IRB.getInt32(T->isDoubleTy())});
   } else if (T->isIntegerTy() && T->getIntegerBitWidth() == 1) {
     result = IRB.CreateCall(runtime.buildTrunc,
                             {I, ConstantInt::get(IRB.getInt8Ty(), 1)});
