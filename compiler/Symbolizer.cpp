@@ -441,9 +441,13 @@ void Symbolizer::visitSelectInst(SelectInst &I) {
   // expression over from the chosen argument.
 
   IRBuilder<> IRB(&I);
+  // Zero-extend the i1 condition to a 32-bit value matching the runtime's
+  // `int taken` parameter, so that no uninitialized high bits of the i1
+  // register can reach the runtime (see issue #83).
+  auto *taken = IRB.CreateZExt(I.getCondition(), IRB.getInt32Ty());
   auto runtimeCall = buildRuntimeCall(IRB, runtime.pushPathConstraint,
                                       {{I.getCondition(), true},
-                                       {I.getCondition(), false},
+                                       {taken, false},
                                        {getTargetPreferredInt(&I), false}});
   registerSymbolicComputation(runtimeCall);
   if (getSymbolicExpression(I.getTrueValue()) ||
@@ -491,9 +495,13 @@ void Symbolizer::visitBranchInst(BranchInst &I) {
     return;
 
   IRBuilder<> IRB(&I);
+  // Zero-extend the i1 condition to a 32-bit value matching the runtime's
+  // `int taken` parameter, so that no uninitialized high bits of the i1
+  // register can reach the runtime (see issue #83).
+  auto *taken = IRB.CreateZExt(I.getCondition(), IRB.getInt32Ty());
   auto runtimeCall = buildRuntimeCall(IRB, runtime.pushPathConstraint,
                                       {{I.getCondition(), true},
-                                       {I.getCondition(), false},
+                                       {taken, false},
                                        {getTargetPreferredInt(&I), false}});
   registerSymbolicComputation(runtimeCall);
 }
@@ -923,11 +931,13 @@ void Symbolizer::visitSwitchInst(SwitchInst &I) {
   IRB.SetInsertPoint(constraintBlock);
   for (auto &caseHandle : I.cases()) {
     auto *caseTaken = IRB.CreateICmpEQ(condition, caseHandle.getCaseValue());
+    // Zero-extend to match the runtime's `int taken` parameter (issue #83).
+    auto *caseTakenInt = IRB.CreateZExt(caseTaken, IRB.getInt32Ty());
     auto *caseConstraint = IRB.CreateCall(
         runtime.comparisonHandlers[CmpInst::ICMP_EQ],
         {conditionExpr, createValueExpression(caseHandle.getCaseValue(), IRB)});
     IRB.CreateCall(runtime.pushPathConstraint,
-                   {caseConstraint, caseTaken, getTargetPreferredInt(&I)});
+                   {caseConstraint, caseTakenInt, getTargetPreferredInt(&I)});
   }
 }
 
@@ -1099,7 +1109,7 @@ void Symbolizer::tryAlternative(IRBuilder<> &IRB, Value *V) {
                        {destExpr, concreteDestExpr});
     auto *pushAssertion = IRB.CreateCall(
         runtime.pushPathConstraint,
-        {destAssertion, IRB.getInt1(true), getTargetPreferredInt(V)});
+        {destAssertion, IRB.getInt32(1), getTargetPreferredInt(V)});
     registerSymbolicComputation(SymbolicComputation(
         concreteDestExpr, pushAssertion, {Input(V, 0, destAssertion)}));
   }
