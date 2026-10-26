@@ -132,6 +132,9 @@ public:
   void visitSwitchInst(llvm::SwitchInst &I);
   void visitUnreachableInst(llvm::UnreachableInst &);
   void visitInstruction(llvm::Instruction &I);
+  void visitExtractElementInst(llvm::ExtractElementInst &I);
+  void visitInsertElementInst(llvm::InsertElementInst &I);
+  void visitShuffleVectorInst(llvm::ShuffleVectorInst &I);
 
 private:
   static constexpr unsigned kExpectedMaxPHINodesPerFunction = 16;

@@ -429,6 +429,77 @@ void Symbolizer::visitBinaryOperator(BinaryOperator &I) {
     }
   }
 
+  // vector-typed operand handling
+  if (auto *vectorType = dyn_cast<VectorType>(I.getOperand(0)->getType())) {
+    auto opcode = I.getOpcode();
+    bool isBitwise = (opcode == Instruction::And || opcode == Instruction::Or ||
+                      opcode == Instruction::Xor);
+
+    if (!isBitwise) {
+      auto *elementType = vectorType->getElementType();
+
+      if (!elementType->isIntegerTy()) {
+        errs() << "Warning: unsupported element type for vector binary op; "
+                  "the result will be concretized\n";
+        return;
+      }
+
+      // Early return if both operands are concrete
+      if (getSymbolicExpression(I.getOperand(0)) == nullptr &&
+          getSymbolicExpression(I.getOperand(1)) == nullptr)
+        return;
+
+      auto elementSize =
+          dataLayout.getTypeStoreSize(elementType).getFixedValue();
+      auto numElements = cast<FixedVectorType>(vectorType)->getNumElements();
+      bool le = isLittleEndian(elementType);
+
+      SymbolicComputation symbolicComputation;
+      Instruction *resultExpr = nullptr;
+
+      for (unsigned i = 0; i < numElements; i++) {
+        auto byteOffset = i * elementSize;
+
+        // Extract the two operands
+        auto extract0 =
+            forceBuildRuntimeCall(IRB, runtime.buildExtract,
+                                  {{I.getOperand(0), true},
+                                   {IRB.getInt64(byteOffset), false},
+                                   {IRB.getInt64(elementSize), false},
+                                   {IRB.getInt1(le ? 1 : 0), false}});
+        symbolicComputation.merge(extract0);
+        auto extract1 =
+            forceBuildRuntimeCall(IRB, runtime.buildExtract,
+                                  {{I.getOperand(1), true},
+                                   {IRB.getInt64(byteOffset), false},
+                                   {IRB.getInt64(elementSize), false},
+                                   {IRB.getInt1(le ? 1 : 0), false}});
+        symbolicComputation.merge(extract1);
+
+        // Apply the scalar handler to the two extracted lanes
+        auto opCall =
+            forceBuildRuntimeCall(IRB, handler,
+                                  {{extract0.lastInstruction, false},
+                                   {extract1.lastInstruction, false}});
+        symbolicComputation.merge(opCall);
+
+        // Concatenate this lane into the running result
+        if (resultExpr == nullptr) {
+          resultExpr = opCall.lastInstruction;
+        } else {
+          auto concatCall = forceBuildRuntimeCall(
+              IRB, runtime.buildConcat,
+              {{resultExpr, false}, {opCall.lastInstruction, false}});
+          symbolicComputation.merge(concatCall);
+          resultExpr = concatCall.lastInstruction;
+        }
+      }
+
+      registerSymbolicComputation(symbolicComputation, &I);
+      return;
+    }
+  }
+
   assert(handler && "Unable to handle binary operator");
   auto runtimeCall =
       buildRuntimeCall(IRB, handler, {I.getOperand(0), I.getOperand(1)});
@@ -470,6 +541,73 @@ void Symbolizer::visitCmpInst(CmpInst &I) {
 
   IRBuilder<> IRB(&I);
   SymFnT handler = runtime.comparisonHandlers.at(I.getPredicate());
+
+  // vector-typed operand handling
+  if (auto *vectorType = dyn_cast<VectorType>(I.getOperand(0)->getType())) {
+    auto *elementType = vectorType->getElementType();
+
+    if (!elementType->isIntegerTy()) {
+      errs() << "Warning: unsupported element type for vector comparison; "
+                "the result will be concretized\n";
+      return;
+    }
+
+    if (getSymbolicExpression(I.getOperand(0)) == nullptr &&
+        getSymbolicExpression(I.getOperand(1)) == nullptr)
+      return;
+
+    auto elementSize = dataLayout.getTypeStoreSize(elementType).getFixedValue();
+    auto numElements = cast<FixedVectorType>(vectorType)->getNumElements();
+    bool le = isLittleEndian(elementType);
+
+    SymbolicComputation symbolicComputation;
+    Instruction *resultExpr = nullptr;
+
+    for (unsigned i = 0; i < numElements; i++) {
+      auto byteOffset = i * elementSize;
+
+      // Extract the two operands
+      auto extract0 = forceBuildRuntimeCall(IRB, runtime.buildExtract,
+                                            {{I.getOperand(0), true},
+                                             {IRB.getInt64(byteOffset), false},
+                                             {IRB.getInt64(elementSize), false},
+                                             {IRB.getInt1(le ? 1 : 0), false}});
+      symbolicComputation.merge(extract0);
+      auto extract1 = forceBuildRuntimeCall(IRB, runtime.buildExtract,
+                                            {{I.getOperand(1), true},
+                                             {IRB.getInt64(byteOffset), false},
+                                             {IRB.getInt64(elementSize), false},
+                                             {IRB.getInt1(le ? 1 : 0), false}});
+      symbolicComputation.merge(extract1);
+
+      // Apply the scalar handler to the two extracted lanes
+      auto cmpCall = forceBuildRuntimeCall(IRB, handler,
+                                           {{extract0.lastInstruction, false},
+                                            {extract1.lastInstruction, false}});
+      symbolicComputation.merge(cmpCall);
+
+      // Convert Bool result to 1-bit bitvector.
+      auto boolToBit = forceBuildRuntimeCall(
+          IRB, runtime.buildBoolToBit, {{cmpCall.lastInstruction, false}});
+      symbolicComputation.merge(boolToBit);
+
+      // Concat into running result
+      if (resultExpr == nullptr) {
+        resultExpr = boolToBit.lastInstruction;
+      } else {
+        auto concatCall = forceBuildRuntimeCall(
+            IRB, runtime.buildConcat,
+            {{resultExpr, false}, {boolToBit.lastInstruction, false}});
+        symbolicComputation.merge(concatCall);
+        resultExpr = concatCall.lastInstruction;
+      }
+    }
+
+    registerSymbolicComputation(symbolicComputation, &I);
+    return;
+  }
+
+  // Scalar path (existing).
   assert(handler && "Unable to handle icmp/fcmp variant");
   auto runtimeCall =
       buildRuntimeCall(IRB, handler, {I.getOperand(0), I.getOperand(1)});
@@ -954,6 +1092,223 @@ void Symbolizer::visitInstruction(Instruction &I) {
          << "; the result will be concretized\n";
 }
 
+void Symbolizer::visitExtractElementInst(ExtractElementInst &I) {
+  IRBuilder<> IRB(&I);
+
+  // if the vector is concrete then there's nothing to track
+  if (getSymbolicExpression(I.getVectorOperand()) == nullptr)
+    return;
+
+  // Get the type of the vector and its elements
+  auto *vectorType = cast<VectorType>(I.getVectorOperand()->getType());
+  auto *elementType = vectorType->getElementType();
+  auto elementSize = dataLayout.getTypeStoreSize(elementType).getFixedValue();
+  bool le = isLittleEndian(elementType);
+  auto numElements = cast<FixedVectorType>(vectorType)->getNumElements();
+
+  SymbolicComputation symbolicComputation;
+
+  if (auto *constIdx = dyn_cast<ConstantInt>(I.getIndexOperand())) {
+    // Fast path: constant index -- extract exactly one lane.
+    auto byteOffset = constIdx->getZExtValue() * elementSize;
+    symbolicComputation.merge(
+        forceBuildRuntimeCall(IRB, runtime.buildExtract,
+                              {{I.getVectorOperand(), true},
+                               {IRB.getInt64(byteOffset), false},
+                               {IRB.getInt64(elementSize), false},
+                               {IRB.getInt1(le ? 1 : 0), false}}));
+  } else {
+    // Slow path: variable index -- build an ITE chain over all lanes so
+    // the solver can reason about which lane was selected.
+    //
+    //   result = lane_{N-1}
+    //   for i from N-2 down to 0:
+    //     result = ite(idx_sym == i, lane_i, result)
+    auto *idx = I.getIndexOperand();
+    auto idxWidth = idx->getType()->getIntegerBitWidth();
+
+    // Start with lane N-1 as the default (bottom of the chain).
+    auto lastExtract = forceBuildRuntimeCall(
+        IRB, runtime.buildExtract,
+        {{I.getVectorOperand(), true},
+         {IRB.getInt64((numElements - 1) * elementSize), false},
+         {IRB.getInt64(elementSize), false},
+         {IRB.getInt1(le ? 1 : 0), false}});
+    symbolicComputation.merge(lastExtract);
+    Value *currentExpr = lastExtract.lastInstruction;
+
+    for (int i = static_cast<int>(numElements) - 2; i >= 0; i--) {
+      // Extract lane i.
+      auto laneExtract =
+          forceBuildRuntimeCall(IRB, runtime.buildExtract,
+                                {{I.getVectorOperand(), true},
+                                 {IRB.getInt64(i * elementSize), false},
+                                 {IRB.getInt64(elementSize), false},
+                                 {IRB.getInt1(le ? 1 : 0), false}});
+      symbolicComputation.merge(laneExtract);
+
+      // Symbolic constant for the lane index i.
+      auto *idxConstExpr = IRB.CreateCall(
+          runtime.buildInteger, {IRB.getInt64(i), IRB.getInt8(idxWidth)});
+
+      // Symbolic condition idx == i.
+      auto cond = forceBuildRuntimeCall(
+          IRB, runtime.comparisonHandlers[CmpInst::ICMP_EQ],
+          {{idx, true}, {idxConstExpr, false}});
+      symbolicComputation.merge(cond);
+
+      // currentExpr = ite(cond, lane_i, currentExpr)
+      auto iteCall =
+          forceBuildRuntimeCall(IRB, runtime.buildIte,
+                                {{cond.lastInstruction, false},
+                                 {laneExtract.lastInstruction, false},
+                                 {currentExpr, false}});
+      symbolicComputation.merge(iteCall);
+      currentExpr = iteCall.lastInstruction;
+    }
+  }
+
+  // Convert bit-vector result back to float or bool kind.
+  if (elementType->isFloatingPointTy()) {
+    symbolicComputation.merge(forceBuildRuntimeCall(
+        IRB, runtime.buildBitsToFloat,
+        {{symbolicComputation.lastInstruction, false},
+         {IRB.getInt1(elementType->isDoubleTy()), false}}));
+  } else if (elementType->isIntegerTy() &&
+             elementType->getIntegerBitWidth() == 1) {
+    symbolicComputation.merge(
+        forceBuildRuntimeCall(IRB, runtime.buildBitToBool,
+                              {{symbolicComputation.lastInstruction, false}}));
+  }
+  registerSymbolicComputation(symbolicComputation, &I);
+}
+
+void Symbolizer::visitInsertElementInst(InsertElementInst &I) {
+  IRBuilder<> IRB(&I);
+  // Get vector and elements
+  auto *vector = I.getOperand(0);
+  auto *insertedValue = I.getOperand(1);
+  auto *index = I.getOperand(2);
+
+  if (getSymbolicExpression(vector) == nullptr &&
+      getSymbolicExpression(insertedValue) == nullptr)
+    return;
+
+  // Get types and size
+  auto *vectorType = cast<VectorType>(vector->getType());
+  auto *elementType = vectorType->getElementType();
+  auto elementSize = dataLayout.getTypeStoreSize(elementType).getFixedValue();
+
+  // Only constant lane indices are supported for now
+  auto *constIdx = dyn_cast<ConstantInt>(index);
+  if (constIdx == nullptr) {
+    errs() << "Warning: non-constant insertelement index; "
+              "the result will be concretized\n";
+    return;
+  }
+  auto byteOffset = constIdx->getZExtValue() * elementSize;
+
+  // We may have to convert the expression to bit-vector kind...
+  auto maybeConversion = convertExprForTypeToBitVectorExpr(
+      IRB, insertedValue, getSymbolicExpressionOrNull(insertedValue));
+
+  auto insert = IRB.CreateCall(
+      runtime.buildInsert,
+      {getSymbolicExpressionOrNull(vector),
+       // If we had to convert the expression, use the result of the conversion.
+       maybeConversion ? maybeConversion->lastInstruction
+                       : getSymbolicExpressionOrNull(insertedValue),
+       IRB.getInt64(byteOffset),
+       IRB.getInt1(isLittleEndian(insertedValue->getType()) ? 1 : 0)});
+  auto insertComputation =
+      SymbolicComputation(insert, insert, {Input(vector, 0, insert)});
+
+  if (!maybeConversion) {
+    // If we didn't have to convert, then the inserted value is first used in
+    // the insertion.
+    insertComputation.inputs.push_back(Input(insertedValue, 1, insert));
+  } else {
+    // Otherwise, the full computation consists of the conversion followed by
+    // the insertion.
+    maybeConversion->merge(insertComputation);
+  }
+
+  registerSymbolicComputation(maybeConversion.value_or(insertComputation), &I);
+}
+
+void Symbolizer::visitShuffleVectorInst(ShuffleVectorInst &I) {
+  IRBuilder<> IRB(&I);
+
+  auto *v1 = I.getOperand(0);
+  auto *v2 = I.getOperand(1);
+
+  // Early return if both sources are concrete.
+  if (getSymbolicExpression(v1) == nullptr &&
+      getSymbolicExpression(v2) == nullptr)
+    return;
+
+  // Get vector and elements types
+  auto *vectorType = cast<VectorType>(v1->getType());
+  auto *elementType = vectorType->getElementType();
+  auto elementSize = dataLayout.getTypeStoreSize(elementType).getFixedValue();
+  auto numSrcElements = cast<FixedVectorType>(vectorType)->getNumElements();
+
+  SymbolicComputation symbolicComputation;
+  Instruction *resultExpr = nullptr;
+
+  for (int maskVal : I.getShuffleMask()) {
+    SymbolicComputation laneComputation;
+
+    if (maskVal < 0) {
+      // Undef lane: build zero bytes of the element width.
+      laneComputation = forceBuildRuntimeCall(
+          IRB, runtime.buildZeroBytes, {{IRB.getInt64(elementSize), false}});
+    } else {
+      // Pick source vector and compute the byte offset into it.
+      // mask < numSrcElements → v1, lane = mask
+      Value *source;
+      unsigned laneIdx;
+      if (static_cast<unsigned>(maskVal) < numSrcElements) {
+        source = v1;
+        laneIdx = maskVal * elementSize;
+        // mask >= numSrcElements → v2, lane = mask - numSrcElements
+      } else {
+        source = v2;
+        laneIdx = (maskVal - numSrcElements) * elementSize;
+      }
+
+      // Then call runtime.buildExtract with that source.
+      laneComputation = forceBuildRuntimeCall(
+          IRB, runtime.buildExtract,
+          {{source, true},
+           {IRB.getInt64(laneIdx), false},
+           {IRB.getInt64(elementSize), false},
+           {IRB.getInt1(isLittleEndian(elementType) ? 1 : 0), false}});
+    }
+
+    symbolicComputation.merge(laneComputation);
+
+    // Concatenate this lane into the running result.
+    if (resultExpr == nullptr) {
+      resultExpr = laneComputation.lastInstruction;
+    } else {
+      auto concatCall = forceBuildRuntimeCall(
+          IRB, runtime.buildConcat,
+          {{resultExpr, false}, {laneComputation.lastInstruction, false}});
+      symbolicComputation.merge(concatCall);
+      resultExpr = concatCall.lastInstruction;
+    }
+  }
+
+  // If every lane was undef, the computation has no symbolic inputs and
+  // the short-circuit pass would assert. Skip registration in that case —
+  // the result is concretely zero and need not be tracked.
+  if (symbolicComputation.inputs.empty())
+    return;
+
+  registerSymbolicComputation(symbolicComputation, &I);
+}
+
 Instruction *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
   auto *valueType = V->getType();
 
@@ -1077,6 +1432,50 @@ Instruction *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
     }
   }
 
+  if (auto *vectorType = dyn_cast<VectorType>(valueType)) {
+    if (isa<UndefValue>(V)) {
+      // This is just an optimization for completely undefined structs; we
+      // create an all-zeros expression without iterating over the elements.
+      return IRB.CreateCall(
+          runtime.buildZeroBytes,
+          {ConstantInt::get(intPtrType,
+                            dataLayout.getTypeStoreSize(valueType))});
+    } else {
+      // iterate over each element
+      Instruction *expr = nullptr;
+      auto append = [&](Instruction *newExpr) {
+        expr = expr ? IRB.CreateCall(runtime.buildConcat, {expr, newExpr})
+                    : newExpr;
+      };
+
+      for (size_t i = 0;
+           i < cast<FixedVectorType>(vectorType)->getNumElements(); i++) {
+        // build an expression for each one
+        auto element = IRB.CreateExtractElement(V, IRB.getInt32(i));
+        auto elementExpr = createValueExpression(element, IRB);
+
+        // The expression may be of a different kind than bit vector; in this
+        // case, we need to convert it.
+        if (auto conversion =
+                convertExprForTypeToBitVectorExpr(IRB, element, elementExpr)) {
+          elementExpr = conversion->lastInstruction;
+        }
+
+        // If the element is represented in little-endian byte order in memory,
+        // swap the bytes.
+        auto elementType = vectorType->getElementType();
+        if (isLittleEndian(elementType) &&
+            dataLayout.getTypeStoreSize(elementType) > 1) {
+          elementExpr = IRB.CreateCall(runtime.buildBswap, {elementExpr});
+        }
+        // concatenate them all together
+        append(elementExpr);
+      }
+
+      // return the final concatenated expression
+      return expr;
+    }
+  }
   llvm_unreachable("Unhandled type for constant expression");
 }
 
