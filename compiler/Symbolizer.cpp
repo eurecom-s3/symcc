@@ -413,6 +413,15 @@ void Symbolizer::visitBinaryOperator(BinaryOperator &I) {
     case Instruction::Xor:
       handler = runtime.buildBoolXor;
       break;
+    case Instruction::Add:
+    case Instruction::Sub:
+      // Add/sub on i1 is arithmetic mod 2, which equals XOR.
+      handler = runtime.buildBoolXor;
+      break;
+    case Instruction::Mul:
+      // Mul on i1 is arithmetic mod 2, which equals AND.
+      handler = runtime.buildBoolAnd;
+      break;
     default:
       errs() << "Can't handle Boolean operator " << I << '\n';
       llvm_unreachable("Unknown Boolean operator");
