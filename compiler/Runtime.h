@@ -64,6 +64,7 @@ struct Runtime {
   SymFnT buildFshr{};
   SymFnT buildAbs{};
   SymFnT buildConcat{};
+  SymFnT buildIte{};
   SymFnT pushPathConstraint{};
   SymFnT getParameterExpression{};
   SymFnT setParameterExpression{};
