@@ -12,9 +12,9 @@
 // You should have received a copy of the GNU General Public License along with
 // SymCC. If not, see <https://www.gnu.org/licenses/>.
 
-// RUN: /bin/echo -ne "\x00\x00\x00\x05aaaa" > %T/%basename_t.input
+// RUN: /bin/echo -ne "\x00\x00\x00\x05aaaa" > %t.input
 // RUN: %symcc -O2 %s -o %t
-// RUN: env SYMCC_INPUT_FILE=%T/%basename_t.input %t %T/%basename_t.input 2>&1 | %filecheck %s
+// RUN: env SYMCC_INPUT_FILE=%t.input %t %t.input 2>&1 | %filecheck %s
 
 #include <stdio.h>
 
